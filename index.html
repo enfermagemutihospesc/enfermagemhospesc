@@ -1147,76 +1147,57 @@ function renderPreview(d) {
 
 // ── GERAR PDF (jsPDF + html2canvas) ──────────────────────────────────────────
 async function gerarPDF() {
-  const btn = document.getElementById('btn-pdf');
-  const status = document.getElementById('pdf-status');
-  const area = document.getElementById('preview-area');
-  if (!area || !area.innerHTML.trim()) { alert('Gere a impressão primeiro.'); return; }
+  const btn = document.querySelector('.btn-pdf');
+  const status = document.getElementById('save-status'); // Se tiver esse ID no HTML
+  const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
 
-  btn.disabled = true; btn.textContent = '⏳ Gerando PDF...';
-  status.textContent = 'Capturando página...';
-  status.style.color = 'var(--muted)';
+  const nomePaciente = document.getElementById('f-pac')?.value || 'Sem_Nome';
+  const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+  const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
+
+  btn.disabled = true;
+  btn.textContent = 'Enviando ao Drive...';
 
   try {
     const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'pt', 'a4');
+    const elemento = document.getElementById('t-prev');
 
-    const canvas = await html2canvas(area, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      width: area.scrollWidth,
-      height: area.scrollHeight
+    // 1. Gera o PDF usando o html2canvas (mantém o visual idêntico à tela)
+    await doc.html(elemento, {
+      callback: async function(doc) {
+        // 2. Converte o PDF gerado em uma string Base64 para enviar ao Drive
+        const pdfBase64 = doc.output('datauristring').split(',')[1];
+
+        // 3. Envia para o Google Drive via Apps Script
+        await fetch(URL_APPS_SCRIPT, {
+          method: 'POST',
+          mode: 'no-cors', // Necessário para o Google
+          body: JSON.stringify({
+            titulo: nomeArquivo,
+            arquivoBase64: pdfBase64
+          })
+        });
+
+        // 4. Faz o download no celular/computador também
+        doc.save(`${nomeArquivo}.pdf`);
+        
+        alert("Sucesso! PDF salvo no Drive e baixado no aparelho.");
+        btn.disabled = false;
+        btn.textContent = '⬇ Baixar PDF';
+      },
+      x: 10,
+      y: 10,
+      width: 575, // Ajuste para caber no A4
+      windowWidth: 800
     });
 
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-    const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 10;
-    const contentW = pageW - margin*2;
-    const imgH = (canvas.height * contentW) / canvas.width;
-
-    let posY = margin;
-    let remainH = imgH;
-    let srcY = 0;
-    const pageContentH = pageH - margin*2;
-
-    // Múltiplas páginas se necessário
-    while (remainH > 0) {
-      const sliceH = Math.min(remainH, pageContentH);
-      const sliceCanvas = document.createElement('canvas');
-      const ratio = canvas.width / contentW;
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = sliceH * ratio;
-      const ctx = sliceCanvas.getContext('2d');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0,0,sliceCanvas.width,sliceCanvas.height);
-      ctx.drawImage(canvas, 0, srcY * ratio, canvas.width, sliceH * ratio, 0, 0, canvas.width, sliceH * ratio);
-
-      const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.92);
-      if (srcY > 0) pdf.addPage();
-      pdf.addImage(sliceData,'JPEG', margin, margin, contentW, sliceH);
-
-      srcY += sliceH;
-      remainH -= sliceH;
-    }
-
-    const d = coletarDados();
-    const nome = `Evolucao_Leito${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Paciente').split(' ')[0]}.pdf`;
-    pdf.save(nome);
-
-    status.textContent = '✓ PDF baixado com sucesso!';
-    status.style.color = 'var(--verde)';
-    toast('✓ PDF gerado: '+nome);
-  } catch(e) {
+  } catch (e) {
     console.error(e);
-    status.textContent = 'Erro ao gerar PDF. Tente "Imprimir" como alternativa.';
-    status.style.color = 'var(--vermelho)';
-    toast('Erro ao gerar PDF', true);
+    alert("Erro ao processar o PDF. Tente novamente.");
+    btn.disabled = false;
+    btn.textContent = '⬇ Baixar PDF';
   }
-
-  btn.disabled = false; btn.textContent = '⬇ Baixar PDF';
 }
 
 // ── TOAST ─────────────────────────────────────────────────────────────────────
