@@ -28,6 +28,12 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--fonte);background:#e0e8f2;color:var(--texto);min-height:100vh;}
 
+/* Força a quebra de página no PDF */
+.quebra-pagina {
+    page-break-after: always;
+    margin-bottom: 20px; /* Espaço visual no site */
+}
+  
 /* ── TELAS ── */
 .tela{display:none;padding:1rem;max-width:780px;margin:0 auto;}
 .tela.ativa{display:block;}
@@ -1135,6 +1141,7 @@ function renderPreview(d) {
   h+=br('OUTROS DISP.',d.disp_o);
   h+=st('Antimicrobianos em Uso');
   if(d.atbs&&d.atbs.filter(a=>a.nome).length){ d.atbs.filter(a=>a.nome).forEach(a=>{ h+=`<div class="pr"><span class="pv">${a.nome}</span>${a.inicio?`<span class="pl" style="margin-left:1rem;">INÍCIO</span><span class="pv">${fmtD(a.inicio)}</span>`:''}</div>`; }); } else h+=br('','–');
+  h += `<div class="quebra-pagina"></div>`;
   h+=st('Escalas de Risco');
   h+=`<div class="pr"><span class="pl">BRADEN</span><span class="pv">${d.bradScore} pts – ${d.bradRisco||'–'}</span><span class="pl" style="margin-left:1rem;">MORSE</span><span class="pv">${d.morseScore} pts – ${d.morseRisco||'–'}</span></div>`;
   h+=st('Observações / Intercorrências / Informações Complementares');
@@ -1146,55 +1153,65 @@ function renderPreview(d) {
 }
 
 // ── GERAR PDF (jsPDF + html2canvas) ──────────────────────────────────────────
+// ── GERAR PDF (jsPDF + GOOGLE DRIVE) ─────────────────────────────────────────
 async function gerarPDF() {
-  const btn = document.querySelector('.btn-pdf');
-  const status = document.getElementById('save-status'); // Se tiver esse ID no HTML
+  const btn = document.getElementById('btn-pdf');
+  const status = document.getElementById('pdf-status');
   const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
 
+  // Captura dados para o nome do arquivo
   const nomePaciente = document.getElementById('f-pac')?.value || 'Sem_Nome';
   const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
   const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
 
   btn.disabled = true;
-  btn.textContent = 'Enviando ao Drive...';
+  btn.textContent = 'Processando...';
+  if (status) status.textContent = 'Gerando PDF e enviando ao Drive...';
 
   try {
     const { jsPDF } = window.jspdf;
+    // Criamos o PDF em formato A4 e pontos (pt)
     const doc = new jsPDF('p', 'pt', 'a4');
-    const elemento = document.getElementById('t-prev');
+    const elemento = document.getElementById('preview-wrap'); // Área que será "fotografada"
 
-    // 1. Gera o PDF usando o html2canvas (mantém o visual idêntico à tela)
+    // Gerar o HTML dentro do PDF
     await doc.html(elemento, {
       callback: async function(doc) {
-        // 2. Converte o PDF gerado em uma string Base64 para enviar ao Drive
+        // 1. Pegar o código do PDF (Base64) para enviar ao Drive
         const pdfBase64 = doc.output('datauristring').split(',')[1];
 
-        // 3. Envia para o Google Drive via Apps Script
-        await fetch(URL_APPS_SCRIPT, {
-          method: 'POST',
-          mode: 'no-cors', // Necessário para o Google
-          body: JSON.stringify({
-            titulo: nomeArquivo,
-            arquivoBase64: pdfBase64
-          })
-        });
+        // 2. Enviar para o Google Drive
+        try {
+          await fetch(URL_APPS_SCRIPT, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+              titulo: nomeArquivo,
+              arquivoBase64: pdfBase64
+            })
+          });
+        } catch (errDrive) {
+          console.error("Erro no Drive:", errDrive);
+        }
 
-        // 4. Faz o download no celular/computador também
+        // 3. Salvar o arquivo no celular/computador do usuário
         doc.save(`${nomeArquivo}.pdf`);
-        
-        alert("Sucesso! PDF salvo no Drive e baixado no aparelho.");
+
+        alert("Sucesso! PDF gerado e enviado para o Google Drive.");
+        if (status) status.textContent = '✓ Concluído!';
         btn.disabled = false;
         btn.textContent = '⬇ Baixar PDF';
       },
-      x: 10,
-      y: 10,
-      width: 575, // Ajuste para caber no A4
-      windowWidth: 800
+      x: 20,
+      y: 20,
+      width: 555, // Ajuste para largura do A4
+      windowWidth: 800,
+      autoPaging: 'text' // ESSENCIAL: Faz a quebra de página (div quebra-pagina) funcionar
     });
 
   } catch (e) {
     console.error(e);
-    alert("Erro ao processar o PDF. Tente novamente.");
+    alert("Erro ao gerar PDF.");
     btn.disabled = false;
     btn.textContent = '⬇ Baixar PDF';
   }
