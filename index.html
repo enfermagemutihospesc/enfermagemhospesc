@@ -434,19 +434,16 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
         <p class="sub-t">Acesso Venoso Periférico (AVP)</p>
         <div id="avp-lista"></div>
         <button class="btn-add" onclick="addAVP()">+ Adicionar AVP</button>
-
         <p class="sub-t" style="margin-top:4px;">Acesso Venoso Central (AVC)</p>
         <div class="dyn-row">
           <input type="text" id="f-avc-l" placeholder="Local (ex: subclávia D)">
           <input type="date" id="f-avc-d" style="max-width:140px;flex:none;">
         </div>
-
         <p class="sub-t">Cateter de Diálise (CDL)</p>
         <div class="dyn-row">
           <input type="text" id="f-dial-l" placeholder="Local (ex: jugular D)">
           <input type="date" id="f-dial-d" style="max-width:140px;flex:none;">
         </div>
-
         <div class="dc">
           <div>
             <p class="sub-t">SVD</p>
@@ -463,7 +460,6 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
             </div>
           </div>
         </div>
-
         <p class="sub-t">Outros dispositivos</p>
         <input type="text" id="f-disp-o" placeholder="Dreno de tórax, gastrostomia, etc." style="width:100%;">
       </div>
@@ -538,14 +534,9 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
     <div class="btn-row btn-row-prev">
       <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
       <button class="btn btn-imp btn-sm" onclick="window.print()">Imprimir</button>
-      <button id="btn-drive" class="btn btn-azul" onclick="salvarNoDrive()">
-    <i class="fab fa-google-drive"></i> Salvar no Drive
-</button>
-
-<div id="save-status" style="margin-top: 10px; font-weight: bold;"></div>
-</button>
+      <button class="btn btn-drive btn-sm" id="btn-drive" onclick="salvarNoDrive()">Salvar no Drive</button>
     </div>
-    <p id="drive-status" style="font-size:.72rem;color:var(--muted);text-align:right;"></p>
+    <p id="drive-status" style="font-size:.72rem;color:var(--muted);text-align:right;margin-top:4px;"></p>
   </div>
 </div>
 
@@ -575,8 +566,10 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 <div class="toast" id="toast"></div>
 
 <script>
-const FOLDER_ID='1CoIhijd3xqgtnF_vmAMw1ZRl6j_F3lFM';
-let turno='',leitoAtual=0;
+// ─── URL DO SEU APPS SCRIPT ───────────────────────────────────────────────────
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec';
+
+let turno='', leitoAtual=0;
 const TOTAL=10;
 
 function sGet(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
@@ -660,7 +653,6 @@ function getAVPs(){
     const ins=r.querySelectorAll('input');return{local:ins[0].value,data:ins[1].value};
   });
 }
-
 function addATB(nome='',dtInicio=''){
   const lista=document.getElementById('atb-lista');
   const row=document.createElement('div');
@@ -680,7 +672,6 @@ function toggleVMI(){
   document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':'');
   document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex';
 }
-
 function calcB(){
   let t=0;document.querySelectorAll('.bs').forEach(s=>{if(s.value)t+=parseInt(s.value);});
   const sc=document.getElementById('b-sc'),r=document.getElementById('b-r');
@@ -693,12 +684,10 @@ function calcM(){
   sc.textContent=t;
   if(t<=24){r.textContent='Risco Baixo';r.className='rb rb-b';}else if(t<=44){r.textContent='Risco Moderado';r.className='rb rb-m';}else{r.textContent='Risco Alto';r.className='rb rb-a';}
 }
-
 function getAnterior(n){
   const outro=turno==='DIURNO'?'NOTURNO':'DIURNO';
   return sGet('uti_ev_'+n+'_'+outro+'_'+hoje())||sGet('uti_ev_'+n+'_'+turno+'_'+ontem())||sGet('uti_ev_'+n+'_'+outro+'_'+ontem());
 }
-
 function limparForm(){
   document.querySelectorAll('#t-form input[type=checkbox]').forEach(c=>c.checked=false);
   document.querySelectorAll('#t-form input[type=radio]').forEach(r=>r.checked=false);
@@ -845,73 +834,81 @@ function renderPreview(d){
   document.getElementById('preview-area').innerHTML=h;
 }
 
+// ─── SALVAR NO DRIVE VIA APPS SCRIPT ─────────────────────────────────────────
 async function salvarNoDrive() {
-  const btn = document.getElementById('btn-drive');
-  const URL_DO_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
+  const btn    = document.getElementById('btn-drive');
+  const status = document.getElementById('drive-status');
 
-  const nomePaciente = document.getElementById('f-pac').value || 'Sem_Nome';
-  const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-  const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
-  
-  const elementoPreview = document.getElementById('t-prev');
-  
-  if (!elementoPreview || elementoPreview.innerHTML.trim() === "") {
-    alert("Por favor, gere o resumo primeiro.");
+  // Pega SOMENTE o conteúdo do preview-area (não inclui botões nem header da tela)
+  const areaPreview = document.getElementById('preview-area');
+  if (!areaPreview || !areaPreview.innerHTML.trim()) {
+    alert('Por favor, gere a impressão antes de salvar.');
     return;
   }
 
-  // --- AQUI ESTÁ A MÁGICA PARA O PDF FICAR BONITO ---
-  const conteudoHTML = `
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; padding: 0; margin: 0; }
-          .header-pdf { background-color: #0a3d6b; color: white; padding: 20px; text-align: center; margin-bottom: 20px; }
-          .header-pdf h1 { margin: 0; font-size: 18px; text-transform: uppercase; }
-          .container { padding: 20px; }
-          .secao { background: #f4f6f8; padding: 10px; margin-top: 15px; border-left: 4px solid #0a3d6b; font-weight: bold; color: #0a3d6b; text-transform: uppercase; font-size: 13px; }
-          .grid { display: block; margin-bottom: 10px; border-bottom: 1px solid #eee; padding: 8px 0; }
-          .label { font-weight: bold; color: #555; font-size: 11px; display: block; }
-          .valor { font-size: 14px; color: #000; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          td { padding: 8px; border: 1px solid #dee2e6; vertical-align: top; }
-          .footer { margin-top: 30px; border-top: 1px solid #000; text-align: center; padding-top: 10px; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="header-pdf">
-          <h1>Hospital dos Pescadores - UTI</h1>
-          <p>Relatório de Evolução de Enfermagem</p>
-        </div>
-        <div class="container">
-          ${elementoPreview.innerHTML}
-        </div>
-        <div class="footer">
-          Documento gerado eletronicamente em ${new Date().toLocaleString('pt-BR')}
-        </div>
-      </body>
-    </html>
-  `;
+  // Monta o nome do arquivo com leito, turno e data
+  const d = coletarDados();
+  const nomeArquivo = `Evolucao_Leito${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Paciente').split(' ')[0]}`;
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Gerando PDF Bonito...'; }
+  // Monta HTML completo para o Apps Script converter em PDF
+  // Os estilos inline garantem boa renderização mesmo sem folha de estilos externa
+  const htmlCompleto = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0; padding: 10px; }
+  .ph { text-align: center; border: 2px solid #000; padding: 10px; border-bottom: none; }
+  .ph h2 { font-size: 13px; font-weight: 800; text-transform: uppercase; margin: 0; }
+  .ph h3 { font-size: 10px; font-weight: 700; margin: 2px 0 0; }
+  .ph p  { font-size: 10px; margin: 2px 0 0; }
+  .pb { border: 2px solid #000; padding: 8px 10px; }
+  .pst { background: #0a3d6b; color: white; font-size: 9px; font-weight: 800;
+         letter-spacing: .07em; text-transform: uppercase; padding: 3px 7px;
+         margin: 6px -10px 4px; padding-left: 10px; }
+  .pr { display: flex; flex-wrap: wrap; gap: 2px 12px;
+        border-bottom: 1px solid #ddd; padding: 3px 0; font-size: 10px; }
+  .pr:last-child { border-bottom: none; }
+  .pl { color: #555; font-weight: 700; font-size: 9px; text-transform: uppercase; }
+  .pv { font-weight: 500; }
+  .obs-box { border: 1px solid #000; padding: 6px; min-height: 50px;
+             font-size: 10px; white-space: pre-wrap; word-break: break-word; }
+  .pfoot { border-top: 2px solid #000; padding: 4px 10px;
+           display: flex; justify-content: space-between; font-size: 9px; color: #555; }
+</style>
+</head>
+<body>
+${areaPreview.innerHTML}
+<p style="font-size:8px;color:#888;text-align:right;margin-top:8px;">
+  Gerado em ${new Date().toLocaleString('pt-BR')}
+</p>
+</body>
+</html>`;
+
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  status.textContent = 'Enviando para o Drive...';
+  status.style.color = 'var(--muted)';
 
   try {
-    await fetch(URL_DO_SCRIPT, {
+    await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors',
-      body: JSON.stringify({
-        titulo: nomeArquivo,
-        html: conteudoHTML
-      })
+      mode: 'no-cors',   // Apps Script não envia CORS headers por padrão
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ titulo: nomeArquivo, html: htmlCompleto })
     });
 
-    alert("Sucesso! O PDF formatado foi enviado para o Drive.");
+    // Com no-cors não conseguimos ler a resposta, mas se não lançou exceção o envio foi feito
+    status.textContent = '✓ Enviado! Verifique a pasta "UTI – Evoluções de Enfermagem" no Drive.';
+    status.style.color = 'var(--verde)';
+    toast('PDF enviado para o Google Drive!');
   } catch (e) {
-    alert("Erro ao salvar.");
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Salvar no Drive'; }
+    status.textContent = 'Erro ao enviar. Tente novamente ou use "Imprimir" como alternativa.';
+    status.style.color = 'var(--vermelho)';
   }
+
+  btn.disabled = false;
+  btn.textContent = 'Salvar no Drive';
 }
 
 function irLeitos(){document.getElementById('t-form').classList.remove('ativa');document.getElementById('t-leitos').classList.add('ativa');renderLeitos();window.scrollTo(0,0);}
