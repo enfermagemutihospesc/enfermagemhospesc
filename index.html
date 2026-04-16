@@ -846,44 +846,55 @@ function renderPreview(d){
 }
 
 async function salvarNoDrive() {
-  // Tenta encontrar os elementos, mas não trava se forem nulos
   const btn = document.getElementById('btn-drive');
-  const status = document.getElementById('save-status');
   const URL_DO_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
 
-  // Identifica o paciente
-  const campoNome = document.getElementById('f-pac');
-  const nomePaciente = campoNome ? campoNome.value : 'Sem_Nome';
+  const nomePaciente = document.getElementById('f-pac').value || 'Sem_Nome';
   const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
   const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
   
-  // Identifica a área de resumo (t-prev é a tela que aparece após o botão azul)
   const elementoPreview = document.getElementById('t-prev');
   
   if (!elementoPreview || elementoPreview.innerHTML.trim() === "") {
-    alert("Por favor, gere o resumo da evolução antes de salvar.");
+    alert("Por favor, gere o resumo primeiro.");
     return;
   }
 
-  // Prepara o visual do PDF
+  // --- AQUI ESTÁ A MÁGICA PARA O PDF FICAR BONITO ---
   const conteudoHTML = `
     <html>
-      <head><meta charset="UTF-8"></head>
-      <body style="font-family: sans-serif; padding: 20px;">
-        ${elementoPreview.innerHTML}
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: 'Helvetica', 'Arial', sans-serif; color: #333; padding: 0; margin: 0; }
+          .header-pdf { background-color: #0a3d6b; color: white; padding: 20px; text-align: center; margin-bottom: 20px; }
+          .header-pdf h1 { margin: 0; font-size: 18px; text-transform: uppercase; }
+          .container { padding: 20px; }
+          .secao { background: #f4f6f8; padding: 10px; margin-top: 15px; border-left: 4px solid #0a3d6b; font-weight: bold; color: #0a3d6b; text-transform: uppercase; font-size: 13px; }
+          .grid { display: block; margin-bottom: 10px; border-bottom: 1px solid #eee; padding: 8px 0; }
+          .label { font-weight: bold; color: #555; font-size: 11px; display: block; }
+          .valor { font-size: 14px; color: #000; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          td { padding: 8px; border: 1px solid #dee2e6; vertical-align: top; }
+          .footer { margin-top: 30px; border-top: 1px solid #000; text-align: center; padding-top: 10px; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="header-pdf">
+          <h1>Hospital dos Pescadores - UTI</h1>
+          <p>Relatório de Evolução de Enfermagem</p>
+        </div>
+        <div class="container">
+          ${elementoPreview.innerHTML}
+        </div>
+        <div class="footer">
+          Documento gerado eletronicamente em ${new Date().toLocaleString('pt-BR')}
+        </div>
       </body>
     </html>
   `;
 
-  // Mudar estado do botão (com proteção para não dar erro de null)
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Enviando...';
-  }
-  if (status) {
-    status.textContent = 'Gerando PDF no Drive...';
-    status.style.color = 'black';
-  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Gerando PDF Bonito...'; }
 
   try {
     await fetch(URL_DO_SCRIPT, {
@@ -895,22 +906,11 @@ async function salvarNoDrive() {
       })
     });
 
-    // Sucesso
-    alert("Solicitação enviada com sucesso!");
-    if (status) {
-      status.textContent = '✓ Arquivo enviado!';
-      status.style.color = 'green';
-    }
+    alert("Sucesso! O PDF formatado foi enviado para o Drive.");
   } catch (e) {
-    console.error(e);
-    alert("Erro na conexão com o Google Drive.");
-    if (status) status.textContent = 'Erro ao salvar.';
+    alert("Erro ao salvar.");
   } finally {
-    // Volta o botão ao normal
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Salvar no Drive';
-    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar no Drive'; }
   }
 }
 
