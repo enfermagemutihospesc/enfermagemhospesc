@@ -843,46 +843,45 @@ function renderPreview(d){
 }
 
 async function salvarNoDrive() {
+  // 1. Tenta encontrar o botão
   const btn = document.getElementById('btn-drive');
   const status = document.getElementById('save-status');
+  
+  if (!btn) {
+    alert("Erro: O botão com id 'btn-drive' não foi encontrado no HTML.");
+    return;
+  }
+
   const URL_DO_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
 
-  // Pega o nome do paciente
-  const nomePaciente = document.getElementById('f-pac').value || 'Sem_Nome';
+  // 2. Tenta encontrar os dados do paciente
+  const campoNome = document.getElementById('f-pac');
+  const nomePaciente = campoNome ? campoNome.value : 'Sem_Nome';
   const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
   const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
   
-  // Tenta pegar o conteúdo da pré-visualização (t-prev é o ID da tela de resumo)
-  const elementoPreview = document.getElementById('pre-visualizacao') || 
-                          document.getElementById('t-prev') || 
-                          document.querySelector('.preview-content');
+  // 3. Tenta encontrar a área que contém o texto da evolução
+  // No seu código a área final após clicar em gerar é a 't-prev'
+  const elementoPreview = document.getElementById('t-prev');
   
-  if (!elementoPreview) {
-    alert("Erro crítico: Área de dados não encontrada no código.");
+  if (!elementoPreview || elementoPreview.innerHTML.trim() === "") {
+    alert("Por favor, clique em 'GERAR IMPRESSÃO' antes de salvar no Drive.");
     return;
   }
 
-  // Pega o HTML que está aparecendo na tela agora
-  const htmlFinal = elementoPreview.innerHTML;
-
-  if (htmlFinal.length < 50) {
-    alert("Atenção: O resumo parece estar vazio. Tente gerar a impressão novamente.");
-    return;
-  }
-
-  const conteudoEnvio = `
+  const conteudoHTML = `
     <html>
       <head><meta charset="UTF-8"></head>
       <body style="font-family: sans-serif; padding: 20px;">
-        <h2 style="color: #0a3d6b; border-bottom: 2px solid #0a3d6b;">Evolução de Enfermagem</h2>
-        ${htmlFinal}
+        ${elementoPreview.innerHTML}
       </body>
     </html>
   `;
 
+  // Agora sim ele desabilita o botão com segurança
   btn.disabled = true;
   btn.textContent = 'Enviando...';
-  status.textContent = 'Gerando PDF no Drive...';
+  if(status) status.textContent = 'Gerando PDF no Drive...';
 
   try {
     await fetch(URL_DO_SCRIPT, {
@@ -890,21 +889,18 @@ async function salvarNoDrive() {
       mode: 'no-cors',
       body: JSON.stringify({
         titulo: nomeArquivo,
-        html: conteudoEnvio
+        html: conteudoHTML
       })
     });
 
-    // Como usamos 'no-cors', não conseguimos ler a resposta do Google, 
-    // mas se não deu erro de rede, ele foi enviado.
-    status.textContent = '✓ Enviado ao Drive!';
-    status.style.color = 'var(--verde)';
-    alert("Solicitação enviada! Verifique sua pasta no Drive em alguns segundos.");
-
+    alert("Sucesso! Verifique sua pasta no Drive.");
+    if(status) {
+        status.textContent = '✓ Salvo com sucesso!';
+        status.style.color = 'var(--verde)';
+    }
   } catch (e) {
     console.error(e);
-    status.textContent = 'Erro de conexão.';
-    status.style.color = 'var(--vermelho)';
-    alert("Erro ao conectar com o servidor.");
+    alert("Erro ao conectar com o Drive.");
   }
   
   btn.disabled = false;
