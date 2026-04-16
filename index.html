@@ -538,7 +538,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
     <div class="btn-row btn-row-prev">
       <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
       <button class="btn btn-imp btn-sm" onclick="window.print()">Imprimir</button>
-      <button class="btn btn-drive btn-sm" id="btn-drive-save" onclick="salvarDrive()">Salvar no Drive</button>
+      <button class="btn btn-drive btn-sm" id="btn-drive-save" onclick="salvarNoDrive()">Salvar no Drive</button>
     </div>
     <p id="drive-status" style="font-size:.72rem;color:var(--muted);text-align:right;"></p>
   </div>
@@ -845,45 +845,53 @@ async function salvarNoDrive() {
   const status = document.getElementById('save-status');
   const URL_DO_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
 
-  const nomePaciente = document.getElementById('f-pac').value || 'Sem_Nome'; // Ajustado para o ID correto do seu formulário
+  // Captura o nome do paciente pelo ID correto 'f-pac'
+  const nomePaciente = document.getElementById('f-pac').value || 'Sem_Nome';
   const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
   const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
   
+  // No seu HTML original, o conteúdo da prévia fica dentro de 'pre-visualizacao'
+  const elementoPreview = document.getElementById('pre-visualizacao');
+  
+  if (!elementoPreview) {
+    alert("Erro: Área de pré-visualização não encontrada. Gere a evolução primeiro!");
+    return;
+  }
+
   const conteudoHTML = `
-    <style>
-      body { font-family: sans-serif; padding: 20px; }
-      h2 { color: #0a3d6b; border-bottom: 2px solid #0a3d6b; }
-      .pr { margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
-      .pl { font-weight: bold; color: #555; text-transform: uppercase; font-size: 10px; }
-    </style>
-    ${document.getElementById('preview-area').innerHTML}
+    <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: sans-serif; padding: 20px;">
+        <h2 style="color: #0a3d6b; border-bottom: 2px solid #0a3d6b;">Evolução de Enfermagem</h2>
+        ${elementoPreview.innerHTML}
+      </body>
+    </html>
   `;
 
   btn.disabled = true;
-  btn.textContent = 'Gerando PDF...';
-  status.textContent = 'Conectando ao Google Drive...';
+  btn.textContent = 'Enviando...';
+  status.textContent = 'Gerando PDF no Drive...';
 
   try {
-    // Removido o 'no-cors' para permitir validação real de erro
-    const response = await fetch(URL_DO_SCRIPT, {
+    await fetch(URL_DO_SCRIPT, {
       method: 'POST',
+      mode: 'no-cors', // Mantido para evitar erro de redirecionamento do Google
       body: JSON.stringify({
         titulo: nomeArquivo,
         html: conteudoHTML
       })
     });
 
-    // O Google Apps Script redireciona, por isso o fetch pode cair aqui com sucesso 
-    // mesmo sem ler o JSON se não estiver configurado para CORS.
-    status.textContent = '✓ PDF solicitado com sucesso!';
+    // Feedback de sucesso
+    status.textContent = '✓ PDF salvo na pasta!';
     status.style.color = 'var(--verde)';
-    alert("Processo concluído! Verifique a sua pasta no Drive em alguns segundos.");
+    alert("Sucesso! O PDF foi enviado para a pasta do Google Drive.");
 
   } catch (e) {
     console.error(e);
-    status.textContent = 'Erro ao processar PDF.';
+    status.textContent = 'Erro na conexão.';
     status.style.color = 'var(--vermelho)';
-    alert("Erro na ligação com o servidor.");
+    alert("Erro ao conectar com o Google Drive.");
   }
   
   btn.disabled = false;
