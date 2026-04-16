@@ -4,37 +4,85 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>UTI – Hospital dos Pescadores</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+
+<!-- jsPDF + html2canvas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
 <style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 :root{
   --azul:#0a3d6b;--azul-m:#1565a8;--azul-cl:#d6e8f7;--azul-xl:#eaf3fb;
   --cinza:#f4f6f8;--borda:#c8d6e5;--texto:#1a1a2e;--muted:#5a6a7a;
   --verde:#0d6b3a;--verde-cl:#d4f0e0;--amarelo:#f5c842;--amarelo-dk:#3a2800;
   --noturno:#1a2540;--noturno-cl:#c8d6f5;--vermelho:#8b1a1a;--vermelho-cl:#fde0e0;
   --laranja:#7a3a00;--laranja-cl:#fef3c7;--r:8px;
+  --fonte:'IBM Plex Sans',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#e8eef5;color:var(--texto);min-height:100vh;}
-.tela{display:none;padding:1rem;max-width:760px;margin:0 auto;}
+body{font-family:var(--fonte);background:#e0e8f2;color:var(--texto);min-height:100vh;}
+
+/* ── TELAS ── */
+.tela{display:none;padding:1rem;max-width:780px;margin:0 auto;}
 .tela.ativa{display:block;}
+
+/* ── LOGIN ── */
+#t-login{display:none;min-height:100vh;align-items:center;justify-content:center;flex-direction:column;gap:2rem;padding:2rem;}
+#t-login.ativa{display:flex;}
+.login-card{background:white;border-radius:16px;padding:2.5rem 2rem;max-width:380px;width:100%;box-shadow:0 4px 32px rgba(10,61,107,.13);}
+.login-logo{text-align:center;margin-bottom:1.8rem;}
+.login-logo h1{font-size:1rem;font-weight:700;color:var(--azul);line-height:1.6;}
+.login-logo p{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:4px;}
+.login-badge{display:inline-block;background:var(--azul);color:white;font-size:.65rem;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.06em;margin-bottom:.8rem;}
+.login-field{display:flex;flex-direction:column;gap:5px;margin-bottom:1rem;}
+.login-field label{font-size:.74rem;font-weight:600;color:var(--muted);}
+.login-field input{padding:10px 12px;border:1.5px solid var(--borda);border-radius:8px;font-family:var(--fonte);font-size:.85rem;color:var(--texto);background:var(--cinza);}
+.login-field input:focus{outline:none;border-color:var(--azul-m);background:white;}
+.btn-login{width:100%;padding:11px;background:var(--azul);color:white;border:none;border-radius:8px;font-family:var(--fonte);font-size:.88rem;font-weight:700;cursor:pointer;transition:opacity .15s;}
+.btn-login:hover{opacity:.88;}
+.btn-login:disabled{opacity:.5;cursor:not-allowed;}
+.login-msg{font-size:.74rem;color:var(--muted);text-align:center;margin-top:.8rem;}
+.login-err{font-size:.74rem;color:var(--vermelho);text-align:center;margin-top:.5rem;min-height:18px;}
+
+/* ── HEADER ── */
 .app-header{background:var(--azul);color:white;padding:.9rem 1.2rem;border-radius:var(--r) var(--r) 0 0;display:flex;justify-content:space-between;align-items:center;gap:.8rem;}
 .app-header h2{font-size:.9rem;font-weight:600;line-height:1.4;}
 .app-header small{font-size:.72rem;opacity:.8;display:block;font-weight:400;}
+.header-right{display:flex;align-items:center;gap:.7rem;flex-shrink:0;}
 .badge{font-size:.68rem;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
 .badge-d{background:var(--amarelo);color:var(--amarelo-dk);}
 .badge-n{background:var(--noturno);color:var(--noturno-cl);border:1px solid #3b4a6b;}
+.badge-user{font-size:.65rem;background:rgba(255,255,255,.15);color:white;padding:3px 9px;border-radius:20px;cursor:pointer;border:1px solid rgba(255,255,255,.25);}
+.badge-user:hover{background:rgba(255,255,255,.25);}
+
+/* ── CARD ── */
 .card{background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1.2rem;display:flex;flex-direction:column;gap:1.2rem;}
-#t-turno{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:92vh;gap:1.8rem;max-width:760px;margin:0 auto;padding:1rem;}
+
+/* ── TURNO ── */
+#t-turno{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:92vh;gap:1.8rem;max-width:780px;margin:0 auto;padding:1rem;}
 .logo-h{text-align:center;}
 .logo-h h1{font-size:1rem;font-weight:700;color:var(--azul);line-height:1.5;}
 .logo-h p{font-size:.75rem;color:var(--muted);margin-top:3px;letter-spacing:.05em;text-transform:uppercase;}
 .turno-cards{display:flex;gap:1.2rem;flex-wrap:wrap;justify-content:center;}
 .turno-btn{width:148px;height:148px;border:2px solid var(--borda);border-radius:16px;background:white;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;transition:all .18s;}
-.turno-btn:hover,.turno-btn:active{border-color:var(--azul-m);background:var(--azul-cl);transform:translateY(-2px);}
+.turno-btn:hover{border-color:var(--azul-m);background:var(--azul-cl);transform:translateY(-2px);}
 .turno-icon{font-size:2.6rem;}
 .turno-label{font-size:.88rem;font-weight:700;color:var(--azul);text-align:center;line-height:1.3;}
+.sync-status{font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:5px;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#aaa;display:inline-block;}
+.sync-dot.ok{background:var(--verde);}
+.sync-dot.err{background:var(--vermelho);}
+
+/* ── LEITOS ── */
 .leitos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
 @media(min-width:500px){.leitos-grid{grid-template-columns:repeat(3,1fr);}}
-.leito-card{border:1.5px solid var(--borda);border-radius:10px;background:var(--cinza);overflow:hidden;cursor:pointer;transition:all .15s;}
+.leito-card{border:1.5px solid var(--borda);border-radius:10px;background:var(--cinza);overflow:hidden;cursor:pointer;transition:all .15s;position:relative;}
 .leito-card:hover{border-color:var(--azul-m);background:var(--azul-xl);}
 .leito-card.ocupado{background:white;border-color:var(--azul-m);}
 .leito-num{background:var(--azul);color:white;font-size:.7rem;font-weight:700;padding:4px 8px;letter-spacing:.06em;}
@@ -46,15 +94,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#e8eef5;color:var(--
 .lb{font-size:.6rem;padding:2px 6px;border-radius:10px;font-weight:600;}
 .lb-diurno{background:var(--amarelo);color:var(--amarelo-dk);}
 .lb-noturno{background:var(--noturno);color:var(--noturno-cl);}
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:1rem;}
-.overlay.show{display:flex;}
-.modal{background:white;border-radius:12px;width:100%;max-width:440px;overflow:hidden;max-height:90vh;overflow-y:auto;}
-.modal-header{background:var(--azul);color:white;padding:.8rem 1rem;display:flex;justify-content:space-between;align-items:center;}
-.modal-header h3{font-size:.9rem;font-weight:600;}
-.modal-close{background:none;border:none;color:white;font-size:1.3rem;cursor:pointer;line-height:1;padding:0 4px;}
-.modal-body{padding:1rem;display:flex;flex-direction:column;gap:.8rem;}
+.lb-ok{background:var(--verde-cl);color:var(--verde);}
+.lb-cloud{background:#e0f0ff;color:#0a3d6b;}
+.leito-spinner{position:absolute;top:6px;right:8px;width:10px;height:10px;border:2px solid var(--borda);border-top-color:var(--azul-m);border-radius:50%;animation:spin .7s linear infinite;display:none;}
+.leito-card.loading .leito-spinner{display:block;}
+
+/* ── FORMULÁRIO ── */
 .secao{border:1px solid var(--borda);border-radius:var(--r);overflow:hidden;}
-.secao-t{background:var(--azul-cl);color:var(--azul);font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-bottom:1px solid var(--borda);}
+.secao-t{background:var(--azul-cl);color:var(--azul);font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-bottom:1px solid var(--borda);display:flex;align-items:center;gap:6px;}
 .secao-c{padding:10px 12px;display:flex;flex-direction:column;gap:9px;}
 .sub-t{font-size:.71rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
 .sub-blk{background:var(--cinza);border:1px solid var(--borda);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:7px;}
@@ -62,7 +109,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#e8eef5;color:var(--
 .fl label{font-size:.76rem;color:var(--muted);min-width:110px;font-weight:500;}
 .fl input[type=text],.fl input[type=date],.fl input[type=number],.fl select,
 textarea,input[type=text],input[type=date],input[type=number],select{
-  font-family:inherit;font-size:.81rem;padding:5px 8px;border:1px solid var(--borda);border-radius:5px;background:var(--cinza);color:var(--texto);}
+  font-family:var(--fonte);font-size:.81rem;padding:5px 8px;border:1px solid var(--borda);border-radius:5px;background:var(--cinza);color:var(--texto);}
 .fl input,.fl select{flex:1;min-width:90px;}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azul-m);background:white;}
 .cg{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:5px 10px;}
@@ -79,7 +126,8 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 .dva-r input[type=number]{width:65px;font-size:.74rem;padding:3px 5px;border:1px solid var(--borda);border-radius:4px;background:var(--cinza);color:var(--texto);}
 .dva-r span{font-size:.68rem;color:var(--muted);}
 .herd-tag{font-size:.65rem;background:#e0f0ff;color:#0a3d6b;padding:2px 7px;border-radius:10px;font-weight:600;}
-.fc-inline{width:58px!important;font-size:.74rem!important;padding:3px 5px!important;border:1px solid var(--borda)!important;border-radius:4px!important;background:var(--cinza)!important;color:var(--texto)!important;font-family:inherit!important;display:inline-block!important;vertical-align:middle!important;margin:0 3px!important;min-width:0!important;flex:none!important;}
+.cloud-tag{font-size:.65rem;background:var(--verde-cl);color:var(--verde);padding:2px 7px;border-radius:10px;font-weight:600;}
+.fc-inline{width:58px!important;font-size:.74rem!important;padding:3px 5px!important;border:1px solid var(--borda)!important;border-radius:4px!important;background:var(--cinza)!important;color:var(--texto)!important;font-family:var(--fonte)!important;display:inline-block!important;vertical-align:middle!important;margin:0 3px!important;min-width:0!important;flex:none!important;}
 .dyn-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--cinza);border:1px solid var(--borda);border-radius:6px;padding:6px 9px;margin-bottom:5px;}
 .dyn-row input{flex:1;min-width:80px;}
 .btn-add{background:var(--azul-cl);border:1px solid var(--azul-m);color:var(--azul);border-radius:5px;padding:4px 11px;font-size:.72rem;font-weight:700;cursor:pointer;margin-top:2px;}
@@ -94,7 +142,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 .vmi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:7px;}
 .vf{display:flex;flex-direction:column;gap:3px;}
 .vf label{font-size:.68rem;font-weight:700;color:var(--azul);text-transform:uppercase;}
-.vf input,.vf select{font-size:.78rem;padding:4px 7px;border:1px solid var(--borda);border-radius:4px;background:white;color:var(--texto);font-family:inherit;width:100%;}
+.vf input,.vf select{font-size:.78rem;padding:4px 7px;border:1px solid var(--borda);border-radius:4px;background:white;color:var(--texto);font-family:var(--fonte);width:100%;}
 .bt{width:100%;border-collapse:collapse;font-size:.7rem;}
 .bt th{background:var(--azul);color:white;padding:4px 5px;text-align:center;font-weight:600;border:1px solid var(--azul);}
 .bt td{border:1px solid var(--borda);padding:4px 5px;vertical-align:middle;text-align:center;}
@@ -109,16 +157,21 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 .morse-blk{border:1px solid var(--borda);border-radius:6px;overflow:hidden;margin-bottom:5px;}
 .morse-t{background:var(--cinza);padding:4px 9px;font-size:.69rem;font-weight:700;color:var(--azul);text-transform:uppercase;letter-spacing:.05em;}
 .morse-o{padding:5px 9px;display:flex;flex-direction:column;gap:3px;}
+
+/* ── BOTÕES ── */
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
-.btn{padding:9px 18px;border-radius:var(--r);font-size:.83rem;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:opacity .15s;}
+.btn{padding:9px 18px;border-radius:var(--r);font-size:.83rem;font-weight:700;cursor:pointer;border:none;font-family:var(--fonte);transition:opacity .15s;display:inline-flex;align-items:center;gap:6px;}
 .btn:active{opacity:.8;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
 .btn-sec{background:var(--cinza);color:var(--muted);border:1px solid var(--borda);}
 .btn-pri{background:var(--azul);color:white;}
 .btn-ok{background:var(--verde);color:white;}
 .btn-imp{background:#c0392b;color:white;}
-.btn-drive{background:#1a73e8;color:white;}
+.btn-pdf{background:#6c3483;color:white;}
 .btn-sm{padding:6px 12px;font-size:.75rem;}
-#preview-area{background:white;border:2px solid #000;font-size:.76rem;line-height:1.5;}
+
+/* ── PREVIEW / IMPRESSÃO ── */
+#preview-area{background:white;font-size:.76rem;line-height:1.5;font-family:'IBM Plex Sans',sans-serif;}
 .ph{text-align:center;padding:.8rem;border-bottom:2px solid #000;}
 .ph h2{font-size:.92rem;font-weight:800;text-transform:uppercase;}
 .ph h3{font-size:.78rem;font-weight:700;margin-top:2px;}
@@ -131,8 +184,36 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 .pv{font-weight:500;}
 .obs-box{border:1px solid #000;padding:7px;min-height:55px;font-size:.76rem;white-space:pre-wrap;word-break:break-word;}
 .pfoot{border-top:2px solid #000;padding:.5rem .8rem;display:flex;justify-content:space-between;font-size:.69rem;color:#555;}
-.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#0a3d6b;color:white;padding:.7rem 1.4rem;border-radius:20px;font-size:.82rem;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;}
+
+/* ── MODAL ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:1rem;}
+.overlay.show{display:flex;}
+.modal{background:white;border-radius:12px;width:100%;max-width:440px;overflow:hidden;max-height:90vh;overflow-y:auto;}
+.modal-header{background:var(--azul);color:white;padding:.8rem 1rem;display:flex;justify-content:space-between;align-items:center;}
+.modal-header h3{font-size:.9rem;font-weight:600;}
+.modal-close{background:none;border:none;color:white;font-size:1.3rem;cursor:pointer;line-height:1;padding:0 4px;}
+.modal-body{padding:1rem;display:flex;flex-direction:column;gap:.8rem;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#0a3d6b;color:white;padding:.7rem 1.4rem;border-radius:20px;font-size:.82rem;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;display:flex;align-items:center;gap:8px;}
 .toast.show{opacity:1;}
+.toast.err{background:var(--vermelho);}
+
+/* ── LOADING ── */
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(255,255,255,.8);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:1rem;}
+.loading-overlay.show{display:flex;}
+.spinner{width:36px;height:36px;border:3px solid var(--borda);border-top-color:var(--azul-m);border-radius:50%;animation:spin .8s linear infinite;}
+.loading-msg{font-size:.85rem;color:var(--muted);font-weight:500;}
+
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── BANNER CONFIGURAÇÃO ── */
+.config-banner{background:linear-gradient(135deg,#fff8e1,#fff3cd);border:1.5px solid #f5c842;border-radius:12px;padding:1.2rem 1.5rem;display:flex;flex-direction:column;gap:.8rem;max-width:500px;margin:0 auto;}
+.config-banner h3{font-size:.9rem;font-weight:700;color:#3a2800;}
+.config-banner p{font-size:.78rem;color:#5a4a00;line-height:1.6;}
+.config-banner code{background:#3a2800;color:#f5c842;padding:2px 6px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:.75rem;}
+
+/* ── PRINT ── */
 @media print{
   body{background:white;padding:0;}
   #t-turno,#t-leitos,#t-form,.btn-row,.btn-row-prev,#t-prev>*:not(#preview-wrap){display:none!important;}
@@ -144,8 +225,68 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 </head>
 <body>
 
-<!-- T0: TURNO -->
-<div id="t-turno">
+<!-- ═══════════════════════════════════════════
+     CONFIGURAÇÃO FIREBASE
+     ─ Substitua os valores abaixo pelos do seu projeto Firebase
+     ══════════════════════════════════════════ -->
+<script>
+// ┌─────────────────────────────────────────────────────────┐
+// │  PASSO 1: Cole aqui as configs do seu projeto Firebase  │
+// │  console.firebase.google.com → Seu projeto →            │
+// │  Configurações → Apps web → Configuração do SDK         │
+// └─────────────────────────────────────────────────────────┘
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB00a198BLBKXyvfCXmbZgbY9lAPsp_G6c",
+  authDomain: "evolucaouti.firebaseapp.com",
+  projectId: "evolucaouti",
+  storageBucket: "evolucaouti.firebasestorage.app",
+  messagingSenderId: "168481656346",
+  appId: "1:168481656346:web:4af8e67600eeabb4fdcba3",
+  measurementId: "G-BK1NM0JE8J"
+};
+</script>
+
+<!-- TELA LOGIN -->
+<div id="t-login">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="login-badge">SISTEMA DE EVOLUÇÃO</span>
+      <h1>PREFEITURA MUNICIPAL DO NATAL<br>HOSPITAL DOS PESCADORES – UTI</h1>
+      <p>Acesso do Enfermeiro</p>
+    </div>
+    <div class="login-field">
+      <label>E-mail institucional</label>
+      <input type="email" id="li-email" placeholder="enfermeiro@pescadores.natal.br" autocomplete="email">
+    </div>
+    <div class="login-field">
+      <label>Senha</label>
+      <input type="password" id="li-senha" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-login" id="btn-entrar" onclick="fazerLogin()">Entrar</button>
+    <div class="login-err" id="login-err"></div>
+    <p class="login-msg">Primeiro acesso? Peça ao administrador para cadastrar seu e-mail.</p>
+  </div>
+</div>
+
+<!-- TELA CONFIGURAÇÃO (exibida quando Firebase não está configurado) -->
+<div id="t-config" class="tela" style="display:none;padding:2rem;min-height:100vh;display:flex;align-items:center;justify-content:center;">
+  <div class="config-banner">
+    <h3>⚙️ Configure o Firebase para ativar a nuvem</h3>
+    <p>Para salvar os dados na nuvem e compartilhar entre todos os enfermeiros, você precisa configurar um projeto Firebase gratuito.</p>
+    <p><strong>Passo a passo:</strong></p>
+    <p>1. Acesse <strong>console.firebase.google.com</strong> e crie um projeto</p>
+    <p>2. Ative <strong>Firestore Database</strong> (modo de produção)</p>
+    <p>3. Ative <strong>Authentication → E-mail/senha</strong></p>
+    <p>4. Vá em <strong>Configurações do projeto → Seus apps → App da Web</strong></p>
+    <p>5. Copie as configurações e cole no início deste arquivo HTML onde está <code>FIREBASE_CONFIG</code></p>
+    <p>6. Cadastre os enfermeiros em <strong>Authentication → Usuários</strong></p>
+    <p>Enquanto isso, o sistema funciona offline com dados locais.</p>
+    <button class="btn btn-pri" onclick="usarOffline()">Continuar sem nuvem (local)</button>
+  </div>
+</div>
+
+<!-- TELA TURNO -->
+<div id="t-turno" style="display:none;">
   <div class="logo-h">
     <h1>PREFEITURA MUNICIPAL DO NATAL<br>HOSPITAL DOS PESCADORES – UTI</h1>
     <p>Sistema de Evolução do Enfermeiro</p>
@@ -154,14 +295,20 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
     <button class="turno-btn" onclick="escolherTurno('DIURNO')"><span class="turno-icon">☀️</span><span class="turno-label">Turno<br>Diurno</span></button>
     <button class="turno-btn" onclick="escolherTurno('NOTURNO')"><span class="turno-icon">🌙</span><span class="turno-label">Turno<br>Noturno</span></button>
   </div>
-  <p style="font-size:.72rem;color:var(--muted);text-align:center;">Dados salvos localmente neste dispositivo</p>
+  <div class="sync-status" id="sync-status">
+    <span class="sync-dot" id="sync-dot"></span>
+    <span id="sync-txt">verificando conexão...</span>
+  </div>
 </div>
 
-<!-- T1: LEITOS -->
+<!-- TELA LEITOS -->
 <div id="t-leitos" class="tela">
   <div class="app-header" style="border-radius:var(--r);">
     <div><h2>UTI – Hospital dos Pescadores</h2><small>Selecione o leito para preencher a evolução</small></div>
-    <span class="badge" id="badge-leitos"></span>
+    <div class="header-right">
+      <span class="badge" id="badge-leitos"></span>
+      <span class="badge-user" id="badge-user" onclick="fazerLogout()" title="Clique para sair">Sair</span>
+    </div>
   </div>
   <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;display:flex;flex-direction:column;gap:.9rem;">
     <div class="leitos-grid" id="leitos-grid"></div>
@@ -169,17 +316,19 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
   </div>
 </div>
 
-<!-- T2: FORMULÁRIO -->
+<!-- TELA FORMULÁRIO -->
 <div id="t-form" class="tela">
   <div class="app-header">
     <div><h2 id="form-titulo">Evolução – Leito 01</h2><small id="form-sub">Hospital dos Pescadores · UTI</small></div>
-    <span class="badge" id="badge-form"></span>
+    <div class="header-right">
+      <span class="badge" id="badge-form"></span>
+    </div>
   </div>
   <div class="card">
 
     <!-- IDENTIFICAÇÃO -->
     <div class="secao">
-      <div class="secao-t">Identificação do Paciente <span class="herd-tag" id="herd-tag" style="display:none;">↻ dados herdados</span></div>
+      <div class="secao-t">Identificação do Paciente <span class="herd-tag" id="herd-tag" style="display:none;">↻ dados herdados</span><span class="cloud-tag" id="cloud-tag" style="display:none;">☁ nuvem</span></div>
       <div class="secao-c">
         <div class="fl"><label>Paciente</label><input type="text" id="f-pac" placeholder="Nome completo"></div>
         <div class="dc">
@@ -222,7 +371,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
       </div>
     </div>
 
-    <!-- PELE + LESÕES -->
+    <!-- PELE -->
     <div class="secao">
       <div class="secao-t">Pele, Mucosas e Curativos</div>
       <div class="secao-c">
@@ -343,7 +492,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
       </div>
     </div>
 
-    <!-- DIETA / DIURESE / ELIMINAÇÕES -->
+    <!-- DIETA/DIURESE -->
     <div class="secao">
       <div class="secao-t">Dieta, Diurese e Eliminações</div>
       <div class="secao-c">
@@ -389,7 +538,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
       </div>
     </div>
 
-    <!-- DVA / SEDO -->
+    <!-- DVA/SEDO -->
     <div class="secao">
       <div class="secao-t">Drogas Vasoativas e Sedoanalgesia <span class="herd-tag">↻ herdado</span></div>
       <div class="secao-c">
@@ -518,25 +667,27 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 
     <div class="btn-row">
       <button class="btn btn-sec" onclick="irLeitos()">← Leitos</button>
-      <button class="btn btn-pri" onclick="gerarPreview()">Gerar Impressão →</button>
+      <button class="btn btn-pri" id="btn-gerar" onclick="gerarPreview()">Gerar Impressão →</button>
     </div>
   </div>
 </div>
 
-<!-- T3: PREVIEW -->
+<!-- TELA PREVIEW -->
 <div id="t-prev" class="tela">
   <div class="app-header">
     <div><h2>Pré-visualização – Impressão</h2><small id="prev-sub">Leito · Turno</small></div>
     <span class="badge" id="badge-prev"></span>
   </div>
   <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;display:flex;flex-direction:column;gap:.9rem;">
-    <div id="preview-wrap"><div id="preview-area"></div></div>
+    <div id="preview-wrap" style="border:2px solid #000;">
+      <div id="preview-area"></div>
+    </div>
     <div class="btn-row btn-row-prev">
       <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
-      <button class="btn btn-imp btn-sm" onclick="window.print()">Imprimir</button>
-      <button class="btn btn-drive btn-sm" id="btn-drive" onclick="salvarNoDrive()">Salvar no Drive</button>
+      <button class="btn btn-imp btn-sm" onclick="window.print()">🖨 Imprimir</button>
+      <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">⬇ Baixar PDF</button>
     </div>
-    <p id="drive-status" style="font-size:.72rem;color:var(--muted);text-align:right;margin-top:4px;"></p>
+    <p id="pdf-status" style="font-size:.72rem;color:var(--muted);text-align:right;"></p>
   </div>
 </div>
 
@@ -563,232 +714,392 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
   </div>
 </div>
 
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div>
+  <span class="loading-msg" id="loading-msg">Carregando...</span>
+</div>
+
 <div class="toast" id="toast"></div>
 
+<!-- ════════════════════════════════════════════
+     JAVASCRIPT
+═════════════════════════════════════════════ -->
 <script>
-// ─── URL DO SEU APPS SCRIPT ───────────────────────────────────────────────────
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec';
+// ── ESTADO ──────────────────────────────────────────────────────────────────
+let turno = '', leitoAtual = 0, usuarioEmail = '';
+let db = null, auth = null, modoOffline = false;
+const TOTAL = 10;
 
-let turno='', leitoAtual=0;
-const TOTAL=10;
-
-function sGet(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
-function sSet(k,v){localStorage.setItem(k,JSON.stringify(v));}
-function leitosData(){let d=sGet('uti_leitos');if(!d){d={};for(let i=1;i<=TOTAL;i++)d[i]={ocupado:false,pac:'',diag:'',dn:'',adm:'',comor:''};sSet('uti_leitos',d);}return d;}
-function pad(n){return String(n).padStart(2,'0');}
-function hoje(){return new Date().toISOString().split('T')[0];}
-function ontem(){const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split('T')[0];}
-function gf(id){const e=document.getElementById(id);return e?e.value:'';}
-function gChecked(cls){return Array.from(document.querySelectorAll('.'+cls+':checked')).map(e=>e.value);}
-function gRadio(name){const e=document.querySelector('input[name="'+name+'"]:checked');return e?e.value:'';}
-function fmtD(s){if(!s||s==='–')return'–';try{const[y,m,d]=s.split('-');return d+'/'+m+'/'+y;}catch(e){return s;}}
-function setF(id,v){const e=document.getElementById(id);if(e&&v!=null)e.value=v;}
-function setChecks(cls,arr){if(!arr)return;document.querySelectorAll('.'+cls).forEach(cb=>{cb.checked=arr.includes(cb.value);});}
-function setRadio(name,val){if(!val)return;const r=document.querySelector('input[name="'+name+'"][value="'+val+'"]');if(r)r.checked=true;}
-function getDVAData(cid){const data={};document.getElementById(cid).querySelectorAll('.dva-r').forEach(row=>{const cb=row.querySelector('.dc-cb');const v=row.querySelector('.dc-v');if(cb)data[cb.value]={checked:cb.checked,val:v?v.value:''};});return data;}
-function loadDVA(cid,data){if(!data)return;document.getElementById(cid).querySelectorAll('.dva-r').forEach(row=>{const cb=row.querySelector('.dc-cb');const v=row.querySelector('.dc-v');if(cb&&data[cb.value]!==undefined){cb.checked=data[cb.value].checked;if(v)v.value=data[cb.value].val||'';}});}
-function getBraden(){return Array.from(document.querySelectorAll('.bs')).map(s=>s.value);}
-function getMorse(){return['m1','m2','m3','m4','m5','m6'].map(n=>{const el=document.querySelector('input[name="'+n+'"]:checked');return el?el.value:'';});}
-function dvaStr(data){if(!data)return'–';const res=Object.entries(data).filter(([k,v])=>v.checked).map(([k,v])=>k+(v.val?' '+v.val+'ml/h':''));return res.length?res.join(' | '):'–';}
-
-function escolherTurno(t){
-  turno=t;
-  document.getElementById('t-turno').style.display='none';
-  document.getElementById('t-leitos').classList.add('ativa');
-  const b=document.getElementById('badge-leitos');
-  b.textContent=t==='DIURNO'?'☀ DIURNO':'☽ NOTURNO';
-  b.className='badge '+(t==='DIURNO'?'badge-d':'badge-n');
-  renderLeitos();
+// ── FIREBASE INIT ────────────────────────────────────────────────────────────
+function firebaseConfigurado() {
+  return FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.includes('COLE_');
 }
-function irTurno(){document.getElementById('t-leitos').classList.remove('ativa');document.getElementById('t-turno').style.display='flex';}
 
-function renderLeitos(){
-  const d=leitosData();
-  const grid=document.getElementById('leitos-grid');
-  grid.innerHTML='';
-  for(let i=1;i<=TOTAL;i++){
-    const l=d[i];
-    const evHoje=sGet('uti_ev_'+i+'_'+turno+'_'+hoje());
-    const card=document.createElement('div');
-    card.className='leito-card'+(l.ocupado?' ocupado':'');
-    card.innerHTML=`<div class="leito-num">LEITO ${pad(i)}</div>
-      <div class="leito-info">${l.ocupado?`<div class="leito-pac">${l.pac||'–'}</div><div class="leito-diag">${l.diag||''}</div>`:`<div class="leito-vazio">Vago</div>`}</div>
-      <div class="leito-badge-row">${l.ocupado?`<span class="lb lb-${turno==='DIURNO'?'diurno':'noturno'}">${turno==='DIURNO'?'Diurno':'Noturno'}</span>`:''}${evHoje?'<span class="lb" style="background:#d4f0e0;color:#0d6b3a;">✓ Evolução</span>':''}</div>`;
-    card.onclick=()=>l.ocupado?abrirForm(i):abrirModal(i);
-    grid.appendChild(card);
+function initFirebase() {
+  if (!firebaseConfigurado()) return false;
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db   = firebase.firestore();
+    auth = firebase.auth();
+    return true;
+  } catch(e) {
+    console.warn('Firebase init error:', e);
+    return false;
   }
 }
 
-let modalLeito=0;
-function abrirModal(n){
-  modalLeito=n;const l=leitosData()[n];
-  document.getElementById('modal-titulo').textContent=`Leito ${pad(n)} – ${l.ocupado?'Editar dados':'Admissão'}`;
-  document.getElementById('m-pac').value=l.pac||'';document.getElementById('m-diag').value=l.diag||'';
-  document.getElementById('m-dn').value=l.dn||'';document.getElementById('m-adm').value=l.adm||hoje();
-  document.getElementById('m-comor').value=l.comor||'';
-  document.getElementById('btn-alta').style.display=l.ocupado?'':'none';
+// ── HELPERS GERAIS ────────────────────────────────────────────────────────────
+function pad(n){ return String(n).padStart(2,'0'); }
+function hoje(){ return new Date().toISOString().split('T')[0]; }
+function ontem(){ const d=new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; }
+function fmtD(s){ if(!s||s==='–') return '–'; try{ const[y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }catch(e){ return s; } }
+function gf(id){ const e=document.getElementById(id); return e?e.value:''; }
+function gChecked(cls){ return Array.from(document.querySelectorAll('.'+cls+':checked')).map(e=>e.value); }
+function gRadio(name){ const e=document.querySelector('input[name="'+name+'"]:checked'); return e?e.value:''; }
+function setF(id,v){ const e=document.getElementById(id); if(e&&v!=null) e.value=v; }
+function setChecks(cls,arr){ if(!arr) return; document.querySelectorAll('.'+cls).forEach(cb=>{ cb.checked=arr.includes(cb.value); }); }
+function setRadio(name,val){ if(!val) return; const r=document.querySelector('input[name="'+name+'"][value="'+val+'"]'); if(r) r.checked=true; }
+function showLoading(msg){ document.getElementById('loading-msg').textContent=msg||'Carregando...'; document.getElementById('loading-overlay').classList.add('show'); }
+function hideLoading(){ document.getElementById('loading-overlay').classList.remove('show'); }
+
+// ── STORAGE (Firestore + localStorage fallback) ────────────────────────────────
+async function dbGet(key) {
+  if (!modoOffline && db) {
+    try {
+      const doc = await db.collection('uti').doc(key).get();
+      if (doc.exists) return doc.data().value;
+    } catch(e) { console.warn('Firestore get error, usando local:', e); }
+  }
+  try { return JSON.parse(localStorage.getItem(key)); } catch(e) { return null; }
+}
+
+async function dbSet(key, value) {
+  // Sempre salva local como cache
+  localStorage.setItem(key, JSON.stringify(value));
+  if (!modoOffline && db) {
+    try {
+      await db.collection('uti').doc(key).set({ value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      return true;
+    } catch(e) { console.warn('Firestore set error:', e); return false; }
+  }
+  return false;
+}
+
+// ── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
+async function fazerLogin() {
+  const email = gf('li-email').trim();
+  const senha = gf('li-senha');
+  const errEl = document.getElementById('login-err');
+  const btn   = document.getElementById('btn-entrar');
+  errEl.textContent = '';
+  if (!email || !senha) { errEl.textContent = 'Preencha e-mail e senha.'; return; }
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  try {
+    await auth.signInWithEmailAndPassword(email, senha);
+  } catch(e) {
+    const msgs = {
+      'auth/user-not-found':'Usuário não encontrado.',
+      'auth/wrong-password':'Senha incorreta.',
+      'auth/invalid-email':'E-mail inválido.',
+      'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.',
+    };
+    errEl.textContent = msgs[e.code] || 'Erro ao entrar. Tente novamente.';
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+
+function fazerLogout() {
+  if (!confirm('Sair do sistema?')) return;
+  if (auth) auth.signOut();
+  else { irTelaTurno(false); }
+}
+
+function usarOffline() {
+  modoOffline = true;
+  irTelaTurno(false);
+}
+
+// ── NAVEGAÇÃO ─────────────────────────────────────────────────────────────────
+function mostrarTela(id) {
+  document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
+  ['t-login','t-turno','t-config'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (id === 't-login') { el.style.display = 'flex'; }
+  else if (id === 't-turno') { el.style.display = 'flex'; }
+  else if (id === 't-config') { el.style.display = 'flex'; }
+  else { el.classList.add('ativa'); }
+}
+
+function irTelaTurno(comAuth) {
+  mostrarTela('t-turno');
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-txt');
+  if (modoOffline) {
+    dot.className = 'sync-dot err';
+    txt.textContent = 'modo offline – dados locais';
+  } else {
+    dot.className = 'sync-dot ok';
+    txt.textContent = 'conectado ao Firebase – dados sincronizados';
+  }
+}
+
+function irTurno(){ mostrarTela('t-turno'); }
+function irLeitos(){ mostrarTela('t-leitos'); renderLeitos(); window.scrollTo(0,0); }
+function irForm(){ mostrarTela('t-form'); window.scrollTo(0,0); }
+
+// ── TURNO ────────────────────────────────────────────────────────────────────
+async function escolherTurno(t) {
+  turno = t;
+  mostrarTela('t-leitos');
+  const b = document.getElementById('badge-leitos');
+  b.textContent = t==='DIURNO' ? '☀ DIURNO' : '☽ NOTURNO';
+  b.className = 'badge '+(t==='DIURNO'?'badge-d':'badge-n');
+  document.getElementById('badge-user').textContent = usuarioEmail ? '👤 '+usuarioEmail.split('@')[0] + ' · Sair' : 'Sair';
+  await renderLeitos();
+}
+
+// ── LEITOS ────────────────────────────────────────────────────────────────────
+async function leitosData() {
+  let d = await dbGet('uti_leitos');
+  if (!d) {
+    d = {};
+    for (let i=1;i<=TOTAL;i++) d[i]={ocupado:false,pac:'',diag:'',dn:'',adm:'',comor:''};
+    await dbSet('uti_leitos', d);
+  }
+  return d;
+}
+
+async function renderLeitos() {
+  const grid = document.getElementById('leitos-grid');
+  grid.innerHTML = '';
+  // Cria cards placeholder
+  for (let i=1;i<=TOTAL;i++) {
+    const card = document.createElement('div');
+    card.className = 'leito-card';
+    card.id = 'leito-card-'+i;
+    card.innerHTML = `<div class="leito-spinner"></div><div class="leito-num">LEITO ${pad(i)}</div><div class="leito-info"><div class="leito-vazio">carregando...</div></div><div class="leito-badge-row"></div>`;
+    card.classList.add('loading');
+    grid.appendChild(card);
+  }
+  const d = await leitosData();
+  for (let i=1;i<=TOTAL;i++) {
+    const l = d[i];
+    const evHoje = await dbGet('uti_ev_'+i+'_'+turno+'_'+hoje());
+    const card = document.getElementById('leito-card-'+i);
+    card.classList.remove('loading');
+    if (l.ocupado) card.classList.add('ocupado');
+    card.innerHTML = `
+      <div class="leito-num">LEITO ${pad(i)}</div>
+      <div class="leito-info">${l.ocupado
+        ? `<div class="leito-pac">${l.pac||'–'}</div><div class="leito-diag">${l.diag||''}</div>`
+        : `<div class="leito-vazio">Vago</div>`}
+      </div>
+      <div class="leito-badge-row">
+        ${l.ocupado ? `<span class="lb lb-${turno==='DIURNO'?'diurno':'noturno'}">${turno==='DIURNO'?'Diurno':'Noturno'}</span>` : ''}
+        ${evHoje ? '<span class="lb lb-ok">✓ Evolução</span>' : ''}
+        ${!modoOffline && l.ocupado ? '<span class="lb lb-cloud">☁</span>' : ''}
+      </div>`;
+    card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
+  }
+}
+
+// ── MODAL ADMISSÃO ────────────────────────────────────────────────────────────
+let modalLeito = 0;
+async function abrirModal(n) {
+  modalLeito = n;
+  const d = await leitosData();
+  const l = d[n];
+  document.getElementById('modal-titulo').textContent = `Leito ${pad(n)} – ${l.ocupado?'Editar dados':'Admissão'}`;
+  document.getElementById('m-pac').value   = l.pac||'';
+  document.getElementById('m-diag').value  = l.diag||'';
+  document.getElementById('m-dn').value    = l.dn||'';
+  document.getElementById('m-adm').value   = l.adm||hoje();
+  document.getElementById('m-comor').value = l.comor||'';
+  document.getElementById('btn-alta').style.display = l.ocupado?'':'none';
   document.getElementById('modal-adm').classList.add('show');
 }
-function fecharModal(){document.getElementById('modal-adm').classList.remove('show');}
-function salvarAdmissao(){
-  const d=leitosData();
-  d[modalLeito]={ocupado:true,pac:gf('m-pac'),diag:gf('m-diag'),dn:gf('m-dn'),adm:gf('m-adm'),comor:gf('m-comor')};
-  sSet('uti_leitos',d);fecharModal();renderLeitos();toast('Paciente admitido no leito '+pad(modalLeito));
-}
-function darAlta(){
-  if(!confirm('Confirma alta/desocupação do leito '+modalLeito+'?'))return;
-  const d=leitosData();d[modalLeito]={ocupado:false,pac:'',diag:'',dn:'',adm:'',comor:''};
-  sSet('uti_leitos',d);fecharModal();renderLeitos();toast('Leito '+pad(modalLeito)+' liberado');
+function fecharModal(){ document.getElementById('modal-adm').classList.remove('show'); }
+
+async function salvarAdmissao() {
+  showLoading('Salvando admissão...');
+  const d = await leitosData();
+  d[modalLeito] = {ocupado:true,pac:gf('m-pac'),diag:gf('m-diag'),dn:gf('m-dn'),adm:gf('m-adm'),comor:gf('m-comor')};
+  await dbSet('uti_leitos', d);
+  hideLoading(); fecharModal(); await renderLeitos();
+  toast('Paciente admitido no leito '+pad(modalLeito));
 }
 
-function addAVP(local='',data=''){
-  const lista=document.getElementById('avp-lista');
-  const row=document.createElement('div');
-  row.className='dyn-row';
-  row.innerHTML=`<input type="text" placeholder="Local (ex: ant. cubital D)" value="${local}"><input type="date" value="${data}" style="max-width:140px;flex:none;"><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`;
-  lista.appendChild(row);
-}
-function getAVPs(){
-  return Array.from(document.getElementById('avp-lista').querySelectorAll('.dyn-row')).map(r=>{
-    const ins=r.querySelectorAll('input');return{local:ins[0].value,data:ins[1].value};
-  });
-}
-function addATB(nome='',dtInicio=''){
-  const lista=document.getElementById('atb-lista');
-  const row=document.createElement('div');
-  row.className='atb-row';
-  row.innerHTML=`<input type="text" placeholder="Ex: Meropenem 1g 8/8h EV" value="${nome}"><div class="atb-date-wrap"><span>Início</span><input type="date" value="${dtInicio}"></div><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`;
-  lista.appendChild(row);
-}
-function getATBs(){
-  return Array.from(document.getElementById('atb-lista').querySelectorAll('.atb-row')).map(r=>{
-    const ins=r.querySelectorAll('input');return{nome:ins[0].value,inicio:ins[1].value};
-  });
+async function darAlta() {
+  if (!confirm('Confirma alta/desocupação do leito '+modalLeito+'?')) return;
+  showLoading('Registrando alta...');
+  const d = await leitosData();
+  d[modalLeito] = {ocupado:false,pac:'',diag:'',dn:'',adm:'',comor:''};
+  await dbSet('uti_leitos', d);
+  hideLoading(); fecharModal(); await renderLeitos();
+  toast('Leito '+pad(modalLeito)+' liberado');
 }
 
-function toggleVMI(){
-  const v=document.querySelector('input[name="vent"]:checked');
-  const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI');
-  document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':'');
-  document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex';
+// ── FORMULÁRIO – helpers ──────────────────────────────────────────────────────
+function getDVAData(cid){
+  const data={};
+  document.getElementById(cid).querySelectorAll('.dva-r').forEach(row=>{
+    const cb=row.querySelector('.dc-cb'), v=row.querySelector('.dc-v');
+    if(cb) data[cb.value]={checked:cb.checked,val:v?v.value:''};
+  });
+  return data;
 }
-function calcB(){
-  let t=0;document.querySelectorAll('.bs').forEach(s=>{if(s.value)t+=parseInt(s.value);});
-  const sc=document.getElementById('b-sc'),r=document.getElementById('b-r');
-  if(t>0){sc.textContent=t;if(t>=15){r.textContent='Risco Baixo';r.className='rb rb-b';}else if(t>=12){r.textContent='Risco Moderado';r.className='rb rb-m';}else{r.textContent='Risco Alto';r.className='rb rb-a';}}
-  else{sc.textContent='–';r.textContent='';}
+function loadDVA(cid,data){
+  if(!data) return;
+  document.getElementById(cid).querySelectorAll('.dva-r').forEach(row=>{
+    const cb=row.querySelector('.dc-cb'), v=row.querySelector('.dc-v');
+    if(cb&&data[cb.value]!==undefined){cb.checked=data[cb.value].checked;if(v)v.value=data[cb.value].val||'';}
+  });
 }
-function calcM(){
-  let t=0;['m1','m2','m3','m4','m5','m6'].forEach(n=>{const el=document.querySelector('input[name="'+n+'"]:checked');if(el)t+=parseInt(el.value);});
-  const sc=document.getElementById('m-sc'),r=document.getElementById('m-r');
-  sc.textContent=t;
-  if(t<=24){r.textContent='Risco Baixo';r.className='rb rb-b';}else if(t<=44){r.textContent='Risco Moderado';r.className='rb rb-m';}else{r.textContent='Risco Alto';r.className='rb rb-a';}
-}
-function getAnterior(n){
-  const outro=turno==='DIURNO'?'NOTURNO':'DIURNO';
-  return sGet('uti_ev_'+n+'_'+outro+'_'+hoje())||sGet('uti_ev_'+n+'_'+turno+'_'+ontem())||sGet('uti_ev_'+n+'_'+outro+'_'+ontem());
-}
+function getBraden(){ return Array.from(document.querySelectorAll('.bs')).map(s=>s.value); }
+function getMorse(){ return['m1','m2','m3','m4','m5','m6'].map(n=>{const el=document.querySelector('input[name="'+n+'"]:checked');return el?el.value:'';}); }
+function dvaStr(data){ if(!data) return '–'; const res=Object.entries(data).filter(([k,v])=>v.checked).map(([k,v])=>k+(v.val?' '+v.val+'ml/h':'')); return res.length?res.join(' | '):'–'; }
+function addAVP(local='',data=''){ const lista=document.getElementById('avp-lista'); const row=document.createElement('div'); row.className='dyn-row'; row.innerHTML=`<input type="text" placeholder="Local (ex: ant. cubital D)" value="${local}"><input type="date" value="${data}" style="max-width:140px;flex:none;"><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); }
+function getAVPs(){ return Array.from(document.getElementById('avp-lista').querySelectorAll('.dyn-row')).map(r=>{const ins=r.querySelectorAll('input');return{local:ins[0].value,data:ins[1].value};}); }
+function addATB(nome='',dtInicio=''){ const lista=document.getElementById('atb-lista'); const row=document.createElement('div'); row.className='atb-row'; row.innerHTML=`<input type="text" placeholder="Ex: Meropenem 1g 8/8h EV" value="${nome}"><div class="atb-date-wrap"><span>Início</span><input type="date" value="${dtInicio}"></div><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); }
+function getATBs(){ return Array.from(document.getElementById('atb-lista').querySelectorAll('.atb-row')).map(r=>{const ins=r.querySelectorAll('input');return{nome:ins[0].value,inicio:ins[1].value};}); }
+function toggleVMI(){ const v=document.querySelector('input[name="vent"]:checked'); const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI'); document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':''); document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex'; }
+function calcB(){ let t=0; document.querySelectorAll('.bs').forEach(s=>{if(s.value)t+=parseInt(s.value);}); const sc=document.getElementById('b-sc'),r=document.getElementById('b-r'); if(t>0){sc.textContent=t;if(t>=15){r.textContent='Risco Baixo';r.className='rb rb-b';}else if(t>=12){r.textContent='Risco Moderado';r.className='rb rb-m';}else{r.textContent='Risco Alto';r.className='rb rb-a';}}else{sc.textContent='–';r.textContent='';} }
+function calcM(){ let t=0; ['m1','m2','m3','m4','m5','m6'].forEach(n=>{const el=document.querySelector('input[name="'+n+'"]:checked');if(el)t+=parseInt(el.value);}); const sc=document.getElementById('m-sc'),r=document.getElementById('m-r'); sc.textContent=t; if(t<=24){r.textContent='Risco Baixo';r.className='rb rb-b';}else if(t<=44){r.textContent='Risco Moderado';r.className='rb rb-m';}else{r.textContent='Risco Alto';r.className='rb rb-a';} }
+
 function limparForm(){
   document.querySelectorAll('#t-form input[type=checkbox]').forEach(c=>c.checked=false);
   document.querySelectorAll('#t-form input[type=radio]').forEach(r=>r.checked=false);
   document.querySelectorAll('#t-form input[type=text],#t-form input[type=number]').forEach(i=>i.value='');
   document.querySelectorAll('#t-form select').forEach(s=>s.value='');
   document.querySelectorAll('#t-form textarea').forEach(t=>t.value='');
-  document.getElementById('b-sc').textContent='–';document.getElementById('b-r').textContent='';
-  document.getElementById('m-sc').textContent='–';document.getElementById('m-r').textContent='';
+  document.getElementById('b-sc').textContent='–'; document.getElementById('b-r').textContent='';
+  document.getElementById('m-sc').textContent='–'; document.getElementById('m-r').textContent='';
   document.getElementById('vmi-box').className='vmi-box';
   document.getElementById('spo2-avulso').style.display='flex';
   document.getElementById('avp-lista').innerHTML='';
   document.getElementById('atb-lista').innerHTML='';
 }
 
-function abrirForm(n){
-  leitoAtual=n;const pac=leitosData()[n];limparForm();
-  const anterior=getAnterior(n);
-  document.getElementById('herd-tag').style.display=anterior?'inline':'none';
-  setF('f-pac',pac.pac);setF('f-dn',pac.dn);setF('f-adm',pac.adm);
-  setF('f-diag',pac.diag);setF('f-comor',pac.comor);
-  setF('f-leito','Leito '+pad(n)+' – UTI Geral');setF('f-data',hoje());
-  const evHoje=sGet('uti_ev_'+n+'_'+turno+'_'+hoje());
-  const fonte=evHoje||anterior;
-  if(fonte){
-    setF('f-avc-l',fonte.avc_l);setF('f-avc-d',fonte.avc_d);
-    setF('f-dial-l',fonte.dial_l);setF('f-dial-d',fonte.dial_d);
-    setF('f-svd-n',fonte.svd_n);setF('f-svd-d',fonte.svd_d);
-    setF('f-sne-n',fonte.sne_n);setF('f-sne-d',fonte.sne_d);
-    setF('f-disp-o',fonte.disp_o);
-    if(fonte.avps&&fonte.avps.length)fonte.avps.forEach(a=>addAVP(a.local,a.data));else addAVP();
-    if(fonte.atbs&&fonte.atbs.length)fonte.atbs.forEach(a=>addATB(a.nome,a.inicio));else addATB();
-    if(fonte.braden){document.querySelectorAll('.bs').forEach((s,i)=>{if(fonte.braden[i])s.value=fonte.braden[i];});calcB();}
-    if(fonte.morse){['m1','m2','m3','m4','m5','m6'].forEach((n,i)=>{const r=document.querySelector('input[name="'+n+'"][value="'+fonte.morse[i]+'"]');if(r)r.checked=true;});calcM();}
-    if(evHoje){
-      loadDVA('dva-l',fonte.dva);loadDVA('sedo-l',fonte.sedo);
-      setChecks('f-neuro',fonte.neuro);setF('f-glas',fonte.glas);setF('f-rass',fonte.rass);
-      setChecks('f-pup',fonte.pup);setChecks('f-pele',fonte.pele);setF('f-les',fonte.les);
-      setChecks('f-resp',fonte.resp);setChecks('f-ausc',fonte.ausc);
-      setRadio('vent',fonte.vent);toggleVMI();
-      setF('vmi-modo',fonte.vmi_modo);setF('vmi-fio2',fonte.vmi_fio2);setF('vmi-peep',fonte.vmi_peep);
-      setF('vmi-fr',fonte.vmi_fr);setF('vmi-sens',fonte.vmi_sens);setF('vmi-vt',fonte.vmi_vt);
-      setF('f-spo2',fonte.spo2);setF('f-spo2-av',fonte.spo2av);
-      setChecks('f-car',fonte.car);setF('f-fc-taqui',fonte.fcTaqui);setF('f-fc-bradi',fonte.fcBradi);
-      setChecks('f-abd',fonte.abd);
-      setRadio('dieta',fonte.dieta);setF('f-vdieta',fonte.vdieta);
-      setRadio('diu',fonte.diu);setChecks('f-uri',fonte.uri);setF('f-ddiu',fonte.ddiu);
-      setChecks('f-eli',fonte.eli);setChecks('f-prev',fonte.prev);setF('f-obs',fonte.obs);
-    }
-  }else{addAVP();addATB();}
-  document.getElementById('form-titulo').textContent='Evolução – Leito '+pad(n);
-  document.getElementById('form-sub').textContent='Hospital dos Pescadores · UTI · '+pac.pac;
-  const b=document.getElementById('badge-form');
-  b.textContent=turno==='DIURNO'?'☀ DIURNO':'☽ NOTURNO';b.className='badge '+(turno==='DIURNO'?'badge-d':'badge-n');
-  document.getElementById('t-leitos').classList.remove('ativa');
-  document.getElementById('t-form').classList.add('ativa');window.scrollTo(0,0);
+async function getAnterior(n) {
+  const outro = turno==='DIURNO'?'NOTURNO':'DIURNO';
+  return (await dbGet('uti_ev_'+n+'_'+outro+'_'+hoje()))
+      || (await dbGet('uti_ev_'+n+'_'+turno+'_'+ontem()))
+      || (await dbGet('uti_ev_'+n+'_'+outro+'_'+ontem()));
 }
 
-function coletarDados(){
-  const isVMI=document.getElementById('vmi-box').classList.contains('show');
-  return{
-    leito:leitoAtual,turno,data:gf('f-data'),pac:gf('f-pac'),dn:gf('f-dn'),adm:gf('f-adm'),diag:gf('f-diag'),comor:gf('f-comor'),
-    neuro:gChecked('f-neuro'),glas:gf('f-glas'),rass:gf('f-rass'),pup:gChecked('f-pup'),
-    pele:gChecked('f-pele'),les:gf('f-les'),
-    resp:gChecked('f-resp'),ausc:gChecked('f-ausc'),vent:gRadio('vent'),
-    vmi_modo:gf('vmi-modo'),vmi_fio2:gf('vmi-fio2'),vmi_peep:gf('vmi-peep'),vmi_fr:gf('vmi-fr'),vmi_sens:gf('vmi-sens'),vmi_vt:gf('vmi-vt'),
-    spo2:isVMI?gf('f-spo2'):'',spo2av:isVMI?'':gf('f-spo2-av'),
-    car:gChecked('f-car'),fcTaqui:gf('f-fc-taqui'),fcBradi:gf('f-fc-bradi'),
-    abd:gChecked('f-abd'),dieta:gRadio('dieta'),vdieta:gf('f-vdieta'),
-    diu:gRadio('diu'),uri:gChecked('f-uri'),ddiu:gf('f-ddiu'),eli:gChecked('f-eli'),
-    dva:getDVAData('dva-l'),sedo:getDVAData('sedo-l'),prev:gChecked('f-prev'),
-    avps:getAVPs(),avc_l:gf('f-avc-l'),avc_d:gf('f-avc-d'),
-    dial_l:gf('f-dial-l'),dial_d:gf('f-dial-d'),
-    svd_n:gf('f-svd-n'),svd_d:gf('f-svd-d'),sne_n:gf('f-sne-n'),sne_d:gf('f-sne-d'),disp_o:gf('f-disp-o'),
+async function abrirForm(n) {
+  leitoAtual = n;
+  showLoading('Carregando evolução...');
+  const d = await leitosData();
+  const pac = d[n];
+  limparForm();
+  const anterior = await getAnterior(n);
+  const evHoje = await dbGet('uti_ev_'+n+'_'+turno+'_'+hoje());
+
+  document.getElementById('herd-tag').style.display = anterior ? 'inline' : 'none';
+  document.getElementById('cloud-tag').style.display = (!modoOffline && (anterior||evHoje)) ? 'inline' : 'none';
+
+  setF('f-pac',pac.pac); setF('f-dn',pac.dn); setF('f-adm',pac.adm);
+  setF('f-diag',pac.diag); setF('f-comor',pac.comor);
+  setF('f-leito','Leito '+pad(n)+' – UTI Geral'); setF('f-data',hoje());
+
+  const fonte = evHoje || anterior;
+  if (fonte) {
+    setF('f-avc-l',fonte.avc_l); setF('f-avc-d',fonte.avc_d);
+    setF('f-dial-l',fonte.dial_l); setF('f-dial-d',fonte.dial_d);
+    setF('f-svd-n',fonte.svd_n); setF('f-svd-d',fonte.svd_d);
+    setF('f-sne-n',fonte.sne_n); setF('f-sne-d',fonte.sne_d);
+    setF('f-disp-o',fonte.disp_o);
+    if(fonte.avps&&fonte.avps.length) fonte.avps.forEach(a=>addAVP(a.local,a.data)); else addAVP();
+    if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
+    if(fonte.braden){ document.querySelectorAll('.bs').forEach((s,i)=>{if(fonte.braden[i])s.value=fonte.braden[i];}); calcB(); }
+    if(fonte.morse){ ['m1','m2','m3','m4','m5','m6'].forEach((nm,i)=>{const r=document.querySelector('input[name="'+nm+'"][value="'+fonte.morse[i]+'"]');if(r)r.checked=true;}); calcM(); }
+    if(evHoje) {
+      loadDVA('dva-l',fonte.dva); loadDVA('sedo-l',fonte.sedo);
+      setChecks('f-neuro',fonte.neuro); setF('f-glas',fonte.glas); setF('f-rass',fonte.rass);
+      setChecks('f-pup',fonte.pup); setChecks('f-pele',fonte.pele); setF('f-les',fonte.les);
+      setChecks('f-resp',fonte.resp); setChecks('f-ausc',fonte.ausc);
+      setRadio('vent',fonte.vent); toggleVMI();
+      setF('vmi-modo',fonte.vmi_modo); setF('vmi-fio2',fonte.vmi_fio2); setF('vmi-peep',fonte.vmi_peep);
+      setF('vmi-fr',fonte.vmi_fr); setF('vmi-sens',fonte.vmi_sens); setF('vmi-vt',fonte.vmi_vt);
+      setF('f-spo2',fonte.spo2); setF('f-spo2-av',fonte.spo2av);
+      setChecks('f-car',fonte.car); setF('f-fc-taqui',fonte.fcTaqui); setF('f-fc-bradi',fonte.fcBradi);
+      setChecks('f-abd',fonte.abd);
+      setRadio('dieta',fonte.dieta); setF('f-vdieta',fonte.vdieta);
+      setRadio('diu',fonte.diu); setChecks('f-uri',fonte.uri); setF('f-ddiu',fonte.ddiu);
+      setChecks('f-eli',fonte.eli); setChecks('f-prev',fonte.prev); setF('f-obs',fonte.obs);
+    }
+  } else { addAVP(); addATB(); }
+
+  document.getElementById('form-titulo').textContent = 'Evolução – Leito '+pad(n);
+  document.getElementById('form-sub').textContent = 'Hospital dos Pescadores · UTI · '+pac.pac;
+  const b = document.getElementById('badge-form');
+  b.textContent = turno==='DIURNO'?'☀ DIURNO':'☽ NOTURNO';
+  b.className = 'badge '+(turno==='DIURNO'?'badge-d':'badge-n');
+
+  hideLoading();
+  mostrarTela('t-form');
+  window.scrollTo(0,0);
+}
+
+// ── COLETA DE DADOS ────────────────────────────────────────────────────────────
+function coletarDados() {
+  const isVMI = document.getElementById('vmi-box').classList.contains('show');
+  return {
+    leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), diag:gf('f-diag'), comor:gf('f-comor'),
+    neuro:gChecked('f-neuro'), glas:gf('f-glas'), rass:gf('f-rass'), pup:gChecked('f-pup'),
+    pele:gChecked('f-pele'), les:gf('f-les'),
+    resp:gChecked('f-resp'), ausc:gChecked('f-ausc'), vent:gRadio('vent'),
+    vmi_modo:gf('vmi-modo'), vmi_fio2:gf('vmi-fio2'), vmi_peep:gf('vmi-peep'), vmi_fr:gf('vmi-fr'), vmi_sens:gf('vmi-sens'), vmi_vt:gf('vmi-vt'),
+    spo2:isVMI?gf('f-spo2'):'', spo2av:isVMI?'':gf('f-spo2-av'),
+    car:gChecked('f-car'), fcTaqui:gf('f-fc-taqui'), fcBradi:gf('f-fc-bradi'),
+    abd:gChecked('f-abd'), dieta:gRadio('dieta'), vdieta:gf('f-vdieta'),
+    diu:gRadio('diu'), uri:gChecked('f-uri'), ddiu:gf('f-ddiu'), eli:gChecked('f-eli'),
+    dva:getDVAData('dva-l'), sedo:getDVAData('sedo-l'), prev:gChecked('f-prev'),
+    avps:getAVPs(), avc_l:gf('f-avc-l'), avc_d:gf('f-avc-d'),
+    dial_l:gf('f-dial-l'), dial_d:gf('f-dial-d'),
+    svd_n:gf('f-svd-n'), svd_d:gf('f-svd-d'), sne_n:gf('f-sne-n'), sne_d:gf('f-sne-d'), disp_o:gf('f-disp-o'),
     atbs:getATBs(),
-    braden:getBraden(),bradScore:document.getElementById('b-sc').textContent,bradRisco:document.getElementById('b-r').textContent,
-    morse:getMorse(),morseScore:document.getElementById('m-sc').textContent,morseRisco:document.getElementById('m-r').textContent,
-    obs:gf('f-obs')
+    braden:getBraden(), bradScore:document.getElementById('b-sc').textContent, bradRisco:document.getElementById('b-r').textContent,
+    morse:getMorse(), morseScore:document.getElementById('m-sc').textContent, morseRisco:document.getElementById('m-r').textContent,
+    obs:gf('f-obs'),
+    autor:usuarioEmail,
+    criadoEm:new Date().toISOString()
   };
 }
 
-function gerarPreview(){
-  const d=coletarDados();
-  sSet('uti_ev_'+d.leito+'_'+d.turno+'_'+d.data,d);
+// ── GERAR PREVIEW ──────────────────────────────────────────────────────────────
+async function gerarPreview() {
+  const btn = document.getElementById('btn-gerar');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  const d = coletarDados();
+  await dbSet('uti_ev_'+d.leito+'_'+d.turno+'_'+d.data, d);
   renderPreview(d);
-  document.getElementById('t-form').classList.remove('ativa');
-  document.getElementById('t-prev').classList.add('ativa');
-  document.getElementById('prev-sub').textContent='Leito '+pad(d.leito)+' · '+d.turno;
-  const b=document.getElementById('badge-prev');
-  b.textContent=d.turno==='DIURNO'?'☀ DIURNO':'☽ NOTURNO';b.className='badge '+(d.turno==='DIURNO'?'badge-d':'badge-n');
-  document.getElementById('drive-status').textContent='';
-  window.scrollTo(0,0);renderLeitos();
+  mostrarTela('t-prev');
+  document.getElementById('prev-sub').textContent = 'Leito '+pad(d.leito)+' · '+d.turno;
+  const b = document.getElementById('badge-prev');
+  b.textContent = d.turno==='DIURNO'?'☀ DIURNO':'☽ NOTURNO';
+  b.className = 'badge '+(d.turno==='DIURNO'?'badge-d':'badge-n');
+  document.getElementById('pdf-status').textContent = '';
+  window.scrollTo(0,0);
+  btn.disabled = false; btn.textContent = 'Gerar Impressão →';
+  toast('✓ Evolução salva'+(modoOffline?' localmente':' na nuvem'));
 }
 
-function renderPreview(d){
+// ── RENDER PREVIEW HTML ────────────────────────────────────────────────────────
+function renderPreview(d) {
   const br=(l,v)=>`<div class="pr"><span class="pl">${l}</span><span class="pv">${v||'–'}</span></div>`;
   const st=t=>`<div class="pst">${t}</div>`;
   let h='';
   h+=`<div class="ph"><h2>PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</h2><h3>SETOR – UNIDADE DE TERAPIA INTENSIVA (UTI)</h3><p>EVOLUÇÃO DO ENFERMEIRO</p></div><div class="pb">`;
   h+=`<div class="pr"><span class="pl">PACIENTE</span><span class="pv">${d.pac||'–'}</span><span class="pl" style="margin-left:1rem;">DATA</span><span class="pv">${fmtD(d.data)}</span><span class="pl" style="margin-left:1rem;">LEITO</span><span class="pv">${pad(d.leito)} – UTI Geral</span><span class="pl" style="margin-left:1rem;">TURNO</span><span class="pv">${d.turno}</span></div>`;
   h+=`<div class="pr"><span class="pl">DN</span><span class="pv">${fmtD(d.dn)}</span><span class="pl" style="margin-left:1rem;">ADMISSÃO UTI</span><span class="pv">${fmtD(d.adm)}</span></div>`;
-  h+=br('DIAGNÓSTICO',d.diag);h+=br('COMORBIDADES',d.comor);
+  h+=br('DIAGNÓSTICO',d.diag); h+=br('COMORBIDADES',d.comor);
   h+=st('Avaliação Neurológica');
   h+=br('CONSCIÊNCIA',d.neuro.join(', ')||'–');
   h+=`<div class="pr"><span class="pl">GLASGOW</span><span class="pv">${d.glas||'–'}</span><span class="pl" style="margin-left:1rem;">RASS</span><span class="pv">${d.rass||'–'}</span><span class="pl" style="margin-left:1rem;">PUPILAS</span><span class="pv">${d.pup.join(', ')||'–'}</span></div>`;
@@ -805,17 +1116,17 @@ function renderPreview(d){
   }
   h+=st('Cardiovascular');
   let cars=d.car.filter(v=>v!=='Taquicárdico'&&v!=='Bradicárdico').join(', ');
-  if(d.car.includes('Taquicárdico'))cars+=(cars?', ':'')+'Taquicárdico'+(d.fcTaqui?' (FC: '+d.fcTaqui+' bpm)':'');
-  if(d.car.includes('Bradicárdico'))cars+=(cars?', ':'')+'Bradicárdico'+(d.fcBradi?' (FC: '+d.fcBradi+' bpm)':'');
+  if(d.car.includes('Taquicárdico')) cars+=(cars?', ':'')+`Taquicárdico${d.fcTaqui?' (FC: '+d.fcTaqui+' bpm)':''}`;
+  if(d.car.includes('Bradicárdico')) cars+=(cars?', ':'')+`Bradicárdico${d.fcBradi?' (FC: '+d.fcBradi+' bpm)':''}`;
   h+=br('ACHADOS',cars||'–');
-  h+=st('Abdome');h+=br('ACHADOS',d.abd.join(', ')||'–');
+  h+=st('Abdome'); h+=br('ACHADOS',d.abd.join(', ')||'–');
   h+=st('Dieta, Diurese e Eliminações');
   h+=`<div class="pr"><span class="pl">DIETA</span><span class="pv">${d.dieta||'–'}</span><span class="pl" style="margin-left:1rem;">VAZÃO</span><span class="pv">${d.vdieta?d.vdieta+' ml/h':'–'}</span></div>`;
   h+=`<div class="pr"><span class="pl">DIURESE</span><span class="pv">${d.diu||'–'}</span><span class="pl" style="margin-left:1rem;">ASPECTO</span><span class="pv">${d.uri.join(', ')||'–'}</span><span class="pl" style="margin-left:1rem;">DÉBITO</span><span class="pv">${d.ddiu?d.ddiu+' ml':'–'}</span></div>`;
   h+=br('ELIM. INTESTINAIS',d.eli.join(', ')||'–');
   h+=st('Drogas Vasoativas e Sedoanalgesia');
-  h+=br('DVA',dvaStr(d.dva));h+=br('SEDOANALGESIA',dvaStr(d.sedo));
-  h+=st('Medidas Preventivas');h+=br('EM USO',d.prev.join(', ')||'–');
+  h+=br('DVA',dvaStr(d.dva)); h+=br('SEDOANALGESIA',dvaStr(d.sedo));
+  h+=st('Medidas Preventivas'); h+=br('EM USO',d.prev.join(', ')||'–');
   h+=st('Dispositivos Médicos');
   const avpStr=d.avps&&d.avps.filter(a=>a.local).length?d.avps.filter(a=>a.local).map(a=>a.local+(a.data?' ('+fmtD(a.data)+')':'')).join(' | '):'–';
   h+=br('AVP',avpStr);
@@ -823,99 +1134,131 @@ function renderPreview(d){
   h+=`<div class="pr"><span class="pl">SVD nº/Data</span><span class="pv">${d.svd_n||'–'} / ${fmtD(d.svd_d)}</span><span class="pl" style="margin-left:1rem;">SNE nº/Data</span><span class="pv">${d.sne_n||'–'} / ${fmtD(d.sne_d)}</span></div>`;
   h+=br('OUTROS DISP.',d.disp_o);
   h+=st('Antimicrobianos em Uso');
-  if(d.atbs&&d.atbs.filter(a=>a.nome).length){d.atbs.filter(a=>a.nome).forEach(a=>{h+=`<div class="pr"><span class="pv">${a.nome}</span>${a.inicio?`<span class="pl" style="margin-left:1rem;">INÍCIO</span><span class="pv">${fmtD(a.inicio)}</span>`:''}</div>`;});}else h+=br('','–');
+  if(d.atbs&&d.atbs.filter(a=>a.nome).length){ d.atbs.filter(a=>a.nome).forEach(a=>{ h+=`<div class="pr"><span class="pv">${a.nome}</span>${a.inicio?`<span class="pl" style="margin-left:1rem;">INÍCIO</span><span class="pv">${fmtD(a.inicio)}</span>`:''}</div>`; }); } else h+=br('','–');
   h+=st('Escalas de Risco');
   h+=`<div class="pr"><span class="pl">BRADEN</span><span class="pv">${d.bradScore} pts – ${d.bradRisco||'–'}</span><span class="pl" style="margin-left:1rem;">MORSE</span><span class="pv">${d.morseScore} pts – ${d.morseRisco||'–'}</span></div>`;
   h+=st('Observações / Intercorrências / Informações Complementares');
   h+=`<div class="obs-box" style="min-height:100px;">${d.obs||''}</div>`;
   h+=st('Assinatura / Carimbo');
-  h+=`<div style="display:flex;justify-content:center;padding:1rem 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:260px;border-top:1px solid #000;padding-top:5px;">Enfermeiro – ${d.turno}<br>Assinatura / Carimbo</div></div>`;
+  h+=`<div style="display:flex;justify-content:center;padding:1rem 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:260px;border-top:1px solid #000;padding-top:5px;">Enfermeiro${d.autor?' – '+d.autor:''}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
   h+=`</div><div class="pfoot"><span>Turno: ${d.turno}</span><span>Leito ${pad(d.leito)} – UTI Geral</span><span>${fmtD(d.data)}</span></div>`;
-  document.getElementById('preview-area').innerHTML=h;
+  document.getElementById('preview-area').innerHTML = h;
 }
 
-// ─── SALVAR NO DRIVE VIA APPS SCRIPT ─────────────────────────────────────────
-async function salvarNoDrive() {
-  const btn    = document.getElementById('btn-drive');
-  const status = document.getElementById('drive-status');
+// ── GERAR PDF (jsPDF + html2canvas) ──────────────────────────────────────────
+async function gerarPDF() {
+  const btn = document.getElementById('btn-pdf');
+  const status = document.getElementById('pdf-status');
+  const area = document.getElementById('preview-area');
+  if (!area || !area.innerHTML.trim()) { alert('Gere a impressão primeiro.'); return; }
 
-  // Pega SOMENTE o conteúdo do preview-area (não inclui botões nem header da tela)
-  const areaPreview = document.getElementById('preview-area');
-  if (!areaPreview || !areaPreview.innerHTML.trim()) {
-    alert('Por favor, gere a impressão antes de salvar.');
-    return;
-  }
-
-  // Monta o nome do arquivo com leito, turno e data
-  const d = coletarDados();
-  const nomeArquivo = `Evolucao_Leito${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Paciente').split(' ')[0]}`;
-
-  // Monta HTML completo para o Apps Script converter em PDF
-  // Os estilos inline garantem boa renderização mesmo sem folha de estilos externa
-  const htmlCompleto = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<style>
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0; padding: 10px; }
-  .ph { text-align: center; border: 2px solid #000; padding: 10px; border-bottom: none; }
-  .ph h2 { font-size: 13px; font-weight: 800; text-transform: uppercase; margin: 0; }
-  .ph h3 { font-size: 10px; font-weight: 700; margin: 2px 0 0; }
-  .ph p  { font-size: 10px; margin: 2px 0 0; }
-  .pb { border: 2px solid #000; padding: 8px 10px; }
-  .pst { background: #0a3d6b; color: white; font-size: 9px; font-weight: 800;
-         letter-spacing: .07em; text-transform: uppercase; padding: 3px 7px;
-         margin: 6px -10px 4px; padding-left: 10px; }
-  .pr { display: flex; flex-wrap: wrap; gap: 2px 12px;
-        border-bottom: 1px solid #ddd; padding: 3px 0; font-size: 10px; }
-  .pr:last-child { border-bottom: none; }
-  .pl { color: #555; font-weight: 700; font-size: 9px; text-transform: uppercase; }
-  .pv { font-weight: 500; }
-  .obs-box { border: 1px solid #000; padding: 6px; min-height: 50px;
-             font-size: 10px; white-space: pre-wrap; word-break: break-word; }
-  .pfoot { border-top: 2px solid #000; padding: 4px 10px;
-           display: flex; justify-content: space-between; font-size: 9px; color: #555; }
-</style>
-</head>
-<body>
-${areaPreview.innerHTML}
-<p style="font-size:8px;color:#888;text-align:right;margin-top:8px;">
-  Gerado em ${new Date().toLocaleString('pt-BR')}
-</p>
-</body>
-</html>`;
-
-  btn.disabled = true;
-  btn.textContent = 'Salvando...';
-  status.textContent = 'Enviando para o Drive...';
+  btn.disabled = true; btn.textContent = '⏳ Gerando PDF...';
+  status.textContent = 'Capturando página...';
   status.style.color = 'var(--muted)';
 
   try {
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',   // Apps Script não envia CORS headers por padrão
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ titulo: nomeArquivo, html: htmlCompleto })
+    const { jsPDF } = window.jspdf;
+
+    const canvas = await html2canvas(area, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: area.scrollWidth,
+      height: area.scrollHeight
     });
 
-    // Com no-cors não conseguimos ler a resposta, mas se não lançou exceção o envio foi feito
-    status.textContent = '✓ Enviado! Verifique a pasta "UTI – Evoluções de Enfermagem" no Drive.';
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const contentW = pageW - margin*2;
+    const imgH = (canvas.height * contentW) / canvas.width;
+
+    let posY = margin;
+    let remainH = imgH;
+    let srcY = 0;
+    const pageContentH = pageH - margin*2;
+
+    // Múltiplas páginas se necessário
+    while (remainH > 0) {
+      const sliceH = Math.min(remainH, pageContentH);
+      const sliceCanvas = document.createElement('canvas');
+      const ratio = canvas.width / contentW;
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceH * ratio;
+      const ctx = sliceCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0,0,sliceCanvas.width,sliceCanvas.height);
+      ctx.drawImage(canvas, 0, srcY * ratio, canvas.width, sliceH * ratio, 0, 0, canvas.width, sliceH * ratio);
+
+      const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.92);
+      if (srcY > 0) pdf.addPage();
+      pdf.addImage(sliceData,'JPEG', margin, margin, contentW, sliceH);
+
+      srcY += sliceH;
+      remainH -= sliceH;
+    }
+
+    const d = coletarDados();
+    const nome = `Evolucao_Leito${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Paciente').split(' ')[0]}.pdf`;
+    pdf.save(nome);
+
+    status.textContent = '✓ PDF baixado com sucesso!';
     status.style.color = 'var(--verde)';
-    toast('PDF enviado para o Google Drive!');
-  } catch (e) {
-    status.textContent = 'Erro ao enviar. Tente novamente ou use "Imprimir" como alternativa.';
+    toast('✓ PDF gerado: '+nome);
+  } catch(e) {
+    console.error(e);
+    status.textContent = 'Erro ao gerar PDF. Tente "Imprimir" como alternativa.';
     status.style.color = 'var(--vermelho)';
+    toast('Erro ao gerar PDF', true);
   }
 
-  btn.disabled = false;
-  btn.textContent = 'Salvar no Drive';
+  btn.disabled = false; btn.textContent = '⬇ Baixar PDF';
 }
 
-function irLeitos(){document.getElementById('t-form').classList.remove('ativa');document.getElementById('t-leitos').classList.add('ativa');renderLeitos();window.scrollTo(0,0);}
-function irForm(){document.getElementById('t-prev').classList.remove('ativa');document.getElementById('t-form').classList.add('ativa');window.scrollTo(0,0);}
-function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function toast(msg, err=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast'+(err?' err':'');
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3000);
+}
 
-window.addEventListener('load',()=>{document.getElementById('t-turno').style.display='flex';});
+// ── INICIALIZAÇÃO ──────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  const fbOk = initFirebase();
+
+  if (!fbOk) {
+    // Firebase não configurado: mostra tela de configuração + opção offline
+    mostrarTela('t-config');
+    document.getElementById('t-config').style.display = 'flex';
+    return;
+  }
+
+  // Firebase configurado: aguarda estado de auth
+  mostrarTela('t-login');
+  document.getElementById('t-login').classList.add('ativa');
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      usuarioEmail = user.email;
+      irTelaTurno(true);
+      mostrarTela('t-turno');
+    } else {
+      mostrarTela('t-login');
+      document.getElementById('t-login').style.display = 'flex';
+    }
+  });
+
+  // Enter no campo de senha faz login
+  document.getElementById('li-senha').addEventListener('keydown', e => {
+    if (e.key === 'Enter') fazerLogin();
+  });
+});
 </script>
 </body>
 </html>
