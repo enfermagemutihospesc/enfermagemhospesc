@@ -845,16 +845,17 @@ async function salvarNoDrive() {
   const status = document.getElementById('save-status');
   const URL_DO_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
 
-  // Captura o nome do paciente pelo ID correto 'f-pac'
+  // Captura o nome do paciente
   const nomePaciente = document.getElementById('f-pac').value || 'Sem_Nome';
   const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
   const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
   
-  // No seu HTML original, o conteúdo da prévia fica dentro de 'pre-visualizacao'
-  const elementoPreview = document.getElementById('pre-visualizacao');
+  // Tenta encontrar a área de prévia por dois IDs comuns no seu código
+  const elementoPreview = document.getElementById('pre-visualizacao') || document.getElementById('preview-area');
   
-  if (!elementoPreview) {
-    alert("Erro: Área de pré-visualização não encontrada. Gere a evolução primeiro!");
+  // Se ainda assim não achar, ou se estiver vazio, avisa o usuário
+  if (!elementoPreview || elementoPreview.innerHTML.trim() === "") {
+    alert("Atenção: Primeiro você deve clicar no botão 'GERAR EVOLUÇÃO' no final do formulário para depois salvar no Drive.");
     return;
   }
 
@@ -875,20 +876,16 @@ async function salvarNoDrive() {
   try {
     await fetch(URL_DO_SCRIPT, {
       method: 'POST',
-      mode: 'no-cors', // Fundamental para scripts do Google
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
+      mode: 'no-cors',
       body: JSON.stringify({
         titulo: nomeArquivo,
         html: conteudoHTML
       })
     });
 
-    // Feedback de sucesso
-    status.textContent = '✓ PDF salvo na pasta!';
+    status.textContent = '✓ PDF solicitado com sucesso!';
     status.style.color = 'var(--verde)';
-    alert("Sucesso! O PDF foi enviado para a pasta do Google Drive.");
+    alert("Sucesso! O PDF está sendo gerado na sua pasta do Drive.");
 
   } catch (e) {
     console.error(e);
