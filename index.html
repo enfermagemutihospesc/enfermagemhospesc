@@ -875,7 +875,10 @@ async function salvarNoDrive() {
   try {
     await fetch(URL_DO_SCRIPT, {
       method: 'POST',
-      mode: 'no-cors', // Mantido para evitar erro de redirecionamento do Google
+      mode: 'no-cors', // Fundamental para scripts do Google
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
       body: JSON.stringify({
         titulo: nomeArquivo,
         html: conteudoHTML
