@@ -689,10 +689,11 @@ const FIREBASE_CONFIG = {
       <div id="preview-area"></div>
     </div>
     <div class="btn-row btn-row-prev">
-      <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
-      <button class="btn btn-imp btn-sm" onclick="window.print()">🖨 Imprimir</button>
-      <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">⬇ Baixar PDF</button>
-    </div>
+  <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
+  <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">⬇ Baixar PDF</button>
+  <button class="btn btn-sm" style="background:#d63031; color:white;" onclick="confirmarAlta()">🏥 Alta</button>
+  <button class="btn btn-sm" style="background:#fdcb6e; color:black;" onclick="prepararTransferencia()">🔄 Transf.</button>
+</div>
     <p id="pdf-status" style="font-size:.72rem;color:var(--muted);text-align:right;"></p>
   </div>
 </div>
@@ -1217,6 +1218,67 @@ async function gerarPDF() {
   }
 }
 
+// ── FUNÇÃO DE ALTA (APAGAR DO FIREBASE) ──────────────────────────────────────
+async function confirmarAlta() {
+  // Pega os dados do paciente que está na tela
+  const leito = document.getElementById('f-leito')?.value;
+  const turno = document.getElementById('f-turno')?.value;
+  const data = document.getElementById('f-data')?.value;
+
+  if (!leito || !turno || !data) {
+    alert("Erro ao identificar o registro para alta.");
+    return;
+  }
+
+  const idDoc = 'uti_ev_' + leito + '_' + turno + '_' + data;
+
+  if (confirm(`Deseja realmente dar ALTA (apagar dados) do Leito ${leito}?\nEsta ação não pode ser desfeita na nuvem.`)) {
+    try {
+      // Apaga na coleção 'uti'
+      await db.collection("uti").doc(idDoc).delete();
+      
+      // Também limpa o local storage por segurança
+      localStorage.removeItem(idDoc);
+      
+      toast("✓ Alta realizada. Leito liberado.");
+      irLeitos(); // Volta para o mapa de leitos
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao processar alta no Firebase: " + e.message);
+    }
+  }
+}
+
+// ── FUNÇÃO DE TRANSFERÊNCIA (MOVER REGISTRO) ──────────────────────────────────
+async function prepararTransferencia() {
+  const d = coletarDados(); // Sua função que já existe para ler o formulário
+  const novoLeito = prompt(`Transferir paciente do Leito ${d.leito} para qual leito? (Digite o número)`);
+
+  if (novoLeito && novoLeito !== d.leito) {
+    const idAntigo = 'uti_ev_' + d.leito + '_' + d.turno + '_' + d.data;
+    const idNovo = 'uti_ev_' + novoLeito + '_' + d.turno + '_' + d.data;
+
+    try {
+      // 1. Cria o novo objeto com o número do leito alterado
+      const dadosTransferidos = { ...d, leito: novoLeito };
+
+      // 2. Grava no novo ID na coleção 'uti'
+      await db.collection("uti").doc(idNovo).set(dadosTransferidos);
+
+      // 3. Apaga o registro do leito antigo
+      await db.collection("uti").doc(idAntigo).delete();
+      
+      // Limpa local storage antigo
+      localStorage.removeItem(idAntigo);
+
+      toast(`✓ Transferido para o Leito ${novoLeito}`);
+      irLeitos();
+    } catch (e) {
+      alert("Erro na transferência: " + e.message);
+    }
+  }
+}
+  
 // ── TOAST ─────────────────────────────────────────────────────────────────────
 function toast(msg, err=false) {
   const t = document.getElementById('toast');
