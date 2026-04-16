@@ -541,6 +541,9 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
       <button id="btn-drive" class="btn btn-azul" onclick="salvarNoDrive()">
     <i class="fab fa-google-drive"></i> Salvar no Drive
 </button>
+
+<div id="save-status" style="margin-top: 10px; font-weight: bold;"></div>
+</button>
     </div>
     <p id="drive-status" style="font-size:.72rem;color:var(--muted);text-align:right;"></p>
   </div>
@@ -843,32 +846,26 @@ function renderPreview(d){
 }
 
 async function salvarNoDrive() {
-  // 1. Tenta encontrar o botão
+  // Tenta encontrar os elementos, mas não trava se forem nulos
   const btn = document.getElementById('btn-drive');
   const status = document.getElementById('save-status');
-  
-  if (!btn) {
-    alert("Erro: O botão com id 'btn-drive' não foi encontrado no HTML.");
-    return;
-  }
-
   const URL_DO_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
 
-  // 2. Tenta encontrar os dados do paciente
+  // Identifica o paciente
   const campoNome = document.getElementById('f-pac');
   const nomePaciente = campoNome ? campoNome.value : 'Sem_Nome';
   const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
   const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
   
-  // 3. Tenta encontrar a área que contém o texto da evolução
-  // No seu código a área final após clicar em gerar é a 't-prev'
+  // Identifica a área de resumo (t-prev é a tela que aparece após o botão azul)
   const elementoPreview = document.getElementById('t-prev');
   
   if (!elementoPreview || elementoPreview.innerHTML.trim() === "") {
-    alert("Por favor, clique em 'GERAR IMPRESSÃO' antes de salvar no Drive.");
+    alert("Por favor, gere o resumo da evolução antes de salvar.");
     return;
   }
 
+  // Prepara o visual do PDF
   const conteudoHTML = `
     <html>
       <head><meta charset="UTF-8"></head>
@@ -878,10 +875,15 @@ async function salvarNoDrive() {
     </html>
   `;
 
-  // Agora sim ele desabilita o botão com segurança
-  btn.disabled = true;
-  btn.textContent = 'Enviando...';
-  if(status) status.textContent = 'Gerando PDF no Drive...';
+  // Mudar estado do botão (com proteção para não dar erro de null)
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+  }
+  if (status) {
+    status.textContent = 'Gerando PDF no Drive...';
+    status.style.color = 'black';
+  }
 
   try {
     await fetch(URL_DO_SCRIPT, {
@@ -893,18 +895,23 @@ async function salvarNoDrive() {
       })
     });
 
-    alert("Sucesso! Verifique sua pasta no Drive.");
-    if(status) {
-        status.textContent = '✓ Salvo com sucesso!';
-        status.style.color = 'var(--verde)';
+    // Sucesso
+    alert("Solicitação enviada com sucesso!");
+    if (status) {
+      status.textContent = '✓ Arquivo enviado!';
+      status.style.color = 'green';
     }
   } catch (e) {
     console.error(e);
-    alert("Erro ao conectar com o Drive.");
+    alert("Erro na conexão com o Google Drive.");
+    if (status) status.textContent = 'Erro ao salvar.';
+  } finally {
+    // Volta o botão ao normal
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Salvar no Drive';
+    }
   }
-  
-  btn.disabled = false;
-  btn.textContent = 'Salvar no Drive';
 }
 
 function irLeitos(){document.getElementById('t-form').classList.remove('ativa');document.getElementById('t-leitos').classList.add('ativa');renderLeitos();window.scrollTo(0,0);}
