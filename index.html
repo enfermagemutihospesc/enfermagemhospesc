@@ -538,7 +538,9 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
     <div class="btn-row btn-row-prev">
       <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
       <button class="btn btn-imp btn-sm" onclick="window.print()">Imprimir</button>
-      <button class="btn btn-drive btn-sm" id="btn-drive-save" onclick="salvarNoDrive()">Salvar no Drive</button>
+      <button id="btn-drive" class="btn btn-azul" onclick="salvarNoDrive()">
+    <i class="fab fa-google-drive"></i> Salvar no Drive
+</button>
     </div>
     <p id="drive-status" style="font-size:.72rem;color:var(--muted);text-align:right;"></p>
   </div>
