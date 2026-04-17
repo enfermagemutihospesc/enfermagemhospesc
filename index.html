@@ -347,9 +347,34 @@ const FIREBASE_CONFIG = {
         </div>
         <div class="fl"><label>Diagnóstico</label><input type="text" id="f-diag" placeholder="Diagnóstico principal"></div>
         <div class="fl"><label>Comorbidades</label><input type="text" id="f-comor" placeholder="Ex: DM, HAS, tabagista..."></div>
+        <div class="fl"><label>Adm. HospEsc</label><input type="date" id="f-adm-hosp"></div>
+<div class="fl"><label>Alergias</label><input type="text" id="f-alergia" placeholder="Ex: Dipirona... ou NKDA"></div>
       </div>
     </div>
 
+<!-- SEGURANÇA -->
+<div class="secao">
+  <div class="secao-t">Segurança do Paciente</div>
+  <div class="secao-c">
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <span class="sub-t">Pulseira de identificação</span>
+      <label class="ri"><input type="radio" name="pulseira" value="Sim"> Sim</label>
+      <label class="ri"><input type="radio" name="pulseira" value="Não"> Não</label>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <span class="sub-t" style="padding-top:3px;">Isolamento</span>
+      <div class="rg">
+        <label class="ri"><input type="radio" name="isolamento" value="Não"> Não</label>
+        <label class="ri"><input type="radio" name="isolamento" value="Vigilância"> Vigilância</label>
+        <label class="ri"><input type="radio" name="isolamento" value="Contato"> Contato</label>
+        <label class="ri"><input type="radio" name="isolamento" value="Gotículas"> Gotículas</label>
+        <label class="ri"><input type="radio" name="isolamento" value="Aerossóis"> Aerossóis</label>
+      </div>
+    </div>
+    <div class="fl"><label>Microrganismo</label><input type="text" id="f-microorg" placeholder="Ex: MRSA, KPC..."></div>
+  </div>
+</div>
+    
     <!-- NEUROLÓGICO -->
     <div class="secao">
       <div class="secao-t">Avaliação Neurológica</div>
@@ -620,6 +645,19 @@ const FIREBASE_CONFIG = {
       </div>
     </div>
 
+<div class="secao">
+  <div class="secao-t">Exames e Procedimentos Realizados Hoje</div>
+  <div class="secao-c">
+    <textarea id="f-exames-real" style="min-height:90px;" placeholder="Ex: Hemograma, gasometria, RX tórax, fisioterapia..."></textarea>
+  </div>
+</div>
+<div class="secao">
+  <div class="secao-t">Exames e Pareceres Solicitados</div>
+  <div class="secao-c">
+    <textarea id="f-exames-solic" style="min-height:90px;" placeholder="Ex: TC tórax, parecer infectologia..."></textarea>
+  </div>
+</div>
+    
     <!-- ATB -->
     <div class="secao">
       <div class="secao-t">Antimicrobianos em Uso <span class="herd-tag">↻ herdado</span></div>
@@ -710,6 +748,14 @@ const FIREBASE_CONFIG = {
         <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Admissão UTI</label><input type="date" id="m-adm" style="width:100%;"></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Comorbidades</label><input type="text" id="m-comor" placeholder="Ex: DM, HAS..." style="width:100%;"></div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+  <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Adm. Hospital dos Pescadores</label>
+  <input type="date" id="m-adm-hosp" style="width:100%;">
+</div>
+<div style="display:flex;flex-direction:column;gap:5px;">
+  <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Alergias</label>
+  <input type="text" id="m-alergia" placeholder="Ex: Dipirona, Penicilina... ou NKDA" style="width:100%;">
+</div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding-top:4px;">
         <button class="btn btn-imp btn-sm" id="btn-alta" onclick="darAlta()">Alta / Desocupar leito</button>
         <div style="display:flex;gap:6px;">
@@ -793,6 +839,12 @@ async function dbSet(key, value) {
   return false;
 }
 
+async function dbDelete(key){
+  localStorage.removeItem(key);
+  if(!modoOffline&&db) try{ await db.collection('uti').doc(key).delete(); }catch(e){}
+}
+  function evKey(leito,t,data){ return 'uti_ev_'+leito+'_'+t+'_'+data; }
+
 // ── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
 async function fazerLogin() {
   const email = gf('li-email').trim();
@@ -875,7 +927,7 @@ async function leitosData() {
   let d = await dbGet('uti_leitos');
   if (!d) {
     d = {};
-    for (let i=1;i<=TOTAL;i++) d[i]={ocupado:false,pac:'',diag:'',dn:'',adm:'',comor:''};
+    for (let i=1;i<=TOTAL;i++) d[i] = {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:''};
     await dbSet('uti_leitos', d);
   }
   return d;
@@ -927,6 +979,8 @@ async function abrirModal(n) {
   document.getElementById('m-dn').value    = l.dn||'';
   document.getElementById('m-adm').value   = l.adm||hoje();
   document.getElementById('m-comor').value = l.comor||'';
+  document.getElementById('m-adm-hosp').value = l.admHosp||'';
+document.getElementById('m-alergia').value   = l.alergia||'';
   document.getElementById('btn-alta').style.display = l.ocupado?'':'none';
   document.getElementById('modal-adm').classList.add('show');
 }
@@ -935,7 +989,8 @@ function fecharModal(){ document.getElementById('modal-adm').classList.remove('s
 async function salvarAdmissao() {
   showLoading('Salvando admissão...');
   const d = await leitosData();
-  d[modalLeito] = {ocupado:true,pac:gf('m-pac'),diag:gf('m-diag'),dn:gf('m-dn'),adm:gf('m-adm'),comor:gf('m-comor')};
+  d[modalLeito] = {ocupado:true, pac:gf('m-pac'), diag:gf('m-diag'), dn:gf('m-dn'),
+  adm:gf('m-adm'), admHosp:gf('m-adm-hosp'), comor:gf('m-comor'), alergia:gf('m-alergia')};
   await dbSet('uti_leitos', d);
   hideLoading(); fecharModal(); await renderLeitos();
   toast('Paciente admitido no leito '+pad(modalLeito));
@@ -1012,7 +1067,8 @@ async function abrirForm(n) {
   document.getElementById('cloud-tag').style.display = (!modoOffline && (anterior||evHoje)) ? 'inline' : 'none';
 
   setF('f-pac',pac.pac); setF('f-dn',pac.dn); setF('f-adm',pac.adm);
-  setF('f-diag',pac.diag); setF('f-comor',pac.comor);
+  setF('f-diag',pac.diag); setF('f-comor',pac.comor); setF('f-adm-hosp', pac.admHosp||'');
+setF('f-alergia',  pac.alergia||'');
   setF('f-leito','Leito '+pad(n)+' – UTI Geral'); setF('f-data',hoje());
 
   const fonte = evHoje || anterior;
@@ -1026,6 +1082,9 @@ async function abrirForm(n) {
     if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
     if(fonte.braden){ document.querySelectorAll('.bs').forEach((s,i)=>{if(fonte.braden[i])s.value=fonte.braden[i];}); calcB(); }
     if(fonte.morse){ ['m1','m2','m3','m4','m5','m6'].forEach((nm,i)=>{const r=document.querySelector('input[name="'+nm+'"][value="'+fonte.morse[i]+'"]');if(r)r.checked=true;}); calcM(); }
+    if(fonte.pulseira) setRadio('pulseira', fonte.pulseira);
+    if(fonte.isolamento) setRadio('isolamento', fonte.isolamento);
+    setF('f-microorg', fonte.microorg||'');
     if(evHoje) {
       loadDVA('dva-l',fonte.dva); loadDVA('sedo-l',fonte.sedo);
       setChecks('f-neuro',fonte.neuro); setF('f-glas',fonte.glas); setF('f-rass',fonte.rass);
@@ -1039,7 +1098,8 @@ async function abrirForm(n) {
       setChecks('f-abd',fonte.abd);
       setRadio('dieta',fonte.dieta); setF('f-vdieta',fonte.vdieta);
       setRadio('diu',fonte.diu); setChecks('f-uri',fonte.uri); setF('f-ddiu',fonte.ddiu);
-      setChecks('f-eli',fonte.eli); setChecks('f-prev',fonte.prev); setF('f-obs',fonte.obs);
+      setChecks('f-eli',fonte.eli); setChecks('f-prev',fonte.prev);setF('f-exames-real',  fonte.examesReal||'');
+setF('f-exames-solic', fonte.examesSolic||''); setF('f-obs',fonte.obs);
     }
   } else { addAVP(); addATB(); }
 
@@ -1058,7 +1118,13 @@ async function abrirForm(n) {
 function coletarDados() {
   const isVMI = document.getElementById('vmi-box').classList.contains('show');
   return {
-    leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), diag:gf('f-diag'), comor:gf('f-comor'),
+    leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), diag:gf('f-diag'), comor:gf('f-comor'),admHosp:    gf('f-adm-hosp'),
+alergia:    gf('f-alergia'),
+pulseira:   gRadio('pulseira'),
+isolamento: gRadio('isolamento'),
+microorg:   gf('f-microorg'),
+examesReal: gf('f-exames-real'),
+examesSolic:gf('f-exames-solic'),
     neuro:gChecked('f-neuro'), glas:gf('f-glas'), rass:gf('f-rass'), pup:gChecked('f-pup'),
     pele:gChecked('f-pele'), les:gf('f-les'),
     resp:gChecked('f-resp'), ausc:gChecked('f-ausc'), vent:gRadio('vent'),
@@ -1107,6 +1173,11 @@ function renderPreview(d) {
   h+=`<div class="pr"><span class="pl">PACIENTE</span><span class="pv">${d.pac||'–'}</span><span class="pl" style="margin-left:1rem;">DATA</span><span class="pv">${fmtD(d.data)}</span><span class="pl" style="margin-left:1rem;">LEITO</span><span class="pv">${pad(d.leito)} – UTI Geral</span><span class="pl" style="margin-left:1rem;">TURNO</span><span class="pv">${d.turno}</span></div>`;
   h+=`<div class="pr"><span class="pl">DN</span><span class="pv">${fmtD(d.dn)}</span><span class="pl" style="margin-left:1rem;">ADMISSÃO UTI</span><span class="pv">${fmtD(d.adm)}</span></div>`;
   h+=br('DIAGNÓSTICO',d.diag); h+=br('COMORBIDADES',d.comor);
+  h+=br('ALERGIAS', d.alergia||'NKDA');
+h+=st('Segurança do Paciente');
+h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseira||'–'}</span>
+    <span class="pl" style="margin-left:1rem;">ISOLAMENTO</span><span class="pv">${d.isolamento||'–'}</span>
+    ${d.microorg?`<span class="pl" style="margin-left:1rem;">MICROORG.</span><span class="pv">${d.microorg}</span>`:''}</div>`;
   h+=st('Avaliação Neurológica');
   h+=br('CONSCIÊNCIA',d.neuro.join(', ')||'–');
   h+=`<div class="pr"><span class="pl">GLASGOW</span><span class="pv">${d.glas||'–'}</span><span class="pl" style="margin-left:1rem;">RASS</span><span class="pv">${d.rass||'–'}</span><span class="pl" style="margin-left:1rem;">PUPILAS</span><span class="pv">${d.pup.join(', ')||'–'}</span></div>`;
@@ -1143,6 +1214,11 @@ function renderPreview(d) {
   h+=st('Antimicrobianos em Uso');
   if(d.atbs&&d.atbs.filter(a=>a.nome).length){ d.atbs.filter(a=>a.nome).forEach(a=>{ h+=`<div class="pr"><span class="pv">${a.nome}</span>${a.inicio?`<span class="pl" style="margin-left:1rem;">INÍCIO</span><span class="pv">${fmtD(a.inicio)}</span>`:''}</div>`; }); } else h+=br('','–');
   h += `<div class="quebra-pagina"></div>`;
+  h += `<div id="pdf-break" style="page-break-after:always;border-top:1px dashed #bbb;margin:10px 0;"></div>`;
+  h+=st('Exames e Procedimentos Realizados Hoje');
+h+=`<div class="obs-box" style="min-height:45px;">${d.examesReal||'–'}</div>`;
+h+=st('Exames e Pareceres Solicitados');
+h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`;
   h+=st('Escalas de Risco');
   h+=`<div class="pr"><span class="pl">BRADEN</span><span class="pv">${d.bradScore} pts – ${d.bradRisco||'–'}</span><span class="pl" style="margin-left:1rem;">MORSE</span><span class="pv">${d.morseScore} pts – ${d.morseRisco||'–'}</span></div>`;
   h+=st('Observações / Intercorrências / Informações Complementares');
@@ -1155,128 +1231,92 @@ function renderPreview(d) {
 
 // ── GERAR PDF (jsPDF + html2canvas) ──────────────────────────────────────────
 // ── GERAR PDF (jsPDF + GOOGLE DRIVE) ─────────────────────────────────────────
-async function gerarPDF() {
-  const btn = document.getElementById('btn-pdf');
-  const status = document.getElementById('pdf-status');
-  const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec";
+async function gerarPDF(){
+  const btn=document.getElementById('btn-pdf'), status=document.getElementById('pdf-status');
+  const area=document.getElementById('preview-area');
+  if(!area||!area.innerHTML.trim()){alert('Gere a impressão primeiro.');return;}
+  btn.disabled=true; btn.textContent='⏳ Gerando...';
+  status.textContent='Capturando...'; status.style.color='var(--muted)';
+  try{
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const margin=10, contentW=pdf.internal.pageSize.getWidth()-margin*2;
+    const breakEl=document.getElementById('pdf-break');
 
-  // Captura dados para o nome do arquivo
-  const nomePaciente = document.getElementById('f-pac')?.value || 'Sem_Nome';
-  const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-  const nomeArquivo = `Evolução_${nomePaciente}_${dataHoje}`;
+    async function fatia(top,height){
+      const c=await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',
+        logging:false,width:area.scrollWidth,height:area.scrollHeight});
+      const ratio=c.width/area.scrollWidth;
+      const sc=document.createElement('canvas');
+      sc.width=c.width; sc.height=Math.round(height*ratio);
+      const ctx=sc.getContext('2d');
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,sc.width,sc.height);
+      ctx.drawImage(c,0,Math.round(top*ratio),c.width,Math.round(height*ratio),0,0,c.width,sc.height);
+      return sc;
+    }
 
-  btn.disabled = true;
-  btn.textContent = 'Processando...';
-  if (status) status.textContent = 'Gerando PDF e enviando ao Drive...';
+    if(breakEl){
+      const p1=await fatia(0, breakEl.offsetTop);
+      pdf.addImage(p1.toDataURL('image/jpeg',.92),'JPEG',margin,margin,contentW,(p1.height/p1.width)*contentW);
+      pdf.addPage();
+      const start=breakEl.offsetTop+breakEl.offsetHeight;
+      const p2=await fatia(start, area.scrollHeight-start);
+      pdf.addImage(p2.toDataURL('image/jpeg',.92),'JPEG',margin,margin,contentW,(p2.height/p2.width)*contentW);
+    } else {
+      const c=await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+      pdf.addImage(c.toDataURL('image/jpeg',.92),'JPEG',margin,margin,contentW,(c.height/c.width)*contentW);
+    }
 
-  try {
-    const { jsPDF } = window.jspdf;
-    // Criamos o PDF em formato A4 e pontos (pt)
-    const doc = new jsPDF('p', 'pt', 'a4');
-    const elemento = document.getElementById('preview-wrap'); // Área que será "fotografada"
-
-    // Gerar o HTML dentro do PDF
-    await doc.html(elemento, {
-      callback: async function(doc) {
-        // 1. Pegar o código do PDF (Base64) para enviar ao Drive
-        const pdfBase64 = doc.output('datauristring').split(',')[1];
-
-        // 2. Enviar para o Google Drive
-        try {
-          await fetch(URL_APPS_SCRIPT, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify({
-              titulo: nomeArquivo,
-              arquivoBase64: pdfBase64
-            })
-          });
-        } catch (errDrive) {
-          console.error("Erro no Drive:", errDrive);
-        }
-
-        // 3. Salvar o arquivo no celular/computador do usuário
-        doc.save(`${nomeArquivo}.pdf`);
-
-        alert("Sucesso! PDF gerado e enviado para o Google Drive.");
-        if (status) status.textContent = '✓ Concluído!';
-        btn.disabled = false;
-        btn.textContent = '⬇ Baixar PDF';
-      },
-      x: 20,
-      y: 20,
-      width: 555, // Ajuste para largura do A4
-      windowWidth: 800,
-      autoPaging: 'text' // ESSENCIAL: Faz a quebra de página (div quebra-pagina) funcionar
-    });
-
-  } catch (e) {
-    console.error(e);
-    alert("Erro ao gerar PDF.");
-    btn.disabled = false;
-    btn.textContent = '⬇ Baixar PDF';
+    const d=coletarDados();
+    pdf.save(`Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}.pdf`);
+    status.textContent='✓ PDF baixado!'; status.style.color='var(--verde)';
+    toast('✓ PDF gerado');
+  }catch(e){
+    status.textContent='Erro. Use Ctrl+P.'; status.style.color='var(--vermelho)';
   }
+  btn.disabled=false; btn.textContent='⬇ Baixar PDF';
 }
 
 // ── FUNÇÃO DE ALTA (APAGAR DO FIREBASE) ──────────────────────────────────────
-async function confirmarAlta() {
-  // Pega os dados do paciente que está na tela
-  const leito = document.getElementById('f-leito')?.value;
-  const turno = document.getElementById('f-turno')?.value;
-  const data = document.getElementById('f-data')?.value;
-
-  if (!leito || !turno || !data) {
-    alert("Erro ao identificar o registro para alta.");
-    return;
-  }
-
-  const idDoc = 'uti_ev_' + leito + '_' + turno + '_' + data;
-
-  if (confirm(`Deseja realmente dar ALTA (apagar dados) do Leito ${leito}?\nEsta ação não pode ser desfeita na nuvem.`)) {
-    try {
-      // Apaga na coleção 'uti'
-      await db.collection("uti").doc(idDoc).delete();
-      
-      // Também limpa o local storage por segurança
-      localStorage.removeItem(idDoc);
-      
-      toast("✓ Alta realizada. Leito liberado.");
-      irLeitos(); // Volta para o mapa de leitos
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao processar alta no Firebase: " + e.message);
-    }
-  }
+async function confirmarAlta(){
+  if(!confirm(`Alta de "${gf('f-pac')}" do Leito ${pad(leitoAtual)}?`)) return;
+  showLoading('Alta...');
+  try{
+    const ld=await leitosData();
+    ld[leitoAtual]={ocupado:false,pac:'',diag:'',dn:'',adm:'',admHosp:'',comor:'',alergia:''};
+    await dbSet('uti_leitos',ld);
+    // apaga evoluções do dia para não herdar dados
+    await dbDelete(evKey(leitoAtual,'DIURNO',hoje()));
+    await dbDelete(evKey(leitoAtual,'NOTURNO',hoje()));
+    hideLoading(); toast('✓ Leito '+pad(leitoAtual)+' liberado');
+    await irLeitos();
+  }catch(e){ hideLoading(); toast('Erro: '+e.message,true); }
 }
 
 // ── FUNÇÃO DE TRANSFERÊNCIA (MOVER REGISTRO) ──────────────────────────────────
-async function prepararTransferencia() {
-  const d = coletarDados(); // Sua função que já existe para ler o formulário
-  const novoLeito = prompt(`Transferir paciente do Leito ${d.leito} para qual leito? (Digite o número)`);
-
-  if (novoLeito && novoLeito !== d.leito) {
-    const idAntigo = 'uti_ev_' + d.leito + '_' + d.turno + '_' + d.data;
-    const idNovo = 'uti_ev_' + novoLeito + '_' + d.turno + '_' + d.data;
-
-    try {
-      // 1. Cria o novo objeto com o número do leito alterado
-      const dadosTransferidos = { ...d, leito: novoLeito };
-
-      // 2. Grava no novo ID na coleção 'uti'
-      await db.collection("uti").doc(idNovo).set(dadosTransferidos);
-
-      // 3. Apaga o registro do leito antigo
-      await db.collection("uti").doc(idAntigo).delete();
-      
-      // Limpa local storage antigo
-      localStorage.removeItem(idAntigo);
-
-      toast(`✓ Transferido para o Leito ${novoLeito}`);
-      irLeitos();
-    } catch (e) {
-      alert("Erro na transferência: " + e.message);
+async function prepararTransferencia(){
+  const novoLeito=prompt(`Transferir "${gf('f-pac')}" do Leito ${pad(leitoAtual)} para qual leito?`);
+  if(!novoLeito) return;
+  const dest=parseInt(novoLeito);
+  if(isNaN(dest)||dest<1||dest>TOTAL){toast('Leito inválido',true);return;}
+  if(dest===leitoAtual){toast('Destino igual à origem',true);return;}
+  showLoading('Transferindo...');
+  try{
+    const ld=await leitosData();
+    if(ld[dest]&&ld[dest].ocupado){hideLoading();toast('Leito '+pad(dest)+' ocupado',true);return;}
+    // move admissão
+    ld[dest]={...ld[leitoAtual]};
+    ld[leitoAtual]={ocupado:false,pac:'',diag:'',dn:'',adm:'',admHosp:'',comor:'',alergia:''};
+    await dbSet('uti_leitos',ld);
+    // move evoluções do dia
+    for(const t of['DIURNO','NOTURNO']){
+      const ev=await dbGet(evKey(leitoAtual,t,hoje()));
+      if(ev){ await dbSet(evKey(dest,t,hoje()),{...ev,leito:dest}); await dbDelete(evKey(leitoAtual,t,hoje())); }
     }
-  }
+    leitoAtual=dest;
+    hideLoading(); toast('✓ Transferido para Leito '+pad(dest));
+    await irLeitos();
+  }catch(e){ hideLoading(); toast('Erro: '+e.message,true); }
 }
   
 // ── TOAST ─────────────────────────────────────────────────────────────────────
