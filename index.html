@@ -785,9 +785,6 @@ let db = null, auth = null, modoOffline = false;
 const TOTAL = 10;
 
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
-function firebaseConfigurado() {
-  return FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.includes('COLE_');
-}
 
 function initFirebase() {
   const config = {
@@ -806,13 +803,14 @@ function initFirebase() {
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    return true; 
+    console.log("Firebase Conectado!");
+    return true;
   } catch (e) {
-    console.error("Erro Firebase:", e);
+    console.error("Erro crítico no Firebase:", e);
     return false;
   }
 }
-
+  
 // ── HELPERS GERAIS ────────────────────────────────────────────────────────────
 function pad(n){ return String(n).padStart(2,'0'); }
 function hoje(){ return new Date().toISOString().split('T')[0]; }
@@ -1378,19 +1376,17 @@ function toast(msg, err=false) {
 
 // ── INICIALIZAÇÃO ──────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  const fbOk = initFirebase();
+  // Inicializa o Firebase com os dados que você colocou acima
+  initFirebase();
 
-  if (!fbOk) {
-    // Se der erro real na inicialização
-    alert("Erro crítico: Não foi possível carregar as chaves do Firebase.");
-    return;
-  }
-
-  // Se chegou aqui, o Firebase está OK. 
-  // Vamos direto para a tela de login em vez de mostrar a tela de configuração.
+  // FORÇA a esconder a tela de configuração e mostrar o login
+  const telaConfig = document.getElementById('t-config');
+  if (telaConfig) telaConfig.style.display = 'none';
+  
   mostrarTela('t-login');
   document.getElementById('t-login').classList.add('ativa');
 
+  // Verifica se o usuário já estava logado
   auth.onAuthStateChanged(user => {
     if (user) {
       usuarioEmail = user.email;
