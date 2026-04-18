@@ -783,15 +783,19 @@ function initFirebase() {
   };
 
   try {
+    if (typeof firebase === 'undefined') {
+      console.error('Firebase SDK não carregou. Verifique a conexão com a internet.');
+      return false;
+    }
     if (!firebase.apps.length) {
       firebase.initializeApp(config);
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    console.log("Firebase Conectado!");
+    console.log('Firebase conectado!');
     return true;
   } catch (e) {
-    console.error("Erro crítico no Firebase:", e);
+    console.error('Erro crítico no Firebase:', e);
     return false;
   }
 }
@@ -1243,9 +1247,14 @@ async function gerarPDF(){
     const canvas=await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
     const ratio=canvas.width/area.scrollWidth;
 
-    // Localiza o marcador de quebra
-    const breakEl=document.getElementById('pdf-break');
-    const breakPx=breakEl ? Math.round(breakEl.offsetTop * ratio) : null;
+    // Localiza o marcador de quebra com posição relativa à área capturada
+    const breakEl = document.getElementById('pdf-break');
+    let breakPx = null;
+    if (breakEl) {
+      const areaRect = area.getBoundingClientRect();
+      const breakRect = breakEl.getBoundingClientRect();
+      breakPx = Math.round((breakRect.top - areaRect.top) * ratio);
+    }
 
     function addFatia(yStart, yEnd){
       const h=yEnd-yStart;
