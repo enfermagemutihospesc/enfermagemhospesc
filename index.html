@@ -96,8 +96,25 @@ body{font-family:var(--fonte);background:#e0e8f2;color:var(--texto);min-height:1
 .lb-noturno{background:var(--noturno);color:var(--noturno-cl);}
 .lb-ok{background:var(--verde-cl);color:var(--verde);}
 .lb-cloud{background:#e0f0ff;color:#0a3d6b;}
+.lb-warn{background:var(--laranja-cl);color:var(--laranja);}
+.lb-high{background:var(--vermelho-cl);color:var(--vermelho);}
 .leito-spinner{position:absolute;top:6px;right:8px;width:10px;height:10px;border:2px solid var(--borda);border-top-color:var(--azul-m);border-radius:50%;animation:spin .7s linear infinite;display:none;}
 .leito-card.loading .leito-spinner{display:block;}
+
+/* ── NAS ── */
+.nas-card{border:1.5px solid var(--borda);border-radius:10px;overflow:hidden;margin-bottom:6px;}
+.nas-header{background:var(--cinza);padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.nas-header:hover{background:var(--azul-cl);}
+.nas-body{padding:10px 14px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--borda);}
+.nas-item{border:1px solid var(--borda);border-radius:6px;overflow:hidden;}
+.nas-item-t{background:var(--cinza);font-size:.7rem;font-weight:700;color:var(--azul);padding:5px 10px;text-transform:uppercase;letter-spacing:.04em;}
+.nas-item-c{padding:6px 10px;display:flex;flex-direction:column;gap:4px;}
+.nas-opt{display:flex;align-items:flex-start;gap:7px;font-size:.77rem;line-height:1.4;cursor:pointer;padding:1px 0;}
+.nas-opt input{margin-top:2px;flex-shrink:0;accent-color:var(--azul-m);}
+.nas-score-row{display:flex;align-items:center;gap:10px;padding:6px 0;}
+.nas-total{font-size:1.3rem;font-weight:700;color:var(--azul-m);}
+.nas-resumo-row{display:flex;align-items:center;justify-content:space-between;font-size:.78rem;padding:4px 0;border-bottom:1px solid var(--borda);}
+.nas-resumo-row:last-child{border-bottom:none;}
 
 /* ── FORMULÁRIO ── */
 .secao{border:1px solid var(--borda);border-radius:var(--r);overflow:hidden;}
@@ -297,7 +314,29 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
   </div>
   <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;display:flex;flex-direction:column;gap:.9rem;">
     <div class="leitos-grid" id="leitos-grid"></div>
-    <div class="btn-row"><button class="btn btn-sec btn-sm" onclick="irTurno()">← Trocar turno</button></div>
+    <div class="btn-row">
+      <button class="btn btn-sec btn-sm" onclick="irTurno()">← Trocar turno</button>
+      <button class="btn btn-sec btn-sm" onclick="irNAS()">📊 NAS do Turno</button>
+    </div>
+  </div>
+</div>
+
+<!-- TELA NAS -->
+<div id="t-nas" class="tela">
+  <div class="app-header" style="border-radius:var(--r);">
+    <div><h2>NAS – Nursing Activities Score</h2><small>Hospital dos Pescadores · UTI</small></div>
+    <div class="header-right">
+      <span class="badge" id="badge-nas"></span>
+      <span class="badge-user" onclick="irLeitos()">← Leitos</span>
+    </div>
+  </div>
+  <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;display:flex;flex-direction:column;gap:.8rem;">
+    <div style="font-size:.76rem;color:var(--azul);background:var(--azul-xl);border:1px solid var(--azul-cl);border-radius:6px;padding:8px 12px;line-height:1.6;">
+      O NAS representa a % do tempo de 24h que a enfermagem dedica a cada paciente.<br>
+      NAS ≥ 100% indica necessidade de mais de um profissional por plantão.
+    </div>
+    <div id="nas-lista"></div>
+    <div id="nas-resumo" style="background:var(--cinza);border:1px solid var(--borda);border-radius:8px;padding:10px 14px;"></div>
   </div>
 </div>
 
@@ -858,6 +897,243 @@ async function dbDelete(key){
 }
   function evKey(leito,t,data){ return 'uti_ev_'+leito+'_'+t+'_'+data; }
 
+// ── NAS – DEFINIÇÃO DOS ITENS ─────────────────────────────────────────────────
+const NAS_ITEMS = [
+  { id:'1', label:'1. Monitorização e controles', tipo:'radio', opcoes:[
+    {id:'1a', label:'1a – Sinais vitais horários, balanço hídrico regular', val:4.5},
+    {id:'1b', label:'1b – Observação contínua ou ativa à beira do leito', val:12.1},
+    {id:'1c', label:'1c – Observação contínua/ativa por 2 horas ou mais', val:19.6}
+  ]},
+  { id:'2',  label:'2. Investigações laboratoriais', tipo:'check', val:4.3 },
+  { id:'3',  label:'3. Medicação (exceto drogas vasoativas)', tipo:'check', val:5.6 },
+  { id:'4', label:'4. Procedimentos de higiene', tipo:'radio', opcoes:[
+    {id:'4a', label:'4a – Menos de 2 horas', val:4.1},
+    {id:'4b', label:'4b – Entre 2 e 4 horas', val:15.5},
+    {id:'4c', label:'4c – Mais de 4 horas', val:23.0}
+  ]},
+  { id:'5',  label:'5. Cuidados com drenos (exceto sondas gástricas)', tipo:'check', val:1.8 },
+  { id:'6', label:'6. Mobilização e posicionamento', tipo:'radio', opcoes:[
+    {id:'6a', label:'6a – Pelo menos 3×/turno ou < 20 min por turno', val:5.5},
+    {id:'6b', label:'6b – Mais frequente que 6a', val:12.4},
+    {id:'6c', label:'6c – Com 2 ou mais profissionais, qualquer frequência', val:17.0}
+  ]},
+  { id:'7', label:'7. Suporte e cuidados à família e ao paciente', tipo:'radio', opcoes:[
+    {id:'7a', label:'7a – Concentração exclusiva ≈ 1 hora', val:4.0},
+    {id:'7b', label:'7b – Concentração exclusiva 3 horas ou mais', val:32.0}
+  ]},
+  { id:'8', label:'8. Tarefas administrativas e gerenciais', tipo:'radio', opcoes:[
+    {id:'8a', label:'8a – Concentração exclusiva ≈ 2 horas', val:4.2},
+    {id:'8b', label:'8b – Concentração exclusiva 4 horas ou mais', val:23.2}
+  ]},
+  { id:'9',  label:'9. Suporte ventilatório', tipo:'check', val:1.4 },
+  { id:'10', label:'10. Cuidados com vias aéreas artificiais', tipo:'check', val:1.8 },
+  { id:'11', label:'11. Tratamento para melhora da função pulmonar', tipo:'check', val:4.4 },
+  { id:'12', label:'12. Medicação vasoativa', tipo:'check', val:1.2 },
+  { id:'13', label:'13. Reposição IV de grandes volumes de fluidos', tipo:'check', val:2.5 },
+  { id:'14', label:'14. Monitorização do átrio esquerdo', tipo:'check', val:1.7 },
+  { id:'15', label:'15. Reanimação cardiorrespiratória nas últimas 24h', tipo:'check', val:7.1 },
+  { id:'16', label:'16. Técnicas de hemofiltração', tipo:'check', val:7.7 },
+  { id:'17', label:'17. Medição quantitativa da diurese', tipo:'check', val:7.0 },
+  { id:'18', label:'18. Medição da pressão intracraniana', tipo:'check', val:1.6 },
+  { id:'19', label:'19. Tratamento de acidose/alcalose', tipo:'check', val:1.3 },
+  { id:'20', label:'20. Hiperalimentação intravenosa', tipo:'check', val:2.8 },
+  { id:'21', label:'21. Alimentação enteral', tipo:'check', val:1.3 },
+  { id:'22', label:'22. Intervenções específicas na UTI', tipo:'check', val:2.8 },
+  { id:'23', label:'23. Intervenções específicas fora da UTI', tipo:'check', val:1.9 }
+];
+
+// ── BADGES DE RISCO ───────────────────────────────────────────────────────────
+function _bradenBadge(score){
+  const s=parseInt(score);
+  if(isNaN(s)||!score||score==='–') return '';
+  const cls=s>=15?'lb-ok':s>=12?'lb-warn':'lb-high';
+  const txt=s>=15?'LP Baixo':s>=12?'LP Mod.':'LP Alto';
+  return `<span class="lb ${cls}">Braden ${s} – ${txt}</span>`;
+}
+function _morseBadge(score){
+  if(score===null||score===undefined||score==='–'||score==='') return '';
+  const s=parseInt(score);
+  if(isNaN(s)) return '';
+  const cls=s<=24?'lb-ok':s<=44?'lb-warn':'lb-high';
+  const txt=s<=24?'Queda Baixo':s<=44?'Queda Mod.':'Queda Alto';
+  return `<span class="lb ${cls}">Morse ${s} – ${txt}</span>`;
+}
+function _nasBadge(nas){
+  if(!nas||!nas.total) return '';
+  const t=parseFloat(nas.total);
+  if(isNaN(t)||t<=0) return '';
+  const cls=t<50?'lb-ok':t<100?'lb-warn':'lb-high';
+  return `<span class="lb ${cls}">NAS ${t.toFixed(1)}%</span>`;
+}
+
+// ── NAS – NAVEGAÇÃO E RENDERIZAÇÃO ────────────────────────────────────────────
+function irNAS(){
+  mostrarTela('t-nas');
+  const b=document.getElementById('badge-nas');
+  if(b){ b.textContent=turno==='DIURNO'?'☀ DIURNO':'☽ NOTURNO'; b.className='badge '+(turno==='DIURNO'?'badge-d':'badge-n'); }
+  renderNAS();
+  window.scrollTo(0,0);
+}
+
+async function renderNAS(){
+  const lista=document.getElementById('nas-lista');
+  lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--muted);">Carregando pacientes...</div>';
+  document.getElementById('nas-resumo').innerHTML='';
+
+  const leitos=await leitosData();
+  const ocupados=Object.entries(leitos)
+    .filter(([,v])=>v.ocupado)
+    .sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
+
+  if(!ocupados.length){
+    lista.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--muted);">Nenhum leito ocupado.</div>';
+    return;
+  }
+
+  lista.innerHTML='';
+  for(const [k,pac] of ocupados){
+    const leito=parseInt(k);
+    const saved=await dbGet('uti_nas_'+leito+'_'+turno+'_'+hoje());
+    const t=saved&&saved.total?parseFloat(saved.total):0;
+    const badgeCls=t<=0?'lb-ok':t<50?'lb-ok':t<100?'lb-warn':'lb-high';
+    const badgeTxt=t>0?`NAS ${t.toFixed(1)}%`:'Não avaliado';
+
+    const card=document.createElement('div');
+    card.className='nas-card'; card.id='nas-card-'+leito;
+    card.innerHTML=`
+      <div class="nas-header" onclick="toggleNASCard(${leito})">
+        <div>
+          <span style="font-weight:700;color:var(--azul);">Leito ${pad(leito)}</span>
+          <span style="font-size:.82rem;"> – ${pac.pac||'–'}</span>
+          ${pac.diag?`<div style="font-size:.7rem;color:var(--muted);margin-top:2px;">${pac.diag}</div>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <span class="lb ${badgeCls}" id="nas-badge-${leito}">${badgeTxt}</span>
+          <span id="nas-arrow-${leito}" style="color:var(--muted);font-size:.75rem;">▼</span>
+        </div>
+      </div>
+      <div class="nas-body" id="nas-body-${leito}" style="display:none;">
+        ${_buildNASForm(leito, saved)}
+      </div>`;
+    lista.appendChild(card);
+  }
+  _atualizarResumoNAS();
+}
+
+function toggleNASCard(leito){
+  const body=document.getElementById('nas-body-'+leito);
+  const arrow=document.getElementById('nas-arrow-'+leito);
+  const open=body.style.display!=='none';
+  body.style.display=open?'none':'block';
+  if(arrow) arrow.textContent=open?'▼':'▲';
+}
+
+function _buildNASForm(leito, saved){
+  const L=pad(leito);
+  let h='';
+  for(const item of NAS_ITEMS){
+    h+=`<div class="nas-item"><div class="nas-item-t">${item.label}</div><div class="nas-item-c">`;
+    if(item.tipo==='radio'){
+      for(const opt of item.opcoes){
+        const chk=saved&&saved[item.id]===opt.id?'checked':'';
+        h+=`<label class="nas-opt"><input type="radio" name="nasR_${item.id}_L${L}" value="${opt.id}" data-val="${opt.val}" ${chk} onchange="calcNASTotal(${leito})">
+          ${opt.label} <em style="color:var(--muted);font-size:.7rem;margin-left:4px;">${opt.val}%</em></label>`;
+      }
+    } else {
+      const chk=saved&&saved[item.id]?'checked':'';
+      h+=`<label class="nas-opt"><input type="checkbox" id="nasC_${item.id}_L${L}" data-val="${item.val}" ${chk} onchange="calcNASTotal(${leito})">
+        Sim — <em style="color:var(--muted);font-size:.7rem;">${item.val}%</em></label>`;
+    }
+    h+=`</div></div>`;
+  }
+  const t=saved&&saved.total?parseFloat(saved.total):0;
+  const interpCls=t<=0?'rb':t<50?'rb rb-b':t<100?'rb rb-m':'rb rb-a';
+  const interpTxt=t<=0?'':t<50?'Baixa demanda':t<100?'Alta demanda':'Carga máxima (≥100%)';
+  h+=`<div class="nas-score-row">
+    <span style="font-size:.8rem;color:var(--muted);">NAS Total:</span>
+    <span class="nas-total" id="nas-total-${leito}">${t>0?t.toFixed(1)+'%':'–'}</span>
+    <span class="${interpCls}" id="nas-interp-${leito}">${interpTxt}</span>
+  </div>
+  <button class="btn btn-ok btn-sm" onclick="salvarNAS(${leito})">✓ Salvar NAS do Leito ${pad(leito)}</button>`;
+  return h;
+}
+
+function calcNASTotal(leito){
+  const L=pad(leito);
+  let total=0;
+  for(const item of NAS_ITEMS){
+    if(item.tipo==='radio'){
+      const sel=document.querySelector(`input[name="nasR_${item.id}_L${L}"]:checked`);
+      if(sel) total+=parseFloat(sel.dataset.val);
+    } else {
+      const cb=document.getElementById(`nasC_${item.id}_L${L}`);
+      if(cb&&cb.checked) total+=parseFloat(cb.dataset.val);
+    }
+  }
+  const totalEl=document.getElementById('nas-total-'+leito);
+  const interpEl=document.getElementById('nas-interp-'+leito);
+  const badgeEl=document.getElementById('nas-badge-'+leito);
+  if(totalEl) totalEl.textContent=total.toFixed(1)+'%';
+  if(interpEl){
+    if(total<=0){interpEl.textContent='';interpEl.className='rb';}
+    else if(total<50){interpEl.textContent='Baixa demanda';interpEl.className='rb rb-b';}
+    else if(total<100){interpEl.textContent='Alta demanda';interpEl.className='rb rb-m';}
+    else{interpEl.textContent='Carga máxima (≥100%)';interpEl.className='rb rb-a';}
+  }
+  if(badgeEl){
+    const cls=total<=0?'lb-ok':total<50?'lb-ok':total<100?'lb-warn':'lb-high';
+    badgeEl.textContent=total>0?`NAS ${total.toFixed(1)}%`:'Não avaliado';
+    badgeEl.className='lb '+cls;
+  }
+  _atualizarResumoNAS();
+  return total;
+}
+
+async function salvarNAS(leito){
+  const L=pad(leito);
+  const data={leito,turno,data:hoje(),autor:usuarioEmail,criadoEm:new Date().toISOString()};
+  for(const item of NAS_ITEMS){
+    if(item.tipo==='radio'){
+      const sel=document.querySelector(`input[name="nasR_${item.id}_L${L}"]:checked`);
+      data[item.id]=sel?sel.value:null;
+    } else {
+      const cb=document.getElementById(`nasC_${item.id}_L${L}`);
+      data[item.id]=cb?cb.checked:false;
+    }
+  }
+  data.total=calcNASTotal(leito);
+  await dbSet('uti_nas_'+leito+'_'+turno+'_'+hoje(),data);
+  toast('✓ NAS Leito '+L+' salvo');
+}
+
+function _atualizarResumoNAS(){
+  const resumo=document.getElementById('nas-resumo');
+  if(!resumo) return;
+  let totalGeral=0, count=0, rows='';
+  document.querySelectorAll('[id^="nas-total-"]').forEach(el=>{
+    const val=parseFloat(el.textContent);
+    if(!isNaN(val)&&val>0){
+      const leito=el.id.replace('nas-total-','');
+      totalGeral+=val; count++;
+      const cls=val<50?'lb-ok':val<100?'lb-warn':'lb-high';
+      rows+=`<div class="nas-resumo-row"><span>Leito ${pad(parseInt(leito))}</span><span class="lb ${cls}">${val.toFixed(1)}%</span></div>`;
+    }
+  });
+  if(!count){ resumo.innerHTML='<div style="font-size:.78rem;color:var(--muted);">Preencha e salve o NAS dos pacientes para ver o resumo.</div>'; return; }
+  const enfNec=(totalGeral/36.36).toFixed(1);
+  const totalCls=totalGeral<50*count?'lb-ok':totalGeral<100*count?'lb-warn':'lb-high';
+  resumo.innerHTML=`
+    <div style="font-size:.7rem;font-weight:700;color:var(--azul);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Resumo NAS – ${turno}</div>
+    ${rows}
+    <div style="margin-top:8px;padding-top:8px;border-top:2px solid var(--borda);display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:.82rem;">
+      <span>NAS Total do Setor</span><span class="lb ${totalCls}">${totalGeral.toFixed(1)}%</span>
+    </div>
+    <div style="font-size:.74rem;color:var(--muted);margin-top:5px;">
+      Profissionais necessários: <strong>${enfNec}</strong>
+      <span style="font-size:.68rem;"> (base COFEN: 36,36%/profissional)</span>
+    </div>`;
+}
+
 // ── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
 async function fazerLogin() {
   const email = gf('li-email').trim();
@@ -962,6 +1238,7 @@ async function renderLeitos() {
   for (let i=1;i<=TOTAL;i++) {
     const l = d[i] || {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:''};
     const evHoje = await dbGet('uti_ev_'+i+'_'+turno+'_'+hoje());
+    const nasHoje = l.ocupado ? await dbGet('uti_nas_'+i+'_'+turno+'_'+hoje()) : null;
     const card = document.getElementById('leito-card-'+i);
     card.classList.remove('loading');
     if (l.ocupado) card.classList.add('ocupado');
@@ -975,6 +1252,9 @@ async function renderLeitos() {
         ${l.ocupado ? `<span class="lb lb-${turno==='DIURNO'?'diurno':'noturno'}">${turno==='DIURNO'?'Diurno':'Noturno'}</span>` : ''}
         ${evHoje ? '<span class="lb lb-ok">✓ Evolução</span>' : ''}
         ${!modoOffline && l.ocupado ? '<span class="lb lb-cloud">☁</span>' : ''}
+        ${l.ocupado && evHoje ? _bradenBadge(evHoje.bradScore) : ''}
+        ${l.ocupado && evHoje ? _morseBadge(evHoje.morseScore) : ''}
+        ${l.ocupado ? _nasBadge(nasHoje) : ''}
       </div>`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
   }
@@ -1371,10 +1651,13 @@ async function gerarPDF(){
     const [ano, mes, dia] = d.data.split('-');
     const dataBR = dia + mes + ano;
 
-    // Nome do paciente — vira o nome da subpasta no Drive
-    const nomePaciente = (d.pac || '').trim() || 'Paciente sem nome';
+    // Nome do paciente e nome da subpasta no Drive
+    const nomePaciente = (d.pac || '').trim();
+    const pastaNome = nomePaciente
+      ? `Leito ${pad(d.leito)} - ${nomePaciente}`
+      : `Leito ${pad(d.leito)} - Sem identificacao`;
 
-    const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${dataBR}_${nomePaciente.split(' ')[0]}`;
+    const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${dataBR}_${(nomePaciente||'Pac').split(' ')[0]}`;
 
     const dataUri = pdf.output('datauristring');
     const base64  = dataUri.split(',')[1];
@@ -1385,10 +1668,10 @@ async function gerarPDF(){
       method:  'POST',
       mode:    'no-cors',
       headers: { 'Content-Type': 'text/plain' },
-      body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: nomePaciente })
+      body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: pastaNome })
     });
 
-    status.textContent = `✓ PDF salvo em "UTI – Evoluções de Enfermagem / ${nomePaciente}"!`;
+    status.textContent = `✓ PDF salvo em "UTI – Evoluções de Enfermagem / ${pastaNome}"!`;
     status.style.color = 'var(--verde)';
     toast('✓ PDF salvo no Google Drive');
 
