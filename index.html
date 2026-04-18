@@ -235,22 +235,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
      CONFIGURAÇÃO FIREBASE
      ─ Substitua os valores abaixo pelos do seu projeto Firebase
      ══════════════════════════════════════════ -->
-<script>
-// ┌─────────────────────────────────────────────────────────┐
-// │  PASSO 1: Cole aqui as configs do seu projeto Firebase  │
-// │  console.firebase.google.com → Seu projeto →            │
-// │  Configurações → Apps web → Configuração do SDK         │
-// └─────────────────────────────────────────────────────────┘
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyB00a198BLBKXyvfCXmbZgbY9lAPsp_G6c",
-  authDomain: "evolucaouti.firebaseapp.com",
-  projectId: "evolucaouti",
-  storageBucket: "evolucaouti.firebasestorage.app",
-  messagingSenderId: "168481656346",
-  appId: "1:168481656346:web:4af8e67600eeabb4fdcba3",
-  measurementId: "G-BK1NM0JE8J"
-};
-</script>
+
 
 <!-- TELA LOGIN -->
 <div id="t-login">
@@ -266,7 +251,7 @@ const FIREBASE_CONFIG = {
     </div>
     <div class="login-field">
       <label>Senha</label>
-      <input type="password" id="li-senha" placeholder="••••••••" autocomplete="current-password">
+      <input type="password" id="li-senha" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') fazerLogin()">
     </div>
     <button class="btn-login" id="btn-entrar" onclick="fazerLogin()">Entrar</button>
     <div class="login-err" id="login-err"></div>
@@ -275,7 +260,7 @@ const FIREBASE_CONFIG = {
 </div>
 
 <!-- TELA CONFIGURAÇÃO (exibida quando Firebase não está configurado) -->
-<div id="t-config" class="tela" style="display:none;padding:2rem;min-height:100vh;display:flex;align-items:center;justify-content:center;">
+<div id="t-config" class="tela" style="padding:2rem;min-height:100vh;align-items:center;justify-content:center;">
   <div class="config-banner">
     <h3>⚙️ Configure o Firebase para ativar a nuvem</h3>
     <p>Para salvar os dados na nuvem e compartilhar entre todos os enfermeiros, você precisa configurar um projeto Firebase gratuito.</p>
@@ -813,8 +798,8 @@ function initFirebase() {
   
 // ── HELPERS GERAIS ────────────────────────────────────────────────────────────
 function pad(n){ return String(n).padStart(2,'0'); }
-function hoje(){ return new Date().toISOString().split('T')[0]; }
-function ontem(){ const d=new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; }
+function hoje(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function ontem(){ const d=new Date(); d.setDate(d.getDate()-1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtD(s){ if(!s||s==='–') return '–'; try{ const[y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }catch(e){ return s; } }
 function gf(id){ const e=document.getElementById(id); return e?e.value:''; }
 function gChecked(cls){ return Array.from(document.querySelectorAll('.'+cls+':checked')).map(e=>e.value); }
@@ -891,8 +876,8 @@ function usarOffline() {
 // ── NAVEGAÇÃO ─────────────────────────────────────────────────────────────────
 function mostrarTela(id) {
   document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
-  ['t-login','t-turno','t-config'].forEach(id => {
-    const el = document.getElementById(id);
+  ['t-login','t-turno','t-config'].forEach(tid => {
+    const el = document.getElementById(tid);
     if (el) el.style.display = 'none';
   });
   const el = document.getElementById(id);
@@ -956,7 +941,7 @@ async function renderLeitos() {
   }
   const d = await leitosData();
   for (let i=1;i<=TOTAL;i++) {
-    const l = d[i];
+    const l = d[i] || {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:''};
     const evHoje = await dbGet('uti_ev_'+i+'_'+turno+'_'+hoje());
     const card = document.getElementById('leito-card-'+i);
     card.classList.remove('loading');
@@ -1009,7 +994,7 @@ async function darAlta() {
   if (!confirm('Confirma alta/desocupação do leito '+modalLeito+'?')) return;
   showLoading('Registrando alta...');
   const d = await leitosData();
-  d[modalLeito] = {ocupado:false,pac:'',diag:'',dn:'',adm:'',comor:''};
+  d[modalLeito] = {ocupado:false,pac:'',diag:'',dn:'',adm:'',admHosp:'',comor:'',alergia:''};
   await dbSet('uti_leitos', d);
   hideLoading(); fecharModal(); await renderLeitos();
   toast('Leito '+pad(modalLeito)+' liberado');
@@ -1281,35 +1266,22 @@ async function gerarPDF(){
       addFatia(0, canvas.height);
     }
 
-    const d=coletarDados();
-    pdf.save(`Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}.pdf`);
-    status.textContent='✓ PDF baixado!'; status.style.color='var(--verde)';
-    toast('✓ PDF gerado');
-  }catch(e){
-    console.error(e);
-    status.textContent='Erro. Use Ctrl+P.'; status.style.color='var(--vermelho)';
-  }
-  btn.disabled=false; btn.textContent='⬇ Baixar PDF';
-}
-
-    // ── 3. Converte para base64 e envia ao Apps Script ────────────────────────
+    // Converte para base64 e envia ao Apps Script → Google Drive
     const d = coletarDados();
     const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Pac').split(' ')[0]}`;
 
-    // output('datauristring') retorna 'data:application/pdf;base64,<base64>'
-    const dataUri   = pdf.output('datauristring');
-    const base64    = dataUri.split(',')[1];   // só a parte base64
+    const dataUri = pdf.output('datauristring');
+    const base64  = dataUri.split(',')[1];
 
     status.textContent = 'Enviando para o Drive...'; status.style.color = 'var(--muted)';
 
     await fetch(APPS_SCRIPT_URL, {
       method:  'POST',
-      mode:    'no-cors',         // Apps Script exige; não dá para ler a resposta
+      mode:    'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body:    JSON.stringify({ titulo, arquivoBase64: base64 })
     });
 
-    // Com no-cors não é possível ler a resposta — se não lançou exceção o envio chegou
     status.textContent = '✓ PDF salvo na pasta "UTI – Evoluções de Enfermagem" no Drive!';
     status.style.color = 'var(--verde)';
     toast('✓ PDF salvo no Google Drive');
@@ -1376,17 +1348,19 @@ function toast(msg, err=false) {
 
 // ── INICIALIZAÇÃO ──────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  // Inicializa o Firebase com os dados que você colocou acima
-  initFirebase();
+  const firebaseOk = initFirebase();
 
-  // FORÇA a esconder a tela de configuração e mostrar o login
   const telaConfig = document.getElementById('t-config');
   if (telaConfig) telaConfig.style.display = 'none';
-  
+
+  if (!firebaseOk || !auth) {
+    mostrarTela('t-config');
+    return;
+  }
+
   mostrarTela('t-login');
   document.getElementById('t-login').classList.add('ativa');
 
-  // Verifica se o usuário já estava logado
   auth.onAuthStateChanged(user => {
     if (user) {
       usuarioEmail = user.email;
