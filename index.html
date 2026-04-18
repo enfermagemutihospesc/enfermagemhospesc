@@ -10,7 +10,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 
-<!-- PDF gerado via Apps Script (jsPDF/html2canvas não necessários) -->
+<!-- jsPDF + html2canvas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -726,7 +728,7 @@ const FIREBASE_CONFIG = {
     </div>
     <div class="btn-row btn-row-prev">
   <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
-  <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">⬆ Salvar PDF no Drive</button>
+  <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">☁ Salvar PDF no Drive</button>
   <button class="btn btn-sm" style="background:#d63031; color:white;" onclick="confirmarAlta()">🏥 Alta</button>
   <button class="btn btn-sm" style="background:#fdcb6e; color:black;" onclick="prepararTransferencia()">🔄 Transf.</button>
 </div>
@@ -1080,45 +1082,26 @@ setF('f-alergia',  pac.alergia||'');
     if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
     if(fonte.braden){ document.querySelectorAll('.bs').forEach((s,i)=>{if(fonte.braden[i])s.value=fonte.braden[i];}); calcB(); }
     if(fonte.morse){ ['m1','m2','m3','m4','m5','m6'].forEach((nm,i)=>{const r=document.querySelector('input[name="'+nm+'"][value="'+fonte.morse[i]+'"]');if(r)r.checked=true;}); calcM(); }
-    // Herdar pulseira, isolamento, microorg sempre (incluindo turno anterior)
-    if(fonte.pulseira) setRadio('pulseira', fonte.pulseira);
+    if(fonte.pulseira)   setRadio('pulseira',   fonte.pulseira);
     if(fonte.isolamento) setRadio('isolamento', fonte.isolamento);
-    setF('f-microorg', fonte.microorg||'');
-    if(evHoje) {
-      // Evolução já salva hoje: carrega TUDO
-      loadDVA('dva-l',fonte.dva); loadDVA('sedo-l',fonte.sedo);
-      setChecks('f-neuro',fonte.neuro); setF('f-glas',fonte.glas); setF('f-rass',fonte.rass);
-      setChecks('f-pup',fonte.pup); setChecks('f-pele',fonte.pele); setF('f-les',fonte.les);
-      setChecks('f-resp',fonte.resp); setChecks('f-ausc',fonte.ausc);
-      setRadio('vent',fonte.vent); toggleVMI();
-      setF('vmi-modo',fonte.vmi_modo); setF('vmi-fio2',fonte.vmi_fio2); setF('vmi-peep',fonte.vmi_peep);
-      setF('vmi-fr',fonte.vmi_fr); setF('vmi-sens',fonte.vmi_sens); setF('vmi-vt',fonte.vmi_vt);
-      setF('f-spo2',fonte.spo2); setF('f-spo2-av',fonte.spo2av);
-      setChecks('f-car',fonte.car); setF('f-fc-taqui',fonte.fcTaqui); setF('f-fc-bradi',fonte.fcBradi);
-      setChecks('f-abd',fonte.abd);
-      setRadio('dieta',fonte.dieta); setF('f-vdieta',fonte.vdieta);
-      setRadio('diu',fonte.diu); setChecks('f-uri',fonte.uri); setF('f-ddiu',fonte.ddiu);
-      setChecks('f-eli',fonte.eli); setChecks('f-prev',fonte.prev);
-      setF('f-exames-real', fonte.examesReal||'');
-      setF('f-exames-solic', fonte.examesSolic||'');
-      setF('f-obs',fonte.obs);
-    } else {
-      // Turno anterior: herda campos clínicos principais também
-      loadDVA('dva-l',fonte.dva); loadDVA('sedo-l',fonte.sedo);
-      setChecks('f-neuro',fonte.neuro); setF('f-glas',fonte.glas); setF('f-rass',fonte.rass);
-      setChecks('f-pup',fonte.pup); setChecks('f-pele',fonte.pele); setF('f-les',fonte.les);
-      setChecks('f-resp',fonte.resp); setChecks('f-ausc',fonte.ausc);
-      setRadio('vent',fonte.vent); toggleVMI();
-      setF('vmi-modo',fonte.vmi_modo); setF('vmi-fio2',fonte.vmi_fio2); setF('vmi-peep',fonte.vmi_peep);
-      setF('vmi-fr',fonte.vmi_fr); setF('vmi-sens',fonte.vmi_sens); setF('vmi-vt',fonte.vmi_vt);
-      setF('f-spo2',fonte.spo2); setF('f-spo2-av',fonte.spo2av);
-      setChecks('f-car',fonte.car); setF('f-fc-taqui',fonte.fcTaqui); setF('f-fc-bradi',fonte.fcBradi);
-      setChecks('f-abd',fonte.abd);
-      setRadio('dieta',fonte.dieta);
-      setRadio('diu',fonte.diu); setChecks('f-uri',fonte.uri);
-      setChecks('f-eli',fonte.eli); setChecks('f-prev',fonte.prev);
-      // NÃO herda: vdieta, ddiu, exames, obs (específicos do turno)
-    }
+    setF('f-microorg',    fonte.microorg||'');
+    // ── herda TUDO – turno anterior e evHoje tratados igual ──────────────────
+    loadDVA('dva-l',fonte.dva);  loadDVA('sedo-l',fonte.sedo);
+    setChecks('f-neuro',fonte.neuro);  setF('f-glas',fonte.glas);  setF('f-rass',fonte.rass);
+    setChecks('f-pup',fonte.pup);      setChecks('f-pele',fonte.pele);  setF('f-les',fonte.les);
+    setChecks('f-resp',fonte.resp);    setChecks('f-ausc',fonte.ausc);
+    setRadio('vent',fonte.vent);       toggleVMI();
+    setF('vmi-modo',fonte.vmi_modo);   setF('vmi-fio2',fonte.vmi_fio2);  setF('vmi-peep',fonte.vmi_peep);
+    setF('vmi-fr',fonte.vmi_fr);       setF('vmi-sens',fonte.vmi_sens);  setF('vmi-vt',fonte.vmi_vt);
+    setF('f-spo2',fonte.spo2);         setF('f-spo2-av',fonte.spo2av);
+    setChecks('f-car',fonte.car);      setF('f-fc-taqui',fonte.fcTaqui);  setF('f-fc-bradi',fonte.fcBradi);
+    setChecks('f-abd',fonte.abd);
+    setRadio('dieta',fonte.dieta);     setF('f-vdieta',fonte.vdieta);
+    setRadio('diu',fonte.diu);         setChecks('f-uri',fonte.uri);  setF('f-ddiu',fonte.ddiu);
+    setChecks('f-eli',fonte.eli);      setChecks('f-prev',fonte.prev);
+    setF('f-exames-real',  fonte.examesReal||'');
+    setF('f-exames-solic', fonte.examesSolic||'');
+    setF('f-obs', fonte.obs||'');
   } else { addAVP(); addATB(); }
 
   document.getElementById('form-titulo').textContent = 'Evolução – Leito '+pad(n);
@@ -1250,82 +1233,127 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
 // ── URL DO APPS SCRIPT ────────────────────────────────────────────────────────
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec';
 
-// ── GERAR PDF E SALVAR NO DRIVE VIA APPS SCRIPT ───────────────────────────────
+// ── GERAR PDF COM jsPDF E ENVIAR BASE64 AO APPS SCRIPT ───────────────────────
 async function gerarPDF(){
-  const btn=document.getElementById('btn-pdf'), status=document.getElementById('pdf-status');
-  const area=document.getElementById('preview-area');
-  if(!area||!area.innerHTML.trim()){alert('Gere a impressão primeiro.');return;}
+  const btn    = document.getElementById('btn-pdf');
+  const status = document.getElementById('pdf-status');
+  const area   = document.getElementById('preview-area');
 
-  btn.disabled=true; btn.textContent='⏳ Enviando...';
-  status.textContent='Preparando documento...'; status.style.color='var(--muted)';
+  if(!area || !area.innerHTML.trim()){ alert('Gere a impressão primeiro.'); return; }
 
-  try{
-    const d=coletarDados();
-    const nomeArquivo=`Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Pac').split(' ')[0]}`;
+  btn.disabled = true; btn.textContent = '⏳ Gerando PDF...';
+  status.textContent = 'Renderizando...'; status.style.color = 'var(--muted)';
 
-    // HTML completo com estilos inline e quebra de página CSS correta
-    // O Apps Script converte para PDF mantendo o page-break-before
-    const htmlParaEnviar=`<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="UTF-8">
-<style>
-  @page { margin: 15mm 12mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0; }
-  .ph { text-align: center; border: 2px solid #000; padding: 10px; border-bottom: none; }
-  .ph h2 { font-size: 13px; font-weight: 800; text-transform: uppercase; margin: 0; }
-  .ph h3 { font-size: 10px; font-weight: 700; margin: 2px 0 0; }
-  .ph p  { font-size: 10px; margin: 2px 0 0; }
-  .pb { border: 2px solid #000; border-top: none; padding: 8px 10px; }
-  .pst { background: #0a3d6b; color: white; font-size: 9px; font-weight: 800;
-         letter-spacing:.06em; text-transform: uppercase; padding: 3px 7px;
-         margin: 6px -10px 4px; padding-left: 10px; }
-  .pr { display: flex; flex-wrap: wrap; gap: 2px 12px;
-        border-bottom: 1px solid #ddd; padding: 3px 0; font-size: 10px; }
-  .pr:last-child { border-bottom: none; }
-  .pl { color: #555; font-weight: 700; font-size: 9px; text-transform: uppercase; }
-  .pv { font-weight: 500; }
-  .obs-box { border: 1px solid #000; padding: 6px; min-height: 50px;
-             font-size: 10px; white-space: pre-wrap; word-break: break-word; }
-  .pfoot { border-top: 2px solid #000; padding: 4px 10px;
-           display: flex; justify-content: space-between; font-size: 9px; color: #555; }
-  /* ── QUEBRA DE PÁGINA ── */
-  /* O Apps Script usa o Chromium interno que respeita estas regras CSS: */
-  .pg-break { page-break-before: always; border-top: 1px dashed #bbb; margin: 0; padding: 0; height: 0; }
-  /* Garante que o div de quebra não fique junto a um pst: */
-  .pst { page-break-after: avoid; }
-  /* Evita que caixas de observação sejam cortadas ao meio: */
-  .obs-box { page-break-inside: avoid; }
-  /* Mantém título de seção com seu conteúdo: */
-  .pst + .pr, .pst + .obs-box { page-break-before: avoid; }
-</style>
-</head><body>
-${area.innerHTML}
-<p style="font-size:8px;color:#aaa;text-align:right;margin-top:6px;">
-  Gerado em ${new Date().toLocaleString('pt-BR')} · ${d.autor||''}
-</p>
-</body></html>`;
+  try {
+    // ── 1. Captura o preview com html2canvas ──────────────────────────────────
+    // Esconde temporariamente elementos que não devem ir para o PDF
+    const hideEls = area.querySelectorAll('#pdf-break, .quebra-pagina');
+    hideEls.forEach(el => el.style.visibility = 'hidden');
 
-    // Substitui o div de quebra antigo (que usa offsetTop) pelo marcador CSS
-    const htmlFinal = htmlParaEnviar
-      .replace(/<div[^>]*id="pdf-break"[^>]*>.*?<\/div>/g,
-               '<div class="pg-break"></div>')
-      .replace(/<div[^>]*class="quebra-pagina"[^>]*>.*?<\/div>/g, '');
-
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ titulo: nomeArquivo, html: htmlFinal })
+    const canvas = await html2canvas(area, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
     });
 
-    // Com no-cors não é possível ler a resposta, mas se não lançou exceção o envio foi aceito
-    status.textContent='✓ Enviado! Verifique a pasta "UTI – Evoluções de Enfermagem" no Drive em alguns segundos.';
-    status.style.color='var(--verde)';
-    toast('✓ PDF enviado para o Drive!');
-  }catch(e){
-    status.textContent='Erro ao enviar. Tente novamente ou use Ctrl+P para imprimir.';
-    status.style.color='var(--vermelho)';
+    hideEls.forEach(el => el.style.visibility = '');
+
+    // ── 2. Monta o PDF com jsPDF, respeitando a quebra de página ─────────────
+    const { jsPDF } = window.jspdf;
+    const A4_W = 210, A4_H = 297; // mm
+    const MARGIN = 8;              // mm em cada lado
+    const printW = A4_W - MARGIN * 2;
+
+    // Converte pixels do canvas em mm na escala do PDF
+    const px2mm = printW / canvas.width;
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // Localiza a linha de quebra de página no preview (div #pdf-break)
+    const breakEl = document.getElementById('pdf-break');
+    const breakRatio = breakEl
+      ? (breakEl.offsetTop + breakEl.offsetHeight / 2) / area.scrollHeight
+      : null;
+
+    const totalH_mm = canvas.height * px2mm; // altura total do conteúdo em mm
+
+    if (breakRatio !== null) {
+      // Pág 1: do topo até a quebra
+      const p1H_px = Math.round(breakRatio * canvas.height);
+      const p1H_mm = p1H_px * px2mm;
+
+      const c1 = document.createElement('canvas');
+      c1.width  = canvas.width;
+      c1.height = p1H_px;
+      c1.getContext('2d').drawImage(canvas, 0, 0, canvas.width, p1H_px, 0, 0, canvas.width, p1H_px);
+
+      pdf.addImage(c1.toDataURL('image/jpeg', 0.92), 'JPEG', MARGIN, MARGIN, printW, p1H_mm);
+
+      // Pág 2: da quebra até o fim
+      pdf.addPage();
+      const p2Y_px  = p1H_px;
+      const p2H_px  = canvas.height - p2Y_px;
+      const p2H_mm  = p2H_px * px2mm;
+
+      const c2 = document.createElement('canvas');
+      c2.width  = canvas.width;
+      c2.height = p2H_px;
+      c2.getContext('2d').drawImage(canvas, 0, p2Y_px, canvas.width, p2H_px, 0, 0, canvas.width, p2H_px);
+
+      pdf.addImage(c2.toDataURL('image/jpeg', 0.92), 'JPEG', MARGIN, MARGIN, printW, p2H_mm);
+    } else {
+      // Sem quebra: uma única página (ou múltiplas automáticas se exceder A4)
+      let yOff = 0;
+      const pageH_mm = A4_H - MARGIN * 2;
+      const pageH_px = pageH_mm / px2mm;
+      let firstPage = true;
+
+      while (yOff < canvas.height) {
+        if (!firstPage) pdf.addPage();
+        firstPage = false;
+
+        const sliceH = Math.min(pageH_px, canvas.height - yOff);
+        const sc = document.createElement('canvas');
+        sc.width  = canvas.width;
+        sc.height = Math.round(sliceH);
+        sc.getContext('2d').drawImage(canvas, 0, yOff, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+        const sliceH_mm = sliceH * px2mm;
+        pdf.addImage(sc.toDataURL('image/jpeg', 0.92), 'JPEG', MARGIN, MARGIN, printW, sliceH_mm);
+        yOff += sliceH;
+      }
+    }
+
+    // ── 3. Converte para base64 e envia ao Apps Script ────────────────────────
+    const d = coletarDados();
+    const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Pac').split(' ')[0]}`;
+
+    // output('datauristring') retorna 'data:application/pdf;base64,<base64>'
+    const dataUri   = pdf.output('datauristring');
+    const base64    = dataUri.split(',')[1];   // só a parte base64
+
+    status.textContent = 'Enviando para o Drive...'; status.style.color = 'var(--muted)';
+
+    await fetch(APPS_SCRIPT_URL, {
+      method:  'POST',
+      mode:    'no-cors',         // Apps Script exige; não dá para ler a resposta
+      headers: { 'Content-Type': 'text/plain' },
+      body:    JSON.stringify({ titulo, arquivoBase64: base64 })
+    });
+
+    // Com no-cors não é possível ler a resposta — se não lançou exceção o envio chegou
+    status.textContent = '✓ PDF salvo na pasta "UTI – Evoluções de Enfermagem" no Drive!';
+    status.style.color = 'var(--verde)';
+    toast('✓ PDF salvo no Google Drive');
+
+  } catch(err) {
+    console.error('gerarPDF:', err);
+    status.textContent = 'Erro ao gerar/enviar. Tente novamente ou use Ctrl+P.';
+    status.style.color = 'var(--vermelho)';
   }
-  btn.disabled=false; btn.textContent='⬇ Salvar PDF no Drive';
+
+  btn.disabled = false; btn.textContent = '☁ Salvar PDF no Drive';
 }
 
 // ── FUNÇÃO DE ALTA (APAGAR DO FIREBASE) ──────────────────────────────────────
