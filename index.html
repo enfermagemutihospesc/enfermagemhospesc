@@ -1235,95 +1235,53 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN
 
 // ── GERAR PDF COM jsPDF E ENVIAR BASE64 AO APPS SCRIPT ───────────────────────
 async function gerarPDF(){
-  const btn    = document.getElementById('btn-pdf');
-  const status = document.getElementById('pdf-status');
-  const area   = document.getElementById('preview-area');
+  const btn=document.getElementById('btn-pdf'), status=document.getElementById('pdf-status');
+  const area=document.getElementById('preview-area');
+  if(!area||!area.innerHTML.trim()){alert('Gere a impressão primeiro.');return;}
+  btn.disabled=true; btn.textContent='⏳ Gerando...';
+  status.textContent='Capturando...'; status.style.color='var(--muted)';
+  try{
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const margin=10, contentW=pdf.internal.pageSize.getWidth()-margin*2;
 
-  if(!area || !area.innerHTML.trim()){ alert('Gere a impressão primeiro.'); return; }
+    // Captura UMA vez em alta resolução
+    const canvas=await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    const ratio=canvas.width/area.scrollWidth;
 
-  btn.disabled = true; btn.textContent = '⏳ Gerando PDF...';
-  status.textContent = 'Renderizando...'; status.style.color = 'var(--muted)';
+    // Localiza o marcador de quebra
+    const breakEl=document.getElementById('pdf-break');
+    const breakPx=breakEl ? Math.round(breakEl.offsetTop * ratio) : null;
 
-  try {
-    // ── 1. Captura o preview com html2canvas ──────────────────────────────────
-    // Esconde temporariamente elementos que não devem ir para o PDF
-    const hideEls = area.querySelectorAll('#pdf-break, .quebra-pagina');
-    hideEls.forEach(el => el.style.visibility = 'hidden');
-
-    const canvas = await html2canvas(area, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-    });
-
-    hideEls.forEach(el => el.style.visibility = '');
-
-    // ── 2. Monta o PDF com jsPDF, respeitando a quebra de página ─────────────
-    const { jsPDF } = window.jspdf;
-    const A4_W = 210, A4_H = 297; // mm
-    const MARGIN = 8;              // mm em cada lado
-    const printW = A4_W - MARGIN * 2;
-
-    // Converte pixels do canvas em mm na escala do PDF
-    const px2mm = printW / canvas.width;
-
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-    // Localiza a linha de quebra de página no preview (div #pdf-break)
-    const breakEl = document.getElementById('pdf-break');
-    const breakRatio = breakEl
-      ? (breakEl.offsetTop + breakEl.offsetHeight / 2) / area.scrollHeight
-      : null;
-
-    const totalH_mm = canvas.height * px2mm; // altura total do conteúdo em mm
-
-    if (breakRatio !== null) {
-      // Pág 1: do topo até a quebra
-      const p1H_px = Math.round(breakRatio * canvas.height);
-      const p1H_mm = p1H_px * px2mm;
-
-      const c1 = document.createElement('canvas');
-      c1.width  = canvas.width;
-      c1.height = p1H_px;
-      c1.getContext('2d').drawImage(canvas, 0, 0, canvas.width, p1H_px, 0, 0, canvas.width, p1H_px);
-
-      pdf.addImage(c1.toDataURL('image/jpeg', 0.92), 'JPEG', MARGIN, MARGIN, printW, p1H_mm);
-
-      // Pág 2: da quebra até o fim
-      pdf.addPage();
-      const p2Y_px  = p1H_px;
-      const p2H_px  = canvas.height - p2Y_px;
-      const p2H_mm  = p2H_px * px2mm;
-
-      const c2 = document.createElement('canvas');
-      c2.width  = canvas.width;
-      c2.height = p2H_px;
-      c2.getContext('2d').drawImage(canvas, 0, p2Y_px, canvas.width, p2H_px, 0, 0, canvas.width, p2H_px);
-
-      pdf.addImage(c2.toDataURL('image/jpeg', 0.92), 'JPEG', MARGIN, MARGIN, printW, p2H_mm);
-    } else {
-      // Sem quebra: uma única página (ou múltiplas automáticas se exceder A4)
-      let yOff = 0;
-      const pageH_mm = A4_H - MARGIN * 2;
-      const pageH_px = pageH_mm / px2mm;
-      let firstPage = true;
-
-      while (yOff < canvas.height) {
-        if (!firstPage) pdf.addPage();
-        firstPage = false;
-
-        const sliceH = Math.min(pageH_px, canvas.height - yOff);
-        const sc = document.createElement('canvas');
-        sc.width  = canvas.width;
-        sc.height = Math.round(sliceH);
-        sc.getContext('2d').drawImage(canvas, 0, yOff, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-
-        const sliceH_mm = sliceH * px2mm;
-        pdf.addImage(sc.toDataURL('image/jpeg', 0.92), 'JPEG', MARGIN, MARGIN, printW, sliceH_mm);
-        yOff += sliceH;
-      }
+    function addFatia(yStart, yEnd){
+      const h=yEnd-yStart;
+      const sc=document.createElement('canvas');
+      sc.width=canvas.width; sc.height=h;
+      const ctx=sc.getContext('2d');
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,sc.width,h);
+      ctx.drawImage(canvas,0,yStart,canvas.width,h,0,0,canvas.width,h);
+      const mmH=(h/canvas.width)*contentW;
+      pdf.addImage(sc.toDataURL('image/jpeg',.92),'JPEG',margin,margin,contentW,mmH);
     }
+
+    if(breakPx && breakPx>0 && breakPx<canvas.height){
+      addFatia(0, breakPx);
+      pdf.addPage();
+      addFatia(breakPx, canvas.height);
+    } else {
+      addFatia(0, canvas.height);
+    }
+
+    const d=coletarDados();
+    pdf.save(`Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}.pdf`);
+    status.textContent='✓ PDF baixado!'; status.style.color='var(--verde)';
+    toast('✓ PDF gerado');
+  }catch(e){
+    console.error(e);
+    status.textContent='Erro. Use Ctrl+P.'; status.style.color='var(--vermelho)';
+  }
+  btn.disabled=false; btn.textContent='⬇ Baixar PDF';
+}
 
     // ── 3. Converte para base64 e envia ao Apps Script ────────────────────────
     const d = coletarDados();
