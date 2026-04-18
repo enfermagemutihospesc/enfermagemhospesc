@@ -1381,13 +1381,13 @@ window.addEventListener('load', () => {
   const fbOk = initFirebase();
 
   if (!fbOk) {
-    // Firebase não configurado: mostra tela de configuração + opção offline
-    mostrarTela('t-config');
-    document.getElementById('t-config').style.display = 'flex';
+    // Se der erro real na inicialização
+    alert("Erro crítico: Não foi possível carregar as chaves do Firebase.");
     return;
   }
 
-  // Firebase configurado: aguarda estado de auth
+  // Se chegou aqui, o Firebase está OK. 
+  // Vamos direto para a tela de login em vez de mostrar a tela de configuração.
   mostrarTela('t-login');
   document.getElementById('t-login').classList.add('ativa');
 
@@ -1398,13 +1398,7 @@ window.addEventListener('load', () => {
       mostrarTela('t-turno');
     } else {
       mostrarTela('t-login');
-      document.getElementById('t-login').style.display = 'flex';
     }
-  });
-
-  // Enter no campo de senha faz login
-  document.getElementById('li-senha').addEventListener('keydown', e => {
-    if (e.key === 'Enter') fazerLogin();
   });
 });
 </script>
