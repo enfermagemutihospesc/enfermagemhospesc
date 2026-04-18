@@ -1288,7 +1288,7 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
   h+=st('Observações / Intercorrências / Informações Complementares');
   h+=`<div class="obs-box" style="min-height:100px;">${d.obs||''}</div>`;
   h+=st('Assinatura / Carimbo');
-  h+=`<div style="display:flex;justify-content:center;padding:1rem 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:260px;border-top:1px solid #000;padding-top:5px;">Enfermeiro${d.autor?' – '+d.autor:''}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
+  h+=`<div style="display:flex;justify-content:center;padding:2.5rem 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:300px;border-top:1px solid #000;padding-top:6px;">Enfermeiro${d.autor?' – '+d.autor:''}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
   h+=`</div><div class="pfoot"><span>Turno: ${d.turno}</span><span>Leito ${pad(d.leito)} – UTI Geral</span><span>${fmtD(d.data)}</span></div>`;
   document.getElementById('preview-area').innerHTML = h;
 }
