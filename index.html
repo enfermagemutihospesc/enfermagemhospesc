@@ -1366,7 +1366,15 @@ async function gerarPDF(){
 
     // Converte o PDF finalizado para base64 e envia ao Apps Script → Google Drive
     const d = coletarDados();
-    const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Pac').split(' ')[0]}`;
+
+    // Data em formato brasileiro DDMMAAAA (ex: 18042026)
+    const [ano, mes, dia] = d.data.split('-');
+    const dataBR = dia + mes + ano;
+
+    // Nome do paciente — vira o nome da subpasta no Drive
+    const nomePaciente = (d.pac || '').trim() || 'Paciente sem nome';
+
+    const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${dataBR}_${nomePaciente.split(' ')[0]}`;
 
     const dataUri = pdf.output('datauristring');
     const base64  = dataUri.split(',')[1];
@@ -1377,10 +1385,10 @@ async function gerarPDF(){
       method:  'POST',
       mode:    'no-cors',
       headers: { 'Content-Type': 'text/plain' },
-      body:    JSON.stringify({ titulo, arquivoBase64: base64 })
+      body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: nomePaciente })
     });
 
-    status.textContent = '✓ PDF salvo na pasta "UTI – Evoluções de Enfermagem" no Drive!';
+    status.textContent = `✓ PDF salvo em "UTI – Evoluções de Enfermagem / ${nomePaciente}"!`;
     status.style.color = 'var(--verde)';
     toast('✓ PDF salvo no Google Drive');
 
