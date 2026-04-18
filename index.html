@@ -27,12 +27,6 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--fonte);background:#e0e8f2;color:var(--texto);min-height:100vh;}
-
-/* Força a quebra de página no PDF */
-.quebra-pagina {
-    page-break-after: always;
-    margin-bottom: 20px; /* Espaço visual no site */
-}
   
 /* ── TELAS ── */
 .tela{display:none;padding:1rem;max-width:780px;margin:0 auto;}
@@ -332,7 +326,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
         </div>
         <div class="fl"><label>Diagnóstico</label><input type="text" id="f-diag" placeholder="Diagnóstico principal"></div>
         <div class="fl"><label>Comorbidades</label><input type="text" id="f-comor" placeholder="Ex: DM, HAS, tabagista..."></div>
-        <div class="fl"><label>Adm. HospEsc</label><input type="date" id="f-adm-hosp"></div>
+        <div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp"></div>
 <div class="fl"><label>Alergias</label><input type="text" id="f-alergia" placeholder="Ex: Dipirona... ou NKDA"></div>
       </div>
     </div>
@@ -469,11 +463,16 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
           <label class="ci"><input type="checkbox" class="f-car" value="Perfusão inalterada"> Perfusão inalterada</label>
           <label class="ci"><input type="checkbox" class="f-car" value="Perfusão lentificada"> Perfusão lentificada</label>
           <label class="ci"><input type="checkbox" class="f-car" value="Edema"> Edema</label>
-          <label class="ci"><input type="checkbox" class="f-car" value="Normocárdico"> Normocárdico</label>
           <label class="ci"><input type="checkbox" class="f-car" value="Ausculta em 2T"> Ausculta em 2T</label>
           <label class="ci"><input type="checkbox" class="f-car" value="Bulhas acessórias"> Bulhas acessórias</label>
         </div>
+        <p class="sub-t">Ritmo / Frequência Cardíaca</p>
         <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <label class="ci"><input type="checkbox" class="f-car" value="Normocárdico"> Normocárdico</label>
+            <input type="number" id="f-fc-norm" class="fc-inline" placeholder="FC" min="0" max="400">
+            <span style="font-size:.74rem;color:var(--muted);">bpm</span>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <label class="ci"><input type="checkbox" class="f-car" value="Taquicárdico"> Taquicárdico</label>
             <input type="number" id="f-fc-taqui" class="fc-inline" placeholder="FC" min="0" max="400">
@@ -554,10 +553,22 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
       </div>
     </div>
 
-    <!-- DVA/SEDO -->
+    <!-- INFUSÕES -->
     <div class="secao">
-      <div class="secao-t">Drogas Vasoativas e Sedoanalgesia <span class="herd-tag">↻ herdado</span></div>
+      <div class="secao-t">Infusões <span class="herd-tag">↻ herdado</span></div>
       <div class="secao-c">
+        <p class="sub-t">Hidratação Venosa</p>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <select id="f-hv-tipo" style="flex:0 1 170px;">
+            <option value="">– selecione –</option>
+            <option value="SF 0,9%">SF 0,9%</option>
+            <option value="Ringer Lactato">Ringer Lactato</option>
+            <option value="Ringer Simples">Ringer Simples</option>
+            <option value="SG 5%">SG 5%</option>
+          </select>
+          <input type="number" id="f-hv-ml" placeholder="ml/h" style="width:90px;flex:none;">
+          <span style="font-size:.74rem;color:var(--muted);">ml/h</span>
+        </div>
         <p class="sub-t">DVA em uso</p>
         <div id="dva-l">
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Noradrenalina"><label>Noradrenalina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
@@ -566,7 +577,9 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Dopamina"><label>Dopamina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Dobutamina"><label>Dobutamina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
         </div>
-        <p class="sub-t">Sedoanalgesia</p>
+        <div id="dva-outros"></div>
+        <button class="btn-add" onclick="addOutraInfusao('dva-outros')">+ Outra DVA</button>
+        <p class="sub-t" style="margin-top:4px;">Sedoanalgesia</p>
         <div id="sedo-l">
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Fentanil"><label>Fentanil</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Midazolam"><label>Midazolam</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
@@ -574,6 +587,8 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Ketamina"><label>Ketamina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Precedex"><label>Precedex</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
         </div>
+        <div id="sedo-outros"></div>
+        <button class="btn-add" onclick="addOutraInfusao('sedo-outros')">+ Outra Sedoanalgesia</button>
       </div>
     </div>
 
@@ -734,7 +749,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Comorbidades</label><input type="text" id="m-comor" placeholder="Ex: DM, HAS..." style="width:100%;"></div>
       <div style="display:flex;flex-direction:column;gap:5px;">
-  <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Adm. Hospital dos Pescadores</label>
+  <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Adm. HOSPESC</label>
   <input type="date" id="m-adm-hosp" style="width:100%;">
 </div>
 <div style="display:flex;flex-direction:column;gap:5px;">
@@ -1023,6 +1038,27 @@ function loadDVA(cid,data){
 function getBraden(){ return Array.from(document.querySelectorAll('.bs')).map(s=>s.value); }
 function getMorse(){ return['m1','m2','m3','m4','m5','m6'].map(n=>{const el=document.querySelector('input[name="'+n+'"]:checked');return el?el.value:'';}); }
 function dvaStr(data){ if(!data) return '–'; const res=Object.entries(data).filter(([k,v])=>v.checked).map(([k,v])=>k+(v.val?' '+v.val+'ml/h':'')); return res.length?res.join(' | '):'–'; }
+function addOutraInfusao(cid,nome='',val=''){
+  const lista=document.getElementById(cid);
+  const row=document.createElement('div');
+  row.className='dva-r';
+  row.innerHTML=`<input type="checkbox" class="dc-cb" value="__outro__" checked style="display:none;">
+    <input type="text" class="dc-nome" placeholder="Nome do medicamento" value="${nome}" style="flex:1;min-width:120px;">
+    <input type="number" class="dc-v" placeholder="ml/h" value="${val}" style="width:65px;">
+    <span>ml/h</span>
+    <button class="btn-rem" onclick="this.parentElement.remove()">×</button>`;
+  lista.appendChild(row);
+}
+function getOutrasInfusoes(cid){
+  return Array.from(document.getElementById(cid).querySelectorAll('.dva-r')).map(r=>{
+    const n=r.querySelector('.dc-nome'), v=r.querySelector('.dc-v');
+    return {nome:n?n.value:'', val:v?v.value:''};
+  }).filter(x=>x.nome.trim());
+}
+function outrasStr(arr){
+  if(!arr||!arr.length) return '';
+  return arr.map(o=>o.nome+(o.val?' '+o.val+'ml/h':'')).join(' | ');
+}
 function addAVP(local='',data=''){ const lista=document.getElementById('avp-lista'); const row=document.createElement('div'); row.className='dyn-row'; row.innerHTML=`<input type="text" placeholder="Local (ex: ant. cubital D)" value="${local}"><input type="date" value="${data}" style="max-width:140px;flex:none;"><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); }
 function getAVPs(){ return Array.from(document.getElementById('avp-lista').querySelectorAll('.dyn-row')).map(r=>{const ins=r.querySelectorAll('input');return{local:ins[0].value,data:ins[1].value};}); }
 function addATB(nome='',dtInicio=''){ const lista=document.getElementById('atb-lista'); const row=document.createElement('div'); row.className='atb-row'; row.innerHTML=`<input type="text" placeholder="Ex: Meropenem 1g 8/8h EV" value="${nome}"><div class="atb-date-wrap"><span>Início</span><input type="date" value="${dtInicio}"></div><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); }
@@ -1043,6 +1079,8 @@ function limparForm(){
   document.getElementById('spo2-avulso').style.display='flex';
   document.getElementById('avp-lista').innerHTML='';
   document.getElementById('atb-lista').innerHTML='';
+  document.getElementById('dva-outros').innerHTML='';
+  document.getElementById('sedo-outros').innerHTML='';
 }
 
 async function getAnterior(n) {
@@ -1065,8 +1103,10 @@ async function abrirForm(n) {
   document.getElementById('cloud-tag').style.display = (!modoOffline && (anterior||evHoje)) ? 'inline' : 'none';
 
   setF('f-pac',pac.pac); setF('f-dn',pac.dn); setF('f-adm',pac.adm);
-  setF('f-diag',pac.diag); setF('f-comor',pac.comor); setF('f-adm-hosp', pac.admHosp||'');
-setF('f-alergia',  pac.alergia||'');
+  setF('f-diag',pac.diag); setF('f-comor',pac.comor);
+  // admHosp e alergia: usa leito primeiro, cai pro evolução anterior se o leito não tem
+  setF('f-adm-hosp', pac.admHosp || (anterior && anterior.admHosp) || (evHoje && evHoje.admHosp) || '');
+  setF('f-alergia',  pac.alergia || (anterior && anterior.alergia) || (evHoje && evHoje.alergia) || '');
   setF('f-leito','Leito '+pad(n)+' – UTI Geral'); setF('f-data',hoje());
 
   const fonte = evHoje || anterior;
@@ -1085,6 +1125,9 @@ setF('f-alergia',  pac.alergia||'');
     setF('f-microorg',    fonte.microorg||'');
     // ── herda TUDO – turno anterior e evHoje tratados igual ──────────────────
     loadDVA('dva-l',fonte.dva);  loadDVA('sedo-l',fonte.sedo);
+    if(fonte.dvaOutros&&fonte.dvaOutros.length) fonte.dvaOutros.forEach(o=>addOutraInfusao('dva-outros',o.nome,o.val));
+    if(fonte.sedoOutros&&fonte.sedoOutros.length) fonte.sedoOutros.forEach(o=>addOutraInfusao('sedo-outros',o.nome,o.val));
+    setF('f-hv-tipo', fonte.hvTipo||''); setF('f-hv-ml', fonte.hvMl||'');
     setChecks('f-neuro',fonte.neuro);  setF('f-glas',fonte.glas);  setF('f-rass',fonte.rass);
     setChecks('f-pup',fonte.pup);      setChecks('f-pele',fonte.pele);  setF('f-les',fonte.les);
     setChecks('f-resp',fonte.resp);    setChecks('f-ausc',fonte.ausc);
@@ -1092,7 +1135,7 @@ setF('f-alergia',  pac.alergia||'');
     setF('vmi-modo',fonte.vmi_modo);   setF('vmi-fio2',fonte.vmi_fio2);  setF('vmi-peep',fonte.vmi_peep);
     setF('vmi-fr',fonte.vmi_fr);       setF('vmi-sens',fonte.vmi_sens);  setF('vmi-vt',fonte.vmi_vt);
     setF('f-spo2',fonte.spo2);         setF('f-spo2-av',fonte.spo2av);
-    setChecks('f-car',fonte.car);      setF('f-fc-taqui',fonte.fcTaqui);  setF('f-fc-bradi',fonte.fcBradi);
+    setChecks('f-car',fonte.car);      setF('f-fc-norm',fonte.fcNorm);  setF('f-fc-taqui',fonte.fcTaqui);  setF('f-fc-bradi',fonte.fcBradi);
     setChecks('f-abd',fonte.abd);
     setRadio('dieta',fonte.dieta);     setF('f-vdieta',fonte.vdieta);
     setRadio('diu',fonte.diu);         setChecks('f-uri',fonte.uri);  setF('f-ddiu',fonte.ddiu);
@@ -1129,10 +1172,13 @@ examesSolic:gf('f-exames-solic'),
     resp:gChecked('f-resp'), ausc:gChecked('f-ausc'), vent:gRadio('vent'),
     vmi_modo:gf('vmi-modo'), vmi_fio2:gf('vmi-fio2'), vmi_peep:gf('vmi-peep'), vmi_fr:gf('vmi-fr'), vmi_sens:gf('vmi-sens'), vmi_vt:gf('vmi-vt'),
     spo2:isVMI?gf('f-spo2'):'', spo2av:isVMI?'':gf('f-spo2-av'),
-    car:gChecked('f-car'), fcTaqui:gf('f-fc-taqui'), fcBradi:gf('f-fc-bradi'),
+    car:gChecked('f-car'), fcNorm:gf('f-fc-norm'), fcTaqui:gf('f-fc-taqui'), fcBradi:gf('f-fc-bradi'),
     abd:gChecked('f-abd'), dieta:gRadio('dieta'), vdieta:gf('f-vdieta'),
     diu:gRadio('diu'), uri:gChecked('f-uri'), ddiu:gf('f-ddiu'), eli:gChecked('f-eli'),
-    dva:getDVAData('dva-l'), sedo:getDVAData('sedo-l'), prev:gChecked('f-prev'),
+    hvTipo:gf('f-hv-tipo'), hvMl:gf('f-hv-ml'),
+    dva:getDVAData('dva-l'), dvaOutros:getOutrasInfusoes('dva-outros'),
+    sedo:getDVAData('sedo-l'), sedoOutros:getOutrasInfusoes('sedo-outros'),
+    prev:gChecked('f-prev'),
     avps:getAVPs(), avc_l:gf('f-avc-l'), avc_d:gf('f-avc-d'),
     dial_l:gf('f-dial-l'), dial_d:gf('f-dial-d'),
     svd_n:gf('f-svd-n'), svd_d:gf('f-svd-d'), sne_n:gf('f-sne-n'), sne_d:gf('f-sne-d'), disp_o:gf('f-disp-o'),
@@ -1151,6 +1197,21 @@ async function gerarPreview() {
   btn.disabled = true; btn.textContent = 'Salvando...';
   const d = coletarDados();
   await dbSet('uti_ev_'+d.leito+'_'+d.turno+'_'+d.data, d);
+
+  // Sincroniza dados de identificação com o cadastro do leito
+  // (assim admHosp, alergia, diag, etc. ficam disponíveis em evoluções futuras)
+  try {
+    const ld = await leitosData();
+    if (ld[d.leito] && ld[d.leito].ocupado) {
+      ld[d.leito] = {
+        ...ld[d.leito],
+        pac: d.pac, dn: d.dn, adm: d.adm, admHosp: d.admHosp,
+        diag: d.diag, comor: d.comor, alergia: d.alergia
+      };
+      await dbSet('uti_leitos', ld);
+    }
+  } catch(e) { console.warn('Sync leito:', e); }
+
   renderPreview(d);
   mostrarTela('t-prev');
   document.getElementById('prev-sub').textContent = 'Leito '+pad(d.leito)+' · '+d.turno;
@@ -1192,7 +1253,8 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
     h+=`<div class="pr"><span class="pl">MODO</span><span class="pv">${d.vmi_modo||'–'}</span><span class="pl" style="margin-left:.6rem;">FiO2</span><span class="pv">${d.vmi_fio2?d.vmi_fio2+'%':'–'}</span><span class="pl" style="margin-left:.6rem;">PEEP</span><span class="pv">${d.vmi_peep?d.vmi_peep+' cmH₂O':'–'}</span><span class="pl" style="margin-left:.6rem;">FR</span><span class="pv">${d.vmi_fr?d.vmi_fr+' ipm':'–'}</span><span class="pl" style="margin-left:.6rem;">SENS</span><span class="pv">${d.vmi_sens||'–'}</span><span class="pl" style="margin-left:.6rem;">VT</span><span class="pv">${d.vmi_vt?d.vmi_vt+' mL':'–'}</span></div>`;
   }
   h+=st('Cardiovascular');
-  let cars=d.car.filter(v=>v!=='Taquicárdico'&&v!=='Bradicárdico').join(', ');
+  let cars=d.car.filter(v=>v!=='Normocárdico'&&v!=='Taquicárdico'&&v!=='Bradicárdico').join(', ');
+  if(d.car.includes('Normocárdico')) cars+=(cars?', ':'')+`Normocárdico${d.fcNorm?' (FC: '+d.fcNorm+' bpm)':''}`;
   if(d.car.includes('Taquicárdico')) cars+=(cars?', ':'')+`Taquicárdico${d.fcTaqui?' (FC: '+d.fcTaqui+' bpm)':''}`;
   if(d.car.includes('Bradicárdico')) cars+=(cars?', ':'')+`Bradicárdico${d.fcBradi?' (FC: '+d.fcBradi+' bpm)':''}`;
   h+=br('ACHADOS',cars||'–');
@@ -1201,8 +1263,13 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
   h+=`<div class="pr"><span class="pl">DIETA</span><span class="pv">${d.dieta||'–'}</span><span class="pl" style="margin-left:1rem;">VAZÃO</span><span class="pv">${d.vdieta?d.vdieta+' ml/h':'–'}</span></div>`;
   h+=`<div class="pr"><span class="pl">DIURESE</span><span class="pv">${d.diu||'–'}</span><span class="pl" style="margin-left:1rem;">ASPECTO</span><span class="pv">${d.uri.join(', ')||'–'}</span><span class="pl" style="margin-left:1rem;">DÉBITO</span><span class="pv">${d.ddiu?d.ddiu+' ml':'–'}</span></div>`;
   h+=br('ELIM. INTESTINAIS',d.eli.join(', ')||'–');
-  h+=st('Drogas Vasoativas e Sedoanalgesia');
-  h+=br('DVA',dvaStr(d.dva)); h+=br('SEDOANALGESIA',dvaStr(d.sedo));
+  h+=st('Infusões');
+  const hvTxt = d.hvTipo ? d.hvTipo + (d.hvMl?' '+d.hvMl+'ml/h':'') : '–';
+  h+=br('HIDRATAÇÃO VENOSA', hvTxt);
+  const dvaJoin = [dvaStr(d.dva), outrasStr(d.dvaOutros)].filter(s=>s&&s!=='–').join(' | ') || '–';
+  const sedoJoin = [dvaStr(d.sedo), outrasStr(d.sedoOutros)].filter(s=>s&&s!=='–').join(' | ') || '–';
+  h+=br('DVA', dvaJoin);
+  h+=br('SEDOANALGESIA', sedoJoin);
   h+=st('Medidas Preventivas'); h+=br('EM USO',d.prev.join(', ')||'–');
   h+=st('Dispositivos Médicos');
   const avpStr=d.avps&&d.avps.filter(a=>a.local).length?d.avps.filter(a=>a.local).map(a=>a.local+(a.data?' ('+fmtD(a.data)+')':'')).join(' | '):'–';
@@ -1212,8 +1279,6 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
   h+=br('OUTROS DISP.',d.disp_o);
   h+=st('Antimicrobianos em Uso');
   if(d.atbs&&d.atbs.filter(a=>a.nome).length){ d.atbs.filter(a=>a.nome).forEach(a=>{ h+=`<div class="pr"><span class="pv">${a.nome}</span>${a.inicio?`<span class="pl" style="margin-left:1rem;">INÍCIO</span><span class="pv">${fmtD(a.inicio)}</span>`:''}</div>`; }); } else h+=br('','–');
-  h += `<div class="quebra-pagina"></div>`;
-  h += `<div id="pdf-break" style="page-break-after:always;border-top:1px dashed #bbb;margin:10px 0;"></div>`;
   h+=st('Exames e Procedimentos Realizados Hoje');
 h+=`<div class="obs-box" style="min-height:45px;">${d.examesReal||'–'}</div>`;
 h+=st('Exames e Pareceres Solicitados');
@@ -1239,43 +1304,67 @@ async function gerarPDF(){
   btn.disabled=true; btn.textContent='⏳ Gerando...';
   status.textContent='Capturando...'; status.style.color='var(--muted)';
   try{
-    const{jsPDF}=window.jspdf;
-    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const margin=10, contentW=pdf.internal.pageSize.getWidth()-margin*2;
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const pageW = pdf.internal.pageSize.getWidth();   // 210 mm
+    const pageH = pdf.internal.pageSize.getHeight();  // 297 mm
+    const margin = 10;
+    const contentW = pageW - margin*2;   // 190 mm
+    const contentH = pageH - margin*2;   // 277 mm
 
     // Captura UMA vez em alta resolução
-    const canvas=await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
-    const ratio=canvas.width/area.scrollWidth;
+    const canvas = await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    const ratio = canvas.width / area.scrollWidth;
 
-    // Localiza o marcador de quebra com posição relativa à área capturada
-    const breakEl = document.getElementById('pdf-break');
-    let breakPx = null;
-    if (breakEl) {
-      const areaRect = area.getBoundingClientRect();
-      const breakRect = breakEl.getBoundingClientRect();
-      breakPx = Math.round((breakRect.top - areaRect.top) * ratio);
+    // Altura de uma página em pixels do canvas
+    const pageHeightPx = Math.floor((contentH / contentW) * canvas.width);
+
+    // Posições (em px do canvas) dos títulos de seção — usadas como quebras preferenciais
+    const areaTop = area.getBoundingClientRect().top;
+    const sectionTops = Array.from(area.querySelectorAll('.pst')).map(el => {
+      return Math.round((el.getBoundingClientRect().top - areaTop) * ratio);
+    }).filter(y => y > 0).sort((a,b) => a-b);
+
+    // Encontra o melhor ponto de corte: prefere um título de seção dentro dos últimos 18% da página
+    function acharQuebra(yStart, yIdeal) {
+      const minAceitavel = yStart + (yIdeal - yStart) * 0.82; // aceita página com pelo menos 82% de altura
+      let melhor = yIdeal;
+      for (const y of sectionTops) {
+        if (y > yStart && y <= yIdeal && y >= minAceitavel) melhor = y;
+      }
+      return melhor;
     }
 
     function addFatia(yStart, yEnd){
-      const h=yEnd-yStart;
-      const sc=document.createElement('canvas');
-      sc.width=canvas.width; sc.height=h;
-      const ctx=sc.getContext('2d');
-      ctx.fillStyle='#fff'; ctx.fillRect(0,0,sc.width,h);
-      ctx.drawImage(canvas,0,yStart,canvas.width,h,0,0,canvas.width,h);
-      const mmH=(h/canvas.width)*contentW;
-      pdf.addImage(sc.toDataURL('image/jpeg',.92),'JPEG',margin,margin,contentW,mmH);
+      const h = yEnd - yStart;
+      const sc = document.createElement('canvas');
+      sc.width = canvas.width; sc.height = h;
+      const ctx = sc.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,sc.width,h);
+      ctx.drawImage(canvas, 0,yStart, canvas.width,h, 0,0, canvas.width,h);
+      const mmH = (h / canvas.width) * contentW;
+      pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', margin, margin, contentW, mmH);
     }
 
-    if(breakPx && breakPx>0 && breakPx<canvas.height){
-      addFatia(0, breakPx);
-      pdf.addPage();
-      addFatia(breakPx, canvas.height);
-    } else {
-      addFatia(0, canvas.height);
+    // Paginação automática
+    let yStart = 0;
+    let pag = 0;
+    while (yStart < canvas.height) {
+      if (pag > 0) pdf.addPage();
+      const restante = canvas.height - yStart;
+      let yEnd;
+      if (restante <= pageHeightPx) {
+        yEnd = canvas.height; // última página
+      } else {
+        const yIdeal = yStart + pageHeightPx;
+        yEnd = acharQuebra(yStart, yIdeal);
+      }
+      addFatia(yStart, yEnd);
+      yStart = yEnd;
+      pag++;
     }
 
-    // Converte para base64 e envia ao Apps Script → Google Drive
+    // Converte o PDF finalizado para base64 e envia ao Apps Script → Google Drive
     const d = coletarDados();
     const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Pac').split(' ')[0]}`;
 
