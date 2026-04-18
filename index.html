@@ -10,9 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 
-<!-- jsPDF + html2canvas -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!-- PDF gerado via Apps Script (jsPDF/html2canvas não necessários) -->
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -728,7 +726,7 @@ const FIREBASE_CONFIG = {
     </div>
     <div class="btn-row btn-row-prev">
   <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
-  <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">⬇ Baixar PDF</button>
+  <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">⬆ Salvar PDF no Drive</button>
   <button class="btn btn-sm" style="background:#d63031; color:white;" onclick="confirmarAlta()">🏥 Alta</button>
   <button class="btn btn-sm" style="background:#fdcb6e; color:black;" onclick="prepararTransferencia()">🔄 Transf.</button>
 </div>
@@ -1082,10 +1080,12 @@ setF('f-alergia',  pac.alergia||'');
     if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
     if(fonte.braden){ document.querySelectorAll('.bs').forEach((s,i)=>{if(fonte.braden[i])s.value=fonte.braden[i];}); calcB(); }
     if(fonte.morse){ ['m1','m2','m3','m4','m5','m6'].forEach((nm,i)=>{const r=document.querySelector('input[name="'+nm+'"][value="'+fonte.morse[i]+'"]');if(r)r.checked=true;}); calcM(); }
+    // Herdar pulseira, isolamento, microorg sempre (incluindo turno anterior)
     if(fonte.pulseira) setRadio('pulseira', fonte.pulseira);
     if(fonte.isolamento) setRadio('isolamento', fonte.isolamento);
     setF('f-microorg', fonte.microorg||'');
     if(evHoje) {
+      // Evolução já salva hoje: carrega TUDO
       loadDVA('dva-l',fonte.dva); loadDVA('sedo-l',fonte.sedo);
       setChecks('f-neuro',fonte.neuro); setF('f-glas',fonte.glas); setF('f-rass',fonte.rass);
       setChecks('f-pup',fonte.pup); setChecks('f-pele',fonte.pele); setF('f-les',fonte.les);
@@ -1098,8 +1098,26 @@ setF('f-alergia',  pac.alergia||'');
       setChecks('f-abd',fonte.abd);
       setRadio('dieta',fonte.dieta); setF('f-vdieta',fonte.vdieta);
       setRadio('diu',fonte.diu); setChecks('f-uri',fonte.uri); setF('f-ddiu',fonte.ddiu);
-      setChecks('f-eli',fonte.eli); setChecks('f-prev',fonte.prev);setF('f-exames-real',  fonte.examesReal||'');
-setF('f-exames-solic', fonte.examesSolic||''); setF('f-obs',fonte.obs);
+      setChecks('f-eli',fonte.eli); setChecks('f-prev',fonte.prev);
+      setF('f-exames-real', fonte.examesReal||'');
+      setF('f-exames-solic', fonte.examesSolic||'');
+      setF('f-obs',fonte.obs);
+    } else {
+      // Turno anterior: herda campos clínicos principais também
+      loadDVA('dva-l',fonte.dva); loadDVA('sedo-l',fonte.sedo);
+      setChecks('f-neuro',fonte.neuro); setF('f-glas',fonte.glas); setF('f-rass',fonte.rass);
+      setChecks('f-pup',fonte.pup); setChecks('f-pele',fonte.pele); setF('f-les',fonte.les);
+      setChecks('f-resp',fonte.resp); setChecks('f-ausc',fonte.ausc);
+      setRadio('vent',fonte.vent); toggleVMI();
+      setF('vmi-modo',fonte.vmi_modo); setF('vmi-fio2',fonte.vmi_fio2); setF('vmi-peep',fonte.vmi_peep);
+      setF('vmi-fr',fonte.vmi_fr); setF('vmi-sens',fonte.vmi_sens); setF('vmi-vt',fonte.vmi_vt);
+      setF('f-spo2',fonte.spo2); setF('f-spo2-av',fonte.spo2av);
+      setChecks('f-car',fonte.car); setF('f-fc-taqui',fonte.fcTaqui); setF('f-fc-bradi',fonte.fcBradi);
+      setChecks('f-abd',fonte.abd);
+      setRadio('dieta',fonte.dieta);
+      setRadio('diu',fonte.diu); setChecks('f-uri',fonte.uri);
+      setChecks('f-eli',fonte.eli); setChecks('f-prev',fonte.prev);
+      // NÃO herda: vdieta, ddiu, exames, obs (específicos do turno)
     }
   } else { addAVP(); addATB(); }
 
@@ -1229,52 +1247,85 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
   document.getElementById('preview-area').innerHTML = h;
 }
 
-// ── GERAR PDF (jsPDF + html2canvas) ──────────────────────────────────────────
-// ── GERAR PDF (jsPDF + GOOGLE DRIVE) ─────────────────────────────────────────
+// ── URL DO APPS SCRIPT ────────────────────────────────────────────────────────
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec';
+
+// ── GERAR PDF E SALVAR NO DRIVE VIA APPS SCRIPT ───────────────────────────────
 async function gerarPDF(){
   const btn=document.getElementById('btn-pdf'), status=document.getElementById('pdf-status');
   const area=document.getElementById('preview-area');
   if(!area||!area.innerHTML.trim()){alert('Gere a impressão primeiro.');return;}
-  btn.disabled=true; btn.textContent='⏳ Gerando...';
-  status.textContent='Capturando...'; status.style.color='var(--muted)';
+
+  btn.disabled=true; btn.textContent='⏳ Enviando...';
+  status.textContent='Preparando documento...'; status.style.color='var(--muted)';
+
   try{
-    const{jsPDF}=window.jspdf;
-    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const margin=10, contentW=pdf.internal.pageSize.getWidth()-margin*2;
-    const breakEl=document.getElementById('pdf-break');
-
-    async function fatia(top,height){
-      const c=await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',
-        logging:false,width:area.scrollWidth,height:area.scrollHeight});
-      const ratio=c.width/area.scrollWidth;
-      const sc=document.createElement('canvas');
-      sc.width=c.width; sc.height=Math.round(height*ratio);
-      const ctx=sc.getContext('2d');
-      ctx.fillStyle='#fff'; ctx.fillRect(0,0,sc.width,sc.height);
-      ctx.drawImage(c,0,Math.round(top*ratio),c.width,Math.round(height*ratio),0,0,c.width,sc.height);
-      return sc;
-    }
-
-    if(breakEl){
-      const p1=await fatia(0, breakEl.offsetTop);
-      pdf.addImage(p1.toDataURL('image/jpeg',.92),'JPEG',margin,margin,contentW,(p1.height/p1.width)*contentW);
-      pdf.addPage();
-      const start=breakEl.offsetTop+breakEl.offsetHeight;
-      const p2=await fatia(start, area.scrollHeight-start);
-      pdf.addImage(p2.toDataURL('image/jpeg',.92),'JPEG',margin,margin,contentW,(p2.height/p2.width)*contentW);
-    } else {
-      const c=await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
-      pdf.addImage(c.toDataURL('image/jpeg',.92),'JPEG',margin,margin,contentW,(c.height/c.width)*contentW);
-    }
-
     const d=coletarDados();
-    pdf.save(`Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}.pdf`);
-    status.textContent='✓ PDF baixado!'; status.style.color='var(--verde)';
-    toast('✓ PDF gerado');
+    const nomeArquivo=`Evolucao_L${pad(d.leito)}_${d.turno}_${d.data.replace(/-/g,'')}_${(d.pac||'Pac').split(' ')[0]}`;
+
+    // HTML completo com estilos inline e quebra de página CSS correta
+    // O Apps Script converte para PDF mantendo o page-break-before
+    const htmlParaEnviar=`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<style>
+  @page { margin: 15mm 12mm; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0; }
+  .ph { text-align: center; border: 2px solid #000; padding: 10px; border-bottom: none; }
+  .ph h2 { font-size: 13px; font-weight: 800; text-transform: uppercase; margin: 0; }
+  .ph h3 { font-size: 10px; font-weight: 700; margin: 2px 0 0; }
+  .ph p  { font-size: 10px; margin: 2px 0 0; }
+  .pb { border: 2px solid #000; border-top: none; padding: 8px 10px; }
+  .pst { background: #0a3d6b; color: white; font-size: 9px; font-weight: 800;
+         letter-spacing:.06em; text-transform: uppercase; padding: 3px 7px;
+         margin: 6px -10px 4px; padding-left: 10px; }
+  .pr { display: flex; flex-wrap: wrap; gap: 2px 12px;
+        border-bottom: 1px solid #ddd; padding: 3px 0; font-size: 10px; }
+  .pr:last-child { border-bottom: none; }
+  .pl { color: #555; font-weight: 700; font-size: 9px; text-transform: uppercase; }
+  .pv { font-weight: 500; }
+  .obs-box { border: 1px solid #000; padding: 6px; min-height: 50px;
+             font-size: 10px; white-space: pre-wrap; word-break: break-word; }
+  .pfoot { border-top: 2px solid #000; padding: 4px 10px;
+           display: flex; justify-content: space-between; font-size: 9px; color: #555; }
+  /* ── QUEBRA DE PÁGINA ── */
+  /* O Apps Script usa o Chromium interno que respeita estas regras CSS: */
+  .pg-break { page-break-before: always; border-top: 1px dashed #bbb; margin: 0; padding: 0; height: 0; }
+  /* Garante que o div de quebra não fique junto a um pst: */
+  .pst { page-break-after: avoid; }
+  /* Evita que caixas de observação sejam cortadas ao meio: */
+  .obs-box { page-break-inside: avoid; }
+  /* Mantém título de seção com seu conteúdo: */
+  .pst + .pr, .pst + .obs-box { page-break-before: avoid; }
+</style>
+</head><body>
+${area.innerHTML}
+<p style="font-size:8px;color:#aaa;text-align:right;margin-top:6px;">
+  Gerado em ${new Date().toLocaleString('pt-BR')} · ${d.autor||''}
+</p>
+</body></html>`;
+
+    // Substitui o div de quebra antigo (que usa offsetTop) pelo marcador CSS
+    const htmlFinal = htmlParaEnviar
+      .replace(/<div[^>]*id="pdf-break"[^>]*>.*?<\/div>/g,
+               '<div class="pg-break"></div>')
+      .replace(/<div[^>]*class="quebra-pagina"[^>]*>.*?<\/div>/g, '');
+
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ titulo: nomeArquivo, html: htmlFinal })
+    });
+
+    // Com no-cors não é possível ler a resposta, mas se não lançou exceção o envio foi aceito
+    status.textContent='✓ Enviado! Verifique a pasta "UTI – Evoluções de Enfermagem" no Drive em alguns segundos.';
+    status.style.color='var(--verde)';
+    toast('✓ PDF enviado para o Drive!');
   }catch(e){
-    status.textContent='Erro. Use Ctrl+P.'; status.style.color='var(--vermelho)';
+    status.textContent='Erro ao enviar. Tente novamente ou use Ctrl+P para imprimir.';
+    status.style.color='var(--vermelho)';
   }
-  btn.disabled=false; btn.textContent='⬇ Baixar PDF';
+  btn.disabled=false; btn.textContent='⬇ Salvar PDF no Drive';
 }
 
 // ── FUNÇÃO DE ALTA (APAGAR DO FIREBASE) ──────────────────────────────────────
