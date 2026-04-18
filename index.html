@@ -790,14 +790,23 @@ function firebaseConfigurado() {
 }
 
 function initFirebase() {
-  if (!firebaseConfigurado()) return false;
+  const config = {
+    apiKey: "AIzaSyB00a198BLBKXyvfCXmbZgbY9lAPsp_G6c",
+    authDomain: "evolucaouti.firebaseapp.com",
+    projectId: "evolucaouti",
+    storageBucket: "evolucaouti.firebasestorage.app",
+    messagingSenderId: "168481656346",
+    appId: "1:168481656346:web:4af8e67600eeabb4fdcba3",
+    measurementId: "G-BK1NM0JE8J"
+  };
+
   try {
     if (!firebase.apps.length) {
-      firebase.initializeApp(FIREBASE_CONFIG);
+      firebase.initializeApp(config);
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    return true;
+    return true; 
   } catch (e) {
     console.error("Erro Firebase:", e);
     return false;
