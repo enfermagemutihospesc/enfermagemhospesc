@@ -42,7 +42,17 @@ function fmtD(s){ if(!s||s==='–') return '–'; try{ const[y,m,d]=s.split('-')
 function gf(id){ const e=document.getElementById(id); return e?e.value:''; }
 function gChecked(cls){ return Array.from(document.querySelectorAll('.'+cls+':checked')).map(e=>e.value); }
 function gRadio(name){ const e=document.querySelector('input[name="'+name+'"]:checked'); return e?e.value:''; }
-function setF(id,v){ const e=document.getElementById(id); if(e&&v!=null) e.value=v; }
+function setF(id,v){
+  const e=document.getElementById(id);
+  if(!e||v==null) return;
+  // Campos de texto/textarea herdam em caixa alta para manter consistência.
+  // Campos de data, número e tempo mantêm o valor original.
+  if ((e.tagName==='INPUT' && (e.type==='text' || e.type==='')) || e.tagName==='TEXTAREA') {
+    e.value = String(v).toUpperCase();
+  } else {
+    e.value = v;
+  }
+}
 function setChecks(cls,arr){ if(!arr) return; document.querySelectorAll('.'+cls).forEach(cb=>{ cb.checked=arr.includes(cb.value); }); }
 function setRadio(name,val){ if(!val) return; const r=document.querySelector('input[name="'+name+'"][value="'+val+'"]'); if(r) r.checked=true; }
 function showLoading(msg){ document.getElementById('loading-msg').textContent=msg||'Carregando...'; document.getElementById('loading-overlay').classList.add('show'); }
@@ -447,15 +457,16 @@ async function abrirModal(n) {
   const d = await leitosData();
   const l = d[n];
   document.getElementById('modal-titulo').textContent = `Leito ${pad(n)} – ${l.ocupado?'Editar dados':'Admissão'}`;
-  document.getElementById('m-pac').value   = l.pac||'';
-  document.getElementById('m-diag').value  = l.diag||'';
+  document.getElementById('m-pac').value   = (l.pac||'').toUpperCase();
+  document.getElementById('m-diag').value  = (l.diag||'').toUpperCase();
   document.getElementById('m-dn').value    = l.dn||'';
   document.getElementById('m-adm').value   = l.adm||hoje();
-  document.getElementById('m-comor').value = l.comor||'';
+  document.getElementById('m-comor').value = (l.comor||'').toUpperCase();
   document.getElementById('m-adm-hosp').value = l.admHosp||'';
-document.getElementById('m-alergia').value   = l.alergia||'';
+  document.getElementById('m-alergia').value  = (l.alergia||'').toUpperCase();
   document.getElementById('btn-alta').style.display = l.ocupado?'':'none';
   document.getElementById('modal-adm').classList.add('show');
+  _ativarCaixaAlta();
 }
 function fecharModal(){ document.getElementById('modal-adm').classList.remove('show'); }
 
@@ -549,11 +560,12 @@ function addOutraInfusao(cid,nome='',val=''){
   const row=document.createElement('div');
   row.className='dva-r';
   row.innerHTML=`<input type="checkbox" class="dc-cb" value="__outro__" checked style="display:none;">
-    <input type="text" class="dc-nome" placeholder="Nome do medicamento" value="${nome}" style="flex:1;min-width:120px;">
+    <input type="text" class="dc-nome" placeholder="Nome do medicamento" value="${(nome||'').toUpperCase()}" style="flex:1;min-width:120px;">
     <input type="number" class="dc-v" placeholder="ml/h" value="${val}" style="width:65px;">
     <span>ml/h</span>
     <button class="btn-rem" onclick="this.parentElement.remove()">×</button>`;
   lista.appendChild(row);
+  _ativarCaixaAlta();
 }
 function getOutrasInfusoes(cid){
   return Array.from(document.getElementById(cid).querySelectorAll('.dva-r')).map(r=>{
@@ -565,9 +577,9 @@ function outrasStr(arr){
   if(!arr||!arr.length) return '';
   return arr.map(o=>o.nome+(o.val?' '+o.val+'ml/h':'')).join(' | ');
 }
-function addAVP(local='',data=''){ const lista=document.getElementById('avp-lista'); const row=document.createElement('div'); row.className='dyn-row'; row.innerHTML=`<input type="text" placeholder="Local (ex: ant. cubital D)" value="${local}"><input type="date" value="${data}" style="max-width:140px;flex:none;"><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); }
+function addAVP(local='',data=''){ const lista=document.getElementById('avp-lista'); const row=document.createElement('div'); row.className='dyn-row'; row.innerHTML=`<input type="text" placeholder="Local (ex: ant. cubital D)" value="${(local||'').toUpperCase()}"><input type="date" value="${data}" style="max-width:140px;flex:none;"><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); _ativarCaixaAlta(); }
 function getAVPs(){ return Array.from(document.getElementById('avp-lista').querySelectorAll('.dyn-row')).map(r=>{const ins=r.querySelectorAll('input');return{local:ins[0].value,data:ins[1].value};}); }
-function addATB(nome='',dtInicio=''){ const lista=document.getElementById('atb-lista'); const row=document.createElement('div'); row.className='atb-row'; row.innerHTML=`<input type="text" placeholder="Ex: Meropenem 1g 8/8h EV" value="${nome}"><div class="atb-date-wrap"><span>Início</span><input type="date" value="${dtInicio}"></div><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); }
+function addATB(nome='',dtInicio=''){ const lista=document.getElementById('atb-lista'); const row=document.createElement('div'); row.className='atb-row'; row.innerHTML=`<input type="text" placeholder="Ex: Meropenem 1g 8/8h EV" value="${(nome||'').toUpperCase()}"><div class="atb-date-wrap"><span>Início</span><input type="date" value="${dtInicio}"></div><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); _ativarCaixaAlta(); }
 function getATBs(){ return Array.from(document.getElementById('atb-lista').querySelectorAll('.atb-row')).map(r=>{const ins=r.querySelectorAll('input');return{nome:ins[0].value,inicio:ins[1].value};}); }
 function toggleVMI(){ const v=document.querySelector('input[name="vent"]:checked'); const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI'); document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':''); document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex'; }
 function calcB(){ let t=0; document.querySelectorAll('.bs').forEach(s=>{if(s.value)t+=parseInt(s.value);}); const sc=document.getElementById('b-sc'),r=document.getElementById('b-r'); if(t>0){sc.textContent=t;if(t>=15){r.textContent='Risco Baixo';r.className='rb rb-b';}else if(t>=12){r.textContent='Risco Moderado';r.className='rb rb-m';}else{r.textContent='Risco Alto';r.className='rb rb-a';}}else{sc.textContent='–';r.textContent='';} }
@@ -662,6 +674,7 @@ async function abrirForm(n) {
 
   hideLoading();
   mostrarTela('t-form');
+  _ativarCaixaAlta();
   window.scrollTo(0,0);
 }
 
@@ -985,6 +998,187 @@ async function prepararTransferencia(){
   }catch(e){ hideLoading(); toast('Erro: '+e.message,true); }
 }
   
+// ── GERADOR DE TEXTO AUTOMÁTICO DA EVOLUÇÃO ──────────────────────────────────
+function gerarTextoEvolucao(){
+  const d = coletarDados();
+  const partes = [];
+
+  // Introdução fixa: DIH, diagnóstico, comorbidades, alergias
+  let dih = '';
+  if (d.admHosp) {
+    const [ano,mes,dia] = d.admHosp.split('-');
+    const dAdm = new Date(+ano, +mes-1, +dia);
+    const diffMs = new Date() - dAdm;
+    const dias = Math.max(1, Math.floor(diffMs / 86400000));
+    dih = `${dias}º DIH`;
+  } else if (d.adm) {
+    const [ano,mes,dia] = d.adm.split('-');
+    const dAdm = new Date(+ano, +mes-1, +dia);
+    const diffMs = new Date() - dAdm;
+    const dias = Math.max(1, Math.floor(diffMs / 86400000));
+    dih = `${dias}º DIH`;
+  } else {
+    dih = 'No X DIH';
+  }
+
+  const diag   = d.diag  ? d.diag.trim()  : 'diagnóstico não registrado';
+  const comor  = d.comor ? ', COMORBIDADES: ' + d.comor.trim() : '';
+  const aler   = (d.alergia && d.alergia.trim() && !/^nega|^nkda/i.test(d.alergia.trim()))
+                 ? `, alérgico a ${d.alergia.trim()}`
+                 : ', nega alergias';
+  partes.push(`Paciente no ${dih} em UTI por ${diag}${comor}${aler}.`);
+
+  // Neurológico
+  const neuro = [];
+  if (d.neuro && d.neuro.length) neuro.push(d.neuro.join(', ').toLowerCase());
+  if (d.glas)   neuro.push(`Glasgow ${d.glas}`);
+  if (d.rass !== '' && d.rass != null) neuro.push(`RASS ${d.rass}`);
+  if (d.pup && d.pup.length) neuro.push(`pupilas ${d.pup.join(', ').toLowerCase()}`);
+  if (neuro.length) partes.push('Neurológico: ' + neuro.join(', ') + '.');
+
+  // Ventilação
+  const ventTxt = _descreveVent(d);
+  if (ventTxt) partes.push(ventTxt);
+
+  // SpO2 (fora do bloco vent pra quando for ar ambiente)
+  const spo2 = d.spo2 || d.spo2av;
+  if (spo2) partes.push(`SpO2 ${spo2}%.`);
+
+  // Ausculta
+  if (d.ausc && d.ausc.length) partes.push('Ausculta: ' + d.ausc.join(', ') + '.');
+
+  // Cardiovascular
+  const car = [];
+  if (d.car && d.car.length) {
+    d.car.forEach(v=>{
+      if (v==='Normocárdico' && d.fcNorm) car.push(`normocárdico (FC ${d.fcNorm} bpm)`);
+      else if (v==='Taquicárdico' && d.fcTaqui) car.push(`taquicárdico (FC ${d.fcTaqui} bpm)`);
+      else if (v==='Bradicárdico' && d.fcBradi) car.push(`bradicárdico (FC ${d.fcBradi} bpm)`);
+      else car.push(v.toLowerCase());
+    });
+  }
+  if (car.length) partes.push('Cardiovascular: ' + car.join(', ') + '.');
+
+  // Infusões
+  const infusoes = [];
+  if (d.hvTipo) infusoes.push(`hidratação venosa com ${d.hvTipo}${d.hvMl?` a ${d.hvMl} ml/h`:''}`);
+  const dvaT = _listaInfusao(d.dva, d.dvaOutros);
+  const sedoT = _listaInfusao(d.sedo, d.sedoOutros);
+  if (dvaT)  infusoes.push('DVA: ' + dvaT);
+  if (sedoT) infusoes.push('sedoanalgesia com ' + sedoT);
+  if (infusoes.length) partes.push('Em uso de ' + infusoes.join('; ') + '.');
+
+  // Dieta e Diurese
+  const dd = [];
+  if (d.dieta) dd.push(`dieta ${d.dieta}${d.vdieta?` a ${d.vdieta} ml/h`:''}`);
+  if (d.diu) {
+    let diu = `diurese por ${d.diu}`;
+    if (d.uri && d.uri.length) diu += `, aspecto ${d.uri.join(', ').toLowerCase()}`;
+    if (d.ddiu) diu += `, débito ${d.ddiu} ml no turno`;
+    dd.push(diu);
+  }
+  if (d.eli && d.eli.length) dd.push(`eliminações intestinais ${d.eli.join(', ').toLowerCase()}`);
+  if (dd.length) partes.push(_capitalizar(dd.join('; ')) + '.');
+
+  // Dispositivos
+  const disp = [];
+  if (d.avps && d.avps.filter(a=>a.local).length) {
+    const avps = d.avps.filter(a=>a.local).map(a=>a.local+(a.data?` (${fmtD(a.data)})`:'')).join(', ');
+    disp.push('AVP em ' + avps);
+  }
+  if (d.avc_l)  disp.push(`AVC em ${d.avc_l}${d.avc_d?` (${fmtD(d.avc_d)})`:''}`);
+  if (d.dial_l) disp.push(`cateter de diálise em ${d.dial_l}${d.dial_d?` (${fmtD(d.dial_d)})`:''}`);
+  if (d.svd_n)  disp.push(`SVD nº ${d.svd_n}${d.svd_d?` (${fmtD(d.svd_d)})`:''}`);
+  if (d.sne_n)  disp.push(`SNE nº ${d.sne_n}${d.sne_d?` (${fmtD(d.sne_d)})`:''}`);
+  if (d.tot_n)  disp.push(`TOT nº ${d.tot_n}${d.tot_d?` (${fmtD(d.tot_d)})`:''}`);
+  if (d.tqt_n)  disp.push(`TQT nº ${d.tqt_n}${d.tqt_d?` (${fmtD(d.tqt_d)})`:''}`);
+  if (d.disp_o) disp.push(d.disp_o);
+  if (disp.length) partes.push('Dispositivos: ' + disp.join('; ') + '.');
+
+  // ATB
+  if (d.atbs && d.atbs.filter(a=>a.nome).length) {
+    const atbs = d.atbs.filter(a=>a.nome).map(a=>a.nome+(a.inicio?` (início ${fmtD(a.inicio)})`:'')).join('; ');
+    partes.push('Antimicrobianos: ' + atbs + '.');
+  }
+
+  // Escalas
+  const risco = [];
+  if (d.bradScore && d.bradScore !== '–') risco.push(`Braden ${d.bradScore} pts (${d.bradRisco||'–'})`);
+  if (d.morseScore && d.morseScore !== '–' && d.morseScore !== '0') risco.push(`Morse ${d.morseScore} pts (${d.morseRisco||'–'})`);
+  if (risco.length) partes.push('Escalas: ' + risco.join(', ') + '.');
+
+  // Preventivas
+  if (d.prev && d.prev.length) partes.push('Medidas preventivas: ' + d.prev.join(', ').toLowerCase() + '.');
+
+  // Isolamento
+  if (d.isolamento && d.isolamento !== 'Não') {
+    partes.push(`Em isolamento de ${d.isolamento.toLowerCase()}${d.microorg?` (${d.microorg})`:''}.`);
+  }
+
+  // Exames realizados hoje
+  if (d.examesReal && d.examesReal.trim()) partes.push('Realizado hoje: ' + d.examesReal.trim() + '.');
+
+  const texto = partes.join(' ');
+  const campo = document.getElementById('f-obs');
+
+  if (campo.value.trim() && !confirm('Há texto no campo de Observações. Substituir pelo texto gerado?')) return;
+  // Texto em caixa alta (igual aos outros campos do sistema)
+  campo.value = texto.toUpperCase();
+  toast('✓ Texto gerado — revise e complemente se necessário');
+}
+
+function _descreveVent(d){
+  if (!d.vent) return '';
+  if (d.vent === 'Ar ambiente') return 'Em ar ambiente.';
+  if (d.vent === 'Cateter nasal') return `Em oxigenoterapia por cateter nasal${d.cnLmin?` a ${d.cnLmin} L/min`:''}.`;
+  if (d.vent === 'Máscara NR')    return `Em oxigenoterapia por máscara não reinalante${d.mnrLmin?` a ${d.mnrLmin} L/min`:''}.`;
+  if (d.vent === 'Macronebulização MV') return `Em macronebulização MV${d.mvFio2?` a ${d.mvFio2}%`:''}.`;
+  if (d.vent === 'VNI – BIPAP')   return 'Em VNI por BIPAP.';
+  if (d.vent.includes('TOT') || d.vent.includes('TQT')) {
+    const via = d.vent.includes('TOT') ? `TOT${d.tot_n?` nº ${d.tot_n}`:''}` : `TQT${d.tqt_n?` nº ${d.tqt_n}`:''}`;
+    const params = [];
+    if (d.vmi_modo) params.push(`modo ${d.vmi_modo}`);
+    if (d.vmi_fio2) params.push(`FiO2 ${d.vmi_fio2}%`);
+    if (d.vmi_peep) params.push(`PEEP ${d.vmi_peep} cmH₂O`);
+    if (d.vmi_fr)   params.push(`FR ${d.vmi_fr} ipm`);
+    if (d.vmi_vt)   params.push(`VT ${d.vmi_vt} mL`);
+    return `Em VMI por ${via}${params.length?' (' + params.join(', ') + ')':''}.`;
+  }
+  return '';
+}
+
+function _listaInfusao(padrao, outros){
+  const lista = [];
+  if (padrao) {
+    Object.entries(padrao).forEach(([k,v])=>{
+      if (v.checked) lista.push(k + (v.val?` ${v.val} ml/h`:''));
+    });
+  }
+  if (outros && outros.length) outros.forEach(o=>{ if(o.nome) lista.push(o.nome + (o.val?` ${o.val} ml/h`:'')); });
+  return lista.join(', ');
+}
+
+function _capitalizar(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+// ── CAIXA ALTA AUTOMÁTICA EM CAMPOS DE TEXTO ─────────────────────────────────
+// Aplica em todos os inputs type=text e textareas do formulário de evolução e
+// do modal de admissão. Campos de data/número ficam fora.
+function _ativarCaixaAlta(){
+  const seletor = '#t-form input[type=text], #t-form textarea, #modal-adm input[type=text]';
+  document.querySelectorAll(seletor).forEach(el=>{
+    if (el.dataset.upperBound) return; // evita duplicar o handler
+    el.dataset.upperBound = '1';
+    el.addEventListener('input', function(){
+      const pos = this.selectionStart;
+      const up  = this.value.toUpperCase();
+      if (this.value !== up) {
+        this.value = up;
+        try { this.setSelectionRange(pos, pos); } catch(e){}
+      }
+    });
+  });
+}
+
 // ── TOAST ─────────────────────────────────────────────────────────────────────
 function toast(msg, err=false) {
   const t = document.getElementById('toast');
