@@ -810,7 +810,7 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
   h+=`<div class="pr"><span class="pl">SVD nº/Data</span><span class="pv">${d.svd_n||'–'} / ${fmtD(d.svd_d)}</span><span class="pl" style="margin-left:1rem;">SNE nº/Data</span><span class="pv">${d.sne_n||'–'} / ${fmtD(d.sne_d)}</span></div>`;
   h+=`<div class="pr"><span class="pl">TOT nº/Data</span><span class="pv">${d.tot_n||'–'} / ${fmtD(d.tot_d)}</span><span class="pl" style="margin-left:1rem;">TQT nº/Data</span><span class="pv">${d.tqt_n||'–'} / ${fmtD(d.tqt_d)}</span></div>`;
   h+=br('OUTROS DISP.',d.disp_o);
-  h+=st('Antimicrobianos em Uso');
+  h+=`<div class="pst" id="pdf-break-point">Antimicrobianos em Uso</div>`;
   if(d.atbs&&d.atbs.filter(a=>a.nome).length){ d.atbs.filter(a=>a.nome).forEach(a=>{ h+=`<div class="pr"><span class="pv">${a.nome}</span>${a.inicio?`<span class="pl" style="margin-left:1rem;">INÍCIO</span><span class="pv">${fmtD(a.inicio)}</span>`:''}</div>`; }); } else h+=br('','–');
   h+=st('Exames e Procedimentos Realizados Hoje');
 h+=`<div class="obs-box" style="min-height:45px;">${d.examesReal||'–'}</div>`;
@@ -877,22 +877,30 @@ async function gerarPDF(){
     // Altura total do conteúdo, convertida para mm considerando a largura do PDF
     const mmTotal = (canvas.height / canvas.width) * contentW;
 
-    // Quantas páginas seriam necessárias no tamanho natural?
+    // Quantas páginas o conteúdo ocuparia naturalmente?
     const paginasNaturais = Math.ceil(mmTotal / contentH);
 
-    // FORÇA 2 páginas: se o conteúdo precisa de mais que 2, escala pra caber
     const PAGINAS_ALVO = 2;
     let larguraUso = contentW;
-    let alturaPorPagina = contentH;
 
+    // Se passar de 2 páginas naturais, comprime proporcionalmente
     if (paginasNaturais > PAGINAS_ALVO) {
       const fator = (PAGINAS_ALVO * contentH) / mmTotal;
       larguraUso = contentW * fator;
-      alturaPorPagina = contentH;
     }
 
-    const mmNovaAltura = (canvas.height / canvas.width) * larguraUso;
-    const pxPorPagina = Math.ceil(canvas.height / Math.ceil(mmNovaAltura / alturaPorPagina));
+    // Altura de UMA página A4 convertida em pixels do canvas
+    const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
+
+    // Localiza o ponto de quebra preferencial (início da seção Antimicrobianos)
+    let breakPx = null;
+    const breakEl = area.querySelector('#pdf-break-point');
+    if (breakEl) {
+      const areaTop  = area.getBoundingClientRect().top;
+      const breakTop = breakEl.getBoundingClientRect().top;
+      // Posição em pixels do canvas (html2canvas usou scale:2)
+      breakPx = Math.round((breakTop - areaTop) * 2);
+    }
 
     const offsetX = margin + (contentW - larguraUso) / 2;
 
@@ -907,15 +915,34 @@ async function gerarPDF(){
       pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', offsetX, margin, larguraUso, mmH);
     }
 
-    let yStart = 0;
-    let pag = 0;
-    while (yStart < canvas.height) {
-      if (pag > 0) pdf.addPage();
-      const yEnd = Math.min(yStart + pxPorPagina, canvas.height);
-      addFatia(yStart, yEnd);
-      yStart = yEnd;
-      pag++;
-      if (pag >= PAGINAS_ALVO) break;
+    // ── DECISÃO DE QUEBRA ────────────────────────────────────────────────────
+    // Caso 1: conteúdo cabe numa página só → gera 1 página
+    // Caso 2: ponto de quebra (Antimicrobianos) existe e cabe dentro de uma
+    //         página → corta ali (página 1 termina antes de Antimicrobianos,
+    //         página 2 começa com Antimicrobianos)
+    // Caso 3: não tem ponto de quebra válido → usa paginação natural (recurso antigo)
+    // Se a página 2 passar do limite → o conteúdo foi pré-comprimido lá em cima,
+    //         então vai caber sem ultrapassar os 2 páginas-alvo.
+    if (canvas.height <= pxPorPagina) {
+      // Cabe em 1 página só
+      addFatia(0, canvas.height);
+    } else if (breakPx && breakPx > 0 && breakPx < canvas.height && breakPx <= pxPorPagina) {
+      // Corta no início de Antimicrobianos
+      addFatia(0, breakPx);
+      pdf.addPage();
+      // Segunda página: resto do conteúdo (máximo pxPorPagina)
+      const restoFim = Math.min(breakPx + pxPorPagina, canvas.height);
+      addFatia(breakPx, restoFim);
+    } else {
+      // Fallback: paginação natural por altura
+      let yStart = 0, pag = 0;
+      while (yStart < canvas.height && pag < PAGINAS_ALVO) {
+        if (pag > 0) pdf.addPage();
+        const yEnd = Math.min(yStart + pxPorPagina, canvas.height);
+        addFatia(yStart, yEnd);
+        yStart = yEnd;
+        pag++;
+      }
     }
 
     const d = coletarDados();
