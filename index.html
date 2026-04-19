@@ -574,7 +574,12 @@
     <!-- OBSERVAÇÕES -->
     <div class="secao">
       <div class="secao-t">Observações / Intercorrências / Informações Complementares</div>
-      <div class="secao-c"><textarea id="f-obs" style="min-height:130px;" placeholder="Registre observações e intercorrências do turno..."></textarea></div>
+      <div class="secao-c">
+        <div style="display:flex;justify-content:flex-end;">
+          <button class="btn-add" onclick="gerarTextoEvolucao()" title="Preenche o campo com um resumo baseado nos dados da evolução">📝 Gerar texto automático</button>
+        </div>
+        <textarea id="f-obs" style="min-height:130px;" placeholder="Registre observações e intercorrências do turno..."></textarea>
+      </div>
     </div>
 
     <div class="btn-row">
