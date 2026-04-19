@@ -640,6 +640,7 @@ async function abrirForm(n) {
     setChecks('f-pup',fonte.pup);      setChecks('f-pele',fonte.pele);  setF('f-les',fonte.les);
     setChecks('f-resp',fonte.resp);    setChecks('f-ausc',fonte.ausc);
     setRadio('vent',fonte.vent);       toggleVMI();
+    setF('f-cn-lmin', fonte.cnLmin||''); setF('f-mnr-lmin', fonte.mnrLmin||''); setF('f-mv-fio2', fonte.mvFio2||'');
     setF('vmi-modo',fonte.vmi_modo);   setF('vmi-fio2',fonte.vmi_fio2);  setF('vmi-peep',fonte.vmi_peep);
     setF('vmi-fr',fonte.vmi_fr);       setF('vmi-sens',fonte.vmi_sens);  setF('vmi-vt',fonte.vmi_vt);
     setF('f-spo2',fonte.spo2);         setF('f-spo2-av',fonte.spo2av);
@@ -678,6 +679,7 @@ examesSolic:gf('f-exames-solic'),
     neuro:gChecked('f-neuro'), glas:gf('f-glas'), rass:gf('f-rass'), pup:gChecked('f-pup'),
     pele:gChecked('f-pele'), les:gf('f-les'),
     resp:gChecked('f-resp'), ausc:gChecked('f-ausc'), vent:gRadio('vent'),
+    cnLmin:gf('f-cn-lmin'), mnrLmin:gf('f-mnr-lmin'), mvFio2:gf('f-mv-fio2'),
     vmi_modo:gf('vmi-modo'), vmi_fio2:gf('vmi-fio2'), vmi_peep:gf('vmi-peep'), vmi_fr:gf('vmi-fr'), vmi_sens:gf('vmi-sens'), vmi_vt:gf('vmi-vt'),
     spo2:isVMI?gf('f-spo2'):'', spo2av:isVMI?'':gf('f-spo2-av'),
     car:gChecked('f-car'), fcNorm:gf('f-fc-norm'), fcTaqui:gf('f-fc-taqui'), fcBradi:gf('f-fc-bradi'),
@@ -759,10 +761,12 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
   h+=br('TÓRAX',d.resp.join(', ')||'–');
   h+=br('AUSCULTA',d.ausc.join(', ')||'–');
   const spo2v=d.spo2||d.spo2av;
-  const ventTxt = d.vent
-    ? d.vent + (d.vent.includes('TOT')&&d.tot_n?' (Nº '+d.tot_n+')':'')
-             + (d.vent.includes('TQT')&&d.tqt_n?' (Nº '+d.tqt_n+')':'')
-    : '–';
+  let ventTxt = d.vent || '–';
+  if (d.vent === 'Cateter nasal' && d.cnLmin)      ventTxt = `Cateter nasal ${d.cnLmin} L/min`;
+  else if (d.vent === 'Máscara NR' && d.mnrLmin)   ventTxt = `Máscara NR ${d.mnrLmin} L/min`;
+  else if (d.vent === 'Macronebulização MV')       ventTxt = `MV (macronebulização)${d.mvFio2?' '+d.mvFio2+'%':''}`;
+  else if (d.vent && d.vent.includes('TOT') && d.tot_n) ventTxt = `${d.vent} (Nº ${d.tot_n})`;
+  else if (d.vent && d.vent.includes('TQT') && d.tqt_n) ventTxt = `${d.vent} (Nº ${d.tqt_n})`;
   h+=`<div class="pr"><span class="pl">VENTILAÇÃO</span><span class="pv">${ventTxt}</span><span class="pl" style="margin-left:1rem;">SpO2</span><span class="pv">${spo2v?spo2v+'%':'–'}</span></div>`;
   if(d.vent&&(d.vent.includes('TOT')||d.vent.includes('TQT'))){
     h+=`<div class="pr"><span class="pl">MODO</span><span class="pv">${d.vmi_modo||'–'}</span><span class="pl" style="margin-left:.6rem;">FiO2</span><span class="pv">${d.vmi_fio2?d.vmi_fio2+'%':'–'}</span><span class="pl" style="margin-left:.6rem;">PEEP</span><span class="pv">${d.vmi_peep?d.vmi_peep+' cmH₂O':'–'}</span><span class="pl" style="margin-left:.6rem;">FR</span><span class="pv">${d.vmi_fr?d.vmi_fr+' ipm':'–'}</span><span class="pl" style="margin-left:.6rem;">SENS</span><span class="pv">${d.vmi_sens||'–'}</span><span class="pl" style="margin-left:.6rem;">VT</span><span class="pv">${d.vmi_vt?d.vmi_vt+' mL':'–'}</span></div>`;
@@ -816,9 +820,28 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN
 async function gerarPDF(){
   const btn=document.getElementById('btn-pdf'), status=document.getElementById('pdf-status');
   const area=document.getElementById('preview-area');
+  const wrap=document.getElementById('preview-wrap');
   if(!area||!area.innerHTML.trim()){alert('Gere a impressão primeiro.');return;}
   btn.disabled=true; btn.textContent='⏳ Gerando...';
   status.textContent='Capturando...'; status.style.color='var(--muted)';
+
+  // Salva estilos originais do preview para restaurar depois
+  const origWidth    = area.style.width;
+  const origMaxWidth = area.style.maxWidth;
+  const origWrapWidth    = wrap.style.width;
+  const origWrapMaxWidth = wrap.style.maxWidth;
+  const origBodyOverflow = document.body.style.overflow;
+
+  // FORÇA largura fixa de "desktop" durante a captura para o PDF ficar
+  // igual independentemente do dispositivo (celular x PC).
+  // 780px é a largura-padrão do container no CSS (max-width:780px).
+  const LARGURA_FIXA = 780;
+  area.style.width = LARGURA_FIXA + 'px';
+  area.style.maxWidth = 'none';
+  wrap.style.width = LARGURA_FIXA + 'px';
+  wrap.style.maxWidth = 'none';
+  document.body.style.overflow = 'hidden'; // evita scroll horizontal durante render
+
   try{
     const {jsPDF} = window.jspdf;
     const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
@@ -828,8 +851,15 @@ async function gerarPDF(){
     const contentW = pageW - margin*2;   // 194 mm
     const contentH = pageH - margin*2;   // 281 mm
 
-    // Captura em alta resolução
-    const canvas = await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
+    // Captura em alta resolução com largura forçada
+    const canvas = await html2canvas(area, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: LARGURA_FIXA,
+      windowWidth: LARGURA_FIXA
+    });
 
     // Altura total do conteúdo, convertida para mm considerando a largura do PDF
     const mmTotal = (canvas.height / canvas.width) * contentW;
@@ -843,17 +873,15 @@ async function gerarPDF(){
     let alturaPorPagina = contentH;
 
     if (paginasNaturais > PAGINAS_ALVO) {
-      // Escalar proporcionalmente para caber em 2 páginas
       const fator = (PAGINAS_ALVO * contentH) / mmTotal;
       larguraUso = contentW * fator;
-      alturaPorPagina = contentH; // mantém página cheia
+      alturaPorPagina = contentH;
     }
 
-    // Recalcula a altura em pixels do canvas correspondente a uma página
     const mmNovaAltura = (canvas.height / canvas.width) * larguraUso;
     const pxPorPagina = Math.ceil(canvas.height / Math.ceil(mmNovaAltura / alturaPorPagina));
 
-    const offsetX = margin + (contentW - larguraUso) / 2; // centraliza horizontalmente
+    const offsetX = margin + (contentW - larguraUso) / 2;
 
     function addFatia(yStart, yEnd){
       const h = yEnd - yStart;
@@ -866,7 +894,6 @@ async function gerarPDF(){
       pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', offsetX, margin, larguraUso, mmH);
     }
 
-    // Gera as páginas
     let yStart = 0;
     let pag = 0;
     while (yStart < canvas.height) {
@@ -875,36 +902,27 @@ async function gerarPDF(){
       addFatia(yStart, yEnd);
       yStart = yEnd;
       pag++;
-      if (pag >= PAGINAS_ALVO) break; // não passa de 2 páginas
+      if (pag >= PAGINAS_ALVO) break;
     }
 
-    // Converte o PDF finalizado para base64 e envia ao Apps Script → Google Drive
     const d = coletarDados();
-
-    // Data em formato brasileiro DDMMAAAA (ex: 18042026)
     const [ano, mes, dia] = d.data.split('-');
     const dataBR = dia + mes + ano;
-
-    // Nome do paciente e nome da subpasta no Drive
     const nomePaciente = (d.pac || '').trim();
     const pastaNome = nomePaciente
       ? `Leito ${pad(d.leito)} - ${nomePaciente}`
       : `Leito ${pad(d.leito)} - Sem identificacao`;
-
     const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${dataBR}_${(nomePaciente||'Pac').split(' ')[0]}`;
-
     const dataUri = pdf.output('datauristring');
     const base64  = dataUri.split(',')[1];
 
     status.textContent = 'Enviando para o Drive...'; status.style.color = 'var(--muted)';
-
     await fetch(APPS_SCRIPT_URL, {
       method:  'POST',
       mode:    'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: pastaNome })
     });
-
     status.textContent = `✓ PDF salvo em "UTI – Evoluções de Enfermagem / ${pastaNome}"!`;
     status.style.color = 'var(--verde)';
     toast('✓ PDF salvo no Google Drive');
@@ -913,6 +931,13 @@ async function gerarPDF(){
     console.error('gerarPDF:', err);
     status.textContent = 'Erro ao gerar/enviar. Tente novamente ou use Ctrl+P.';
     status.style.color = 'var(--vermelho)';
+  } finally {
+    // Restaura os estilos originais do preview
+    area.style.width = origWidth;
+    area.style.maxWidth = origMaxWidth;
+    wrap.style.width = origWrapWidth;
+    wrap.style.maxWidth = origWrapMaxWidth;
+    document.body.style.overflow = origBodyOverflow;
   }
 
   btn.disabled = false; btn.textContent = '☁ Salvar PDF no Drive';
