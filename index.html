@@ -188,19 +188,19 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 .btn-sm{padding:6px 12px;font-size:.75rem;}
 
 /* ── PREVIEW / IMPRESSÃO ── */
-#preview-area{background:white;font-size:.76rem;line-height:1.5;font-family:'IBM Plex Sans',sans-serif;}
-.ph{text-align:center;padding:.8rem;border-bottom:2px solid #000;}
-.ph h2{font-size:.92rem;font-weight:800;text-transform:uppercase;}
-.ph h3{font-size:.78rem;font-weight:700;margin-top:2px;}
-.ph p{font-size:.72rem;}
-.pb{padding:.7rem .8rem;}
-.pst{background:#0a3d6b;color:white;font-size:.67rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;margin:7px -.8rem 5px;padding-left:.8rem;}
-.pr{display:flex;flex-wrap:wrap;gap:3px 14px;border-bottom:1px solid #ddd;padding:3px 0;font-size:.74rem;}
+#preview-area{background:white;font-size:.68rem;line-height:1.35;font-family:'IBM Plex Sans',sans-serif;}
+.ph{text-align:center;padding:.45rem;border-bottom:2px solid #000;}
+.ph h2{font-size:.82rem;font-weight:800;text-transform:uppercase;}
+.ph h3{font-size:.7rem;font-weight:700;margin-top:1px;}
+.ph p{font-size:.65rem;}
+.pb{padding:.4rem .6rem;}
+.pst{background:#0a3d6b;color:white;font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;margin:4px -.6rem 3px;padding-left:.6rem;}
+.pr{display:flex;flex-wrap:wrap;gap:2px 12px;border-bottom:1px solid #ddd;padding:2px 0;font-size:.66rem;}
 .pr:last-child{border-bottom:none;}
-.pl{color:#555;font-weight:700;font-size:.68rem;text-transform:uppercase;}
+.pl{color:#555;font-weight:700;font-size:.6rem;text-transform:uppercase;}
 .pv{font-weight:500;}
-.obs-box{border:1px solid #000;padding:7px;min-height:55px;font-size:.76rem;white-space:pre-wrap;word-break:break-word;}
-.pfoot{border-top:2px solid #000;padding:.5rem .8rem;display:flex;justify-content:space-between;font-size:.69rem;color:#555;}
+.obs-box{border:1px solid #000;padding:5px;min-height:38px;font-size:.66rem;white-space:pre-wrap;word-break:break-word;}
+.pfoot{border-top:2px solid #000;padding:.35rem .6rem;display:flex;justify-content:space-between;font-size:.62rem;color:#555;}
 
 /* ── MODAL ── */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:1rem;}
@@ -473,8 +473,14 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
           <label class="ri"><input type="radio" name="vent" value="Cateter nasal" onchange="toggleVMI()"> Cateter nasal</label>
           <label class="ri"><input type="radio" name="vent" value="Máscara NR" onchange="toggleVMI()"> Máscara NR</label>
           <label class="ri"><input type="radio" name="vent" value="VNI – BIPAP" onchange="toggleVMI()"> VNI – BIPAP</label>
-          <label class="ri"><input type="radio" name="vent" value="TOT – VMI" onchange="toggleVMI()"> TOT – VMI</label>
-          <label class="ri"><input type="radio" name="vent" value="TQT – VMI" onchange="toggleVMI()"> TQT – VMI</label>
+          <label class="ri">
+            <input type="radio" name="vent" value="TOT – VMI" onchange="toggleVMI()"> TOT – VMI
+            <input type="text" id="f-tot-n" placeholder="Nº" style="width:50px;margin-left:4px;" oninput="document.getElementById('f-tot-n2').value=this.value">
+          </label>
+          <label class="ri">
+            <input type="radio" name="vent" value="TQT – VMI" onchange="toggleVMI()"> TQT – VMI
+            <input type="text" id="f-tqt-n" placeholder="Nº" style="width:50px;margin-left:4px;" oninput="document.getElementById('f-tqt-n2').value=this.value">
+          </label>
         </div>
         <div class="vmi-box" id="vmi-box">
           <p class="sub-t" style="margin:0;">Parâmetros do Ventilador</p>
@@ -615,6 +621,9 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Vasopressina"><label>Vasopressina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Dopamina"><label>Dopamina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Dobutamina"><label>Dobutamina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
+          <div class="dva-r"><input type="checkbox" class="dc-cb" value="Tridil"><label>Tridil</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
+          <div class="dva-r"><input type="checkbox" class="dc-cb" value="Nipride"><label>Nipride</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
+          <div class="dva-r"><input type="checkbox" class="dc-cb" value="Amiodarona"><label>Amiodarona</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
         </div>
         <div id="dva-outros"></div>
         <button class="btn-add" onclick="addOutraInfusao('dva-outros')">+ Outra DVA</button>
@@ -653,32 +662,63 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
         <p class="sub-t">Acesso Venoso Periférico (AVP)</p>
         <div id="avp-lista"></div>
         <button class="btn-add" onclick="addAVP()">+ Adicionar AVP</button>
-        <p class="sub-t" style="margin-top:4px;">Acesso Venoso Central (AVC)</p>
-        <div class="dyn-row">
-          <input type="text" id="f-avc-l" placeholder="Local (ex: subclávia D)">
-          <input type="date" id="f-avc-d" style="max-width:140px;flex:none;">
+
+        <div class="disp-wrap" id="disp-avc" data-tipo="AVC">
+          <p class="sub-t" style="margin-top:4px;">Acesso Venoso Central (AVC)</p>
+          <div class="dyn-row">
+            <input type="text" id="f-avc-l" placeholder="Local (ex: subclávia D)">
+            <input type="date" id="f-avc-d" style="max-width:140px;flex:none;">
+            <button class="btn-rem" onclick="retirarDispositivo('AVC','f-avc-l','f-avc-d')">Retirar</button>
+          </div>
         </div>
-        <p class="sub-t">Cateter de Diálise (CDL)</p>
-        <div class="dyn-row">
-          <input type="text" id="f-dial-l" placeholder="Local (ex: jugular D)">
-          <input type="date" id="f-dial-d" style="max-width:140px;flex:none;">
+
+        <div class="disp-wrap" id="disp-cdl" data-tipo="CDL">
+          <p class="sub-t">Cateter de Diálise (CDL)</p>
+          <div class="dyn-row">
+            <input type="text" id="f-dial-l" placeholder="Local (ex: jugular D)">
+            <input type="date" id="f-dial-d" style="max-width:140px;flex:none;">
+            <button class="btn-rem" onclick="retirarDispositivo('CDL','f-dial-l','f-dial-d')">Retirar</button>
+          </div>
         </div>
+
         <div class="dc">
-          <div>
+          <div class="disp-wrap" id="disp-svd" data-tipo="SVD">
             <p class="sub-t">SVD</p>
             <div class="dyn-row" style="margin-top:4px;">
               <input type="text" id="f-svd-n" placeholder="Nº" style="max-width:55px;flex:none;">
               <input type="date" id="f-svd-d">
+              <button class="btn-rem" onclick="retirarDispositivo('SVD','f-svd-n','f-svd-d')">Retirar</button>
             </div>
           </div>
-          <div>
+          <div class="disp-wrap" id="disp-sne" data-tipo="SNE">
             <p class="sub-t">SNE</p>
             <div class="dyn-row" style="margin-top:4px;">
               <input type="text" id="f-sne-n" placeholder="Nº" style="max-width:55px;flex:none;">
               <input type="date" id="f-sne-d">
+              <button class="btn-rem" onclick="retirarDispositivo('SNE','f-sne-n','f-sne-d')">Retirar</button>
             </div>
           </div>
         </div>
+
+        <div class="dc">
+          <div class="disp-wrap" id="disp-tot" data-tipo="TOT">
+            <p class="sub-t">TOT – Tubo Orotraqueal</p>
+            <div class="dyn-row" style="margin-top:4px;">
+              <input type="text" id="f-tot-n2" placeholder="Nº" style="max-width:55px;flex:none;">
+              <input type="date" id="f-tot-d">
+              <button class="btn-rem" onclick="retirarDispositivo('TOT','f-tot-n2','f-tot-d')">Retirar</button>
+            </div>
+          </div>
+          <div class="disp-wrap" id="disp-tqt" data-tipo="TQT">
+            <p class="sub-t">TQT – Traqueostomia</p>
+            <div class="dyn-row" style="margin-top:4px;">
+              <input type="text" id="f-tqt-n2" placeholder="Nº" style="max-width:55px;flex:none;">
+              <input type="date" id="f-tqt-d">
+              <button class="btn-rem" onclick="retirarDispositivo('TQT','f-tqt-n2','f-tqt-d')">Retirar</button>
+            </div>
+          </div>
+        </div>
+
         <p class="sub-t">Outros dispositivos</p>
         <input type="text" id="f-disp-o" placeholder="Dreno de tórax, gastrostomia, etc." style="width:100%;">
       </div>
@@ -767,6 +807,7 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
     </div>
     <div class="btn-row btn-row-prev">
   <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
+  <button class="btn btn-sec btn-sm" onclick="irLeitos()">🛏 Leitos</button>
   <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">☁ Salvar PDF no Drive</button>
   <button class="btn btn-sm" style="background:#d63031; color:white;" onclick="confirmarAlta()">🏥 Alta</button>
   <button class="btn btn-sm" style="background:#fdcb6e; color:black;" onclick="prepararTransferencia()">🔄 Transf.</button>
@@ -1318,6 +1359,52 @@ function loadDVA(cid,data){
 function getBraden(){ return Array.from(document.querySelectorAll('.bs')).map(s=>s.value); }
 function getMorse(){ return['m1','m2','m3','m4','m5','m6'].map(n=>{const el=document.querySelector('input[name="'+n+'"]:checked');return el?el.value:'';}); }
 function dvaStr(data){ if(!data) return '–'; const res=Object.entries(data).filter(([k,v])=>v.checked).map(([k,v])=>k+(v.val?' '+v.val+'ml/h':'')); return res.length?res.join(' | '):'–'; }
+
+// ── RETIRADA DE DISPOSITIVO ────────────────────────────────────────────────────
+// Registra a data de retirada no banco (uti_disp_retirados) e limpa os campos.
+// Esse log servirá depois para calcular taxas de utilização diária.
+async function retirarDispositivo(tipo, idLocal, idData){
+  if(!leitoAtual){ toast('Abra uma evolução primeiro',true); return; }
+  const locOuNum = gf(idLocal);
+  const dataInst = gf(idData);
+  if(!locOuNum && !dataInst){
+    toast('Sem '+tipo+' registrado pra retirar',true);
+    return;
+  }
+  if(!confirm(`Confirma a retirada do ${tipo} do Leito ${pad(leitoAtual)}?`)) return;
+
+  const hojeStr = hoje();
+  const pac = gf('f-pac') || '';
+
+  // Salva o registro de retirada (lista por leito+data)
+  try {
+    const key = 'uti_disp_log';
+    const log = (await dbGet(key)) || [];
+    log.push({
+      leito: leitoAtual,
+      paciente: pac,
+      tipo: tipo,
+      local_ou_numero: locOuNum,
+      data_instalacao: dataInst,
+      data_retirada: hojeStr,
+      turno: turno,
+      autor: usuarioEmail,
+      registradoEm: new Date().toISOString()
+    });
+    await dbSet(key, log);
+  } catch(e){ console.warn('Log retirada:', e); }
+
+  // Limpa os campos do dispositivo no formulário atual
+  setF(idLocal, '');
+  setF(idData, '');
+  // Espelha nos campos TOT/TQT da ventilação se aplicável
+  if(tipo==='TOT'){ setF('f-tot-n',''); }
+  if(tipo==='TQT'){ setF('f-tqt-n',''); }
+
+  toast('✓ '+tipo+' retirado em '+hojeStr.split('-').reverse().join('/'));
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 function addOutraInfusao(cid,nome='',val=''){
   const lista=document.getElementById(cid);
   const row=document.createElement('div');
@@ -1395,6 +1482,8 @@ async function abrirForm(n) {
     setF('f-dial-l',fonte.dial_l); setF('f-dial-d',fonte.dial_d);
     setF('f-svd-n',fonte.svd_n); setF('f-svd-d',fonte.svd_d);
     setF('f-sne-n',fonte.sne_n); setF('f-sne-d',fonte.sne_d);
+    setF('f-tot-n',fonte.tot_n||''); setF('f-tot-n2',fonte.tot_n||''); setF('f-tot-d',fonte.tot_d||'');
+    setF('f-tqt-n',fonte.tqt_n||''); setF('f-tqt-n2',fonte.tqt_n||''); setF('f-tqt-d',fonte.tqt_d||'');
     setF('f-disp-o',fonte.disp_o);
     if(fonte.avps&&fonte.avps.length) fonte.avps.forEach(a=>addAVP(a.local,a.data)); else addAVP();
     if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
@@ -1461,7 +1550,10 @@ examesSolic:gf('f-exames-solic'),
     prev:gChecked('f-prev'),
     avps:getAVPs(), avc_l:gf('f-avc-l'), avc_d:gf('f-avc-d'),
     dial_l:gf('f-dial-l'), dial_d:gf('f-dial-d'),
-    svd_n:gf('f-svd-n'), svd_d:gf('f-svd-d'), sne_n:gf('f-sne-n'), sne_d:gf('f-sne-d'), disp_o:gf('f-disp-o'),
+    svd_n:gf('f-svd-n'), svd_d:gf('f-svd-d'), sne_n:gf('f-sne-n'), sne_d:gf('f-sne-d'),
+    tot_n:gf('f-tot-n')||gf('f-tot-n2'), tot_d:gf('f-tot-d'),
+    tqt_n:gf('f-tqt-n')||gf('f-tqt-n2'), tqt_d:gf('f-tqt-d'),
+    disp_o:gf('f-disp-o'),
     atbs:getATBs(),
     braden:getBraden(), bradScore:document.getElementById('b-sc').textContent, bradRisco:document.getElementById('b-r').textContent,
     morse:getMorse(), morseScore:document.getElementById('m-sc').textContent, morseRisco:document.getElementById('m-r').textContent,
@@ -1528,7 +1620,11 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
   h+=br('TÓRAX',d.resp.join(', ')||'–');
   h+=br('AUSCULTA',d.ausc.join(', ')||'–');
   const spo2v=d.spo2||d.spo2av;
-  h+=`<div class="pr"><span class="pl">VENTILAÇÃO</span><span class="pv">${d.vent||'–'}</span><span class="pl" style="margin-left:1rem;">SpO2</span><span class="pv">${spo2v?spo2v+'%':'–'}</span></div>`;
+  const ventTxt = d.vent
+    ? d.vent + (d.vent.includes('TOT')&&d.tot_n?' (Nº '+d.tot_n+')':'')
+             + (d.vent.includes('TQT')&&d.tqt_n?' (Nº '+d.tqt_n+')':'')
+    : '–';
+  h+=`<div class="pr"><span class="pl">VENTILAÇÃO</span><span class="pv">${ventTxt}</span><span class="pl" style="margin-left:1rem;">SpO2</span><span class="pv">${spo2v?spo2v+'%':'–'}</span></div>`;
   if(d.vent&&(d.vent.includes('TOT')||d.vent.includes('TQT'))){
     h+=`<div class="pr"><span class="pl">MODO</span><span class="pv">${d.vmi_modo||'–'}</span><span class="pl" style="margin-left:.6rem;">FiO2</span><span class="pv">${d.vmi_fio2?d.vmi_fio2+'%':'–'}</span><span class="pl" style="margin-left:.6rem;">PEEP</span><span class="pv">${d.vmi_peep?d.vmi_peep+' cmH₂O':'–'}</span><span class="pl" style="margin-left:.6rem;">FR</span><span class="pv">${d.vmi_fr?d.vmi_fr+' ipm':'–'}</span><span class="pl" style="margin-left:.6rem;">SENS</span><span class="pv">${d.vmi_sens||'–'}</span><span class="pl" style="margin-left:.6rem;">VT</span><span class="pv">${d.vmi_vt?d.vmi_vt+' mL':'–'}</span></div>`;
   }
@@ -1556,6 +1652,7 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
   h+=br('AVP',avpStr);
   h+=`<div class="pr"><span class="pl">AVC</span><span class="pv">${d.avc_l||'–'}${d.avc_d?' – '+fmtD(d.avc_d):''}</span><span class="pl" style="margin-left:1rem;">CAT. DIÁLISE</span><span class="pv">${d.dial_l||'–'}${d.dial_d?' – '+fmtD(d.dial_d):''}</span></div>`;
   h+=`<div class="pr"><span class="pl">SVD nº/Data</span><span class="pv">${d.svd_n||'–'} / ${fmtD(d.svd_d)}</span><span class="pl" style="margin-left:1rem;">SNE nº/Data</span><span class="pv">${d.sne_n||'–'} / ${fmtD(d.sne_d)}</span></div>`;
+  h+=`<div class="pr"><span class="pl">TOT nº/Data</span><span class="pv">${d.tot_n||'–'} / ${fmtD(d.tot_d)}</span><span class="pl" style="margin-left:1rem;">TQT nº/Data</span><span class="pv">${d.tqt_n||'–'} / ${fmtD(d.tqt_d)}</span></div>`;
   h+=br('OUTROS DISP.',d.disp_o);
   h+=st('Antimicrobianos em Uso');
   if(d.atbs&&d.atbs.filter(a=>a.nome).length){ d.atbs.filter(a=>a.nome).forEach(a=>{ h+=`<div class="pr"><span class="pv">${a.nome}</span>${a.inicio?`<span class="pl" style="margin-left:1rem;">INÍCIO</span><span class="pv">${fmtD(a.inicio)}</span>`:''}</div>`; }); } else h+=br('','–');
@@ -1588,32 +1685,36 @@ async function gerarPDF(){
     const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
     const pageW = pdf.internal.pageSize.getWidth();   // 210 mm
     const pageH = pdf.internal.pageSize.getHeight();  // 297 mm
-    const margin = 10;
-    const contentW = pageW - margin*2;   // 190 mm
-    const contentH = pageH - margin*2;   // 277 mm
+    const margin = 8;
+    const contentW = pageW - margin*2;   // 194 mm
+    const contentH = pageH - margin*2;   // 281 mm
 
-    // Captura UMA vez em alta resolução
+    // Captura em alta resolução
     const canvas = await html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false});
-    const ratio = canvas.width / area.scrollWidth;
 
-    // Altura de uma página em pixels do canvas
-    const pageHeightPx = Math.floor((contentH / contentW) * canvas.width);
+    // Altura total do conteúdo, convertida para mm considerando a largura do PDF
+    const mmTotal = (canvas.height / canvas.width) * contentW;
 
-    // Posições (em px do canvas) dos títulos de seção — usadas como quebras preferenciais
-    const areaTop = area.getBoundingClientRect().top;
-    const sectionTops = Array.from(area.querySelectorAll('.pst')).map(el => {
-      return Math.round((el.getBoundingClientRect().top - areaTop) * ratio);
-    }).filter(y => y > 0).sort((a,b) => a-b);
+    // Quantas páginas seriam necessárias no tamanho natural?
+    const paginasNaturais = Math.ceil(mmTotal / contentH);
 
-    // Encontra o melhor ponto de corte: prefere um título de seção dentro dos últimos 18% da página
-    function acharQuebra(yStart, yIdeal) {
-      const minAceitavel = yStart + (yIdeal - yStart) * 0.82; // aceita página com pelo menos 82% de altura
-      let melhor = yIdeal;
-      for (const y of sectionTops) {
-        if (y > yStart && y <= yIdeal && y >= minAceitavel) melhor = y;
-      }
-      return melhor;
+    // FORÇA 2 páginas: se o conteúdo precisa de mais que 2, escala pra caber
+    const PAGINAS_ALVO = 2;
+    let larguraUso = contentW;
+    let alturaPorPagina = contentH;
+
+    if (paginasNaturais > PAGINAS_ALVO) {
+      // Escalar proporcionalmente para caber em 2 páginas
+      const fator = (PAGINAS_ALVO * contentH) / mmTotal;
+      larguraUso = contentW * fator;
+      alturaPorPagina = contentH; // mantém página cheia
     }
+
+    // Recalcula a altura em pixels do canvas correspondente a uma página
+    const mmNovaAltura = (canvas.height / canvas.width) * larguraUso;
+    const pxPorPagina = Math.ceil(canvas.height / Math.ceil(mmNovaAltura / alturaPorPagina));
+
+    const offsetX = margin + (contentW - larguraUso) / 2; // centraliza horizontalmente
 
     function addFatia(yStart, yEnd){
       const h = yEnd - yStart;
@@ -1622,26 +1723,20 @@ async function gerarPDF(){
       const ctx = sc.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0,0,sc.width,h);
       ctx.drawImage(canvas, 0,yStart, canvas.width,h, 0,0, canvas.width,h);
-      const mmH = (h / canvas.width) * contentW;
-      pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', margin, margin, contentW, mmH);
+      const mmH = (h / canvas.width) * larguraUso;
+      pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', offsetX, margin, larguraUso, mmH);
     }
 
-    // Paginação automática
+    // Gera as páginas
     let yStart = 0;
     let pag = 0;
     while (yStart < canvas.height) {
       if (pag > 0) pdf.addPage();
-      const restante = canvas.height - yStart;
-      let yEnd;
-      if (restante <= pageHeightPx) {
-        yEnd = canvas.height; // última página
-      } else {
-        const yIdeal = yStart + pageHeightPx;
-        yEnd = acharQuebra(yStart, yIdeal);
-      }
+      const yEnd = Math.min(yStart + pxPorPagina, canvas.height);
       addFatia(yStart, yEnd);
       yStart = yEnd;
       pag++;
+      if (pag >= PAGINAS_ALVO) break; // não passa de 2 páginas
     }
 
     // Converte o PDF finalizado para base64 e envia ao Apps Script → Google Drive
