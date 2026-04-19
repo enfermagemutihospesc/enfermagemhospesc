@@ -246,8 +246,21 @@
         <p class="sub-t">Ventilação</p>
         <div class="rg">
           <label class="ri"><input type="radio" name="vent" value="Ar ambiente" onchange="toggleVMI()"> Ar ambiente</label>
-          <label class="ri"><input type="radio" name="vent" value="Cateter nasal" onchange="toggleVMI()"> Cateter nasal</label>
-          <label class="ri"><input type="radio" name="vent" value="Máscara NR" onchange="toggleVMI()"> Máscara NR</label>
+          <label class="ri">
+            <input type="radio" name="vent" value="Cateter nasal" onchange="toggleVMI()"> Cateter nasal
+            <input type="number" id="f-cn-lmin" placeholder="L/min" min="0" max="15" step="0.5" style="width:65px;margin-left:4px;">
+            <span style="font-size:.68rem;color:var(--muted);">L/min</span>
+          </label>
+          <label class="ri">
+            <input type="radio" name="vent" value="Máscara NR" onchange="toggleVMI()"> Máscara NR
+            <input type="number" id="f-mnr-lmin" placeholder="L/min" min="0" max="15" step="0.5" style="width:65px;margin-left:4px;">
+            <span style="font-size:.68rem;color:var(--muted);">L/min</span>
+          </label>
+          <label class="ri">
+            <input type="radio" name="vent" value="Macronebulização MV" onchange="toggleVMI()"> MV (macronebulização)
+            <input type="number" id="f-mv-fio2" placeholder="%" min="21" max="100" style="width:55px;margin-left:4px;">
+            <span style="font-size:.68rem;color:var(--muted);">%</span>
+          </label>
           <label class="ri"><input type="radio" name="vent" value="VNI – BIPAP" onchange="toggleVMI()"> VNI – BIPAP</label>
           <label class="ri">
             <input type="radio" name="vent" value="TOT – VMI" onchange="toggleVMI()"> TOT – VMI
