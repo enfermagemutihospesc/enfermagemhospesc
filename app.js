@@ -528,9 +528,11 @@ function _num(v, casas=0){
   return Number(v).toFixed(casas);
 }
 
-// Renderiza um card compacto com valor + legenda
-function _cardInd(label, valor, sub='', cls=''){
+// Renderiza um card compacto com valor + legenda e botão de ficha
+function _cardInd(label, valor, sub='', cls='', fichaId=''){
+  const btn = fichaId ? `<button class="ind-info-btn" onclick="abrirFichaIndicador('${fichaId}')" title="Sobre este indicador">ℹ️</button>` : '';
   return `<div class="ind-card ${cls}">
+    ${btn}
     <div class="ind-card-l">${label}</div>
     <div class="ind-card-v">${valor}</div>
     ${sub?`<div class="ind-card-s">${sub}</div>`:''}
@@ -538,11 +540,12 @@ function _cardInd(label, valor, sub='', cls=''){
 }
 
 // Renderiza um ranking horizontal tipo barra
-function _rankingBarras(titulo, itens, max=null){
-  if (!itens.length) return `<div class="ind-grupo"><div class="ind-grupo-t">${titulo}</div><div class="ind-vazio">Sem dados no período.</div></div>`;
+function _rankingBarras(titulo, itens, max=null, fichaId=''){
+  const btn = fichaId ? `<button class="ind-info-btn ind-grupo-info" onclick="abrirFichaIndicador('${fichaId}')" title="Sobre este indicador">ℹ️</button>` : '';
+  if (!itens.length) return `<div class="ind-grupo"><div class="ind-grupo-t">${titulo}</div>${btn}<div class="ind-vazio">Sem dados no período.</div></div>`;
   const top = max ? itens.slice(0, max) : itens;
   const maior = Math.max(...top.map(i=>i.valor));
-  let h = `<div class="ind-grupo"><div class="ind-grupo-t">${titulo}</div><div class="ind-bar-wrap">`;
+  let h = `<div class="ind-grupo"><div class="ind-grupo-t">${titulo}</div>${btn}<div class="ind-bar-wrap">`;
   top.forEach(i => {
     const pct = maior>0 ? (i.valor*100/maior) : 0;
     h += `<div class="ind-bar">
@@ -553,6 +556,695 @@ function _rankingBarras(titulo, itens, max=null){
   });
   h += `</div></div>`;
   return h;
+}
+
+// ── CATÁLOGO DE FICHAS DOS INDICADORES ───────────────────────────────────────
+// Cada ficha tem: nome, finalidade, formula, codigo (trecho). Os códigos abaixo
+// são snippets representativos do cálculo real em cada renderer.
+const FICHAS_INDICADORES = {
+  // Ocupação e fluxo
+  ocup_admissoes: {
+    nome: 'Admissões no período',
+    finalidade: 'Contagem de novas admissões na UTI no intervalo selecionado. Base para calcular giro de leito e taxa de ocupação.',
+    formula: 'Número de registros em uti_admissao_log com admUTI dentro do período.',
+    codigo: `const admPer = admissoes.filter(a =>
+  _dentroPeriodo(a.admUTI, periodo)
+);
+return admPer.length;`
+  },
+  ocup_altas: {
+    nome: 'Altas no período',
+    finalidade: 'Contagem de pacientes que saíram da UTI no intervalo (por qualquer motivo: enfermaria, transferência ou óbito).',
+    formula: 'Número de registros em uti_alta_log com dataAlta dentro do período.',
+    codigo: `const altasPer = altas.filter(a =>
+  _dentroPeriodo(a.dataAlta, periodo)
+);
+return altasPer.length;`
+  },
+  ocup_taxa: {
+    nome: 'Taxa de ocupação',
+    finalidade: 'Percentual do tempo em que os leitos da UTI estiveram ocupados. Indicador-chave de pressão assistencial e dimensionamento.',
+    formula: 'Taxa = pacientes-dia / (leitos × dias do período) × 100. Pacientes-dia é a soma dos dias de permanência de cada admissão cuja internação se sobrepõe ao período.',
+    codigo: `let pacientesDia = 0;
+admissoes.forEach(adm => {
+  const inicio = _dataLocal(adm.admUTI);
+  const alta = altas.find(a =>
+    a.leito === adm.leito &&
+    a.paciente === adm.paciente &&
+    _dataLocal(a.dataAlta) >= inicio
+  );
+  const fimInt = alta ? _dataLocal(alta.dataAlta) : new Date();
+  const s = inicio > periodo.inicio ? inicio : periodo.inicio;
+  const e = fimInt < periodo.fim ? fimInt : periodo.fim;
+  if (e >= s) pacientesDia += Math.floor((e-s)/86400000) + 1;
+});
+const taxa = (pacientesDia * 100) / (TOTAL * diasPeriodo);`
+  },
+  ocup_pacientesdia: {
+    nome: 'Pacientes-dia',
+    finalidade: 'Denominador-padrão para taxas de infecção, uso de dispositivos e carga de trabalho. Cada dia em que um leito está ocupado por um paciente conta como 1 paciente-dia.',
+    formula: 'Soma dos dias de sobreposição entre cada internação e o período selecionado.',
+    codigo: `// Mesma lógica da taxa de ocupação, mas retorna só o numerador
+let pacientesDia = 0;
+admissoes.forEach(adm => {
+  const inicio = _dataLocal(adm.admUTI);
+  const alta = altas.find(a =>
+    a.leito === adm.leito && a.paciente === adm.paciente
+    && _dataLocal(a.dataAlta) >= inicio);
+  const fim = alta ? _dataLocal(alta.dataAlta) : new Date();
+  // intersecção com o período
+  const s = inicio > periodo.inicio ? inicio : periodo.inicio;
+  const e = fim < periodo.fim ? fim : periodo.fim;
+  if (e >= s) pacientesDia += Math.floor((e-s)/86400000) + 1;
+});`
+  },
+  ocup_giro: {
+    nome: 'Giro de leito',
+    finalidade: 'Quantas admissões cada leito recebeu em média no período. Indicador de rotatividade: giro alto pode indicar internações curtas ou alta pressão.',
+    formula: 'Giro = admissões no período / número total de leitos.',
+    codigo: `const giro = admPer.length / TOTAL;`
+  },
+  ocup_permanencia: {
+    nome: 'Permanência média',
+    finalidade: 'Tempo médio em dias que um paciente passou internado na UTI. Permanências muito longas podem indicar complexidade clínica, e muito curtas podem refletir alta mortalidade precoce.',
+    formula: 'Média de (dataAlta − admUTI), em dias, entre todas as altas do período.',
+    codigo: `const permanencias = altasPer
+  .map(a => _diasEntre(a.admUTI, a.dataAlta))
+  .filter(d => d !== null);
+const media = permanencias.reduce((s,x)=>s+x,0) / permanencias.length;`
+  },
+  ocup_intervalo: {
+    nome: 'Intervalo entre ocupações',
+    finalidade: 'Tempo médio que um leito permanece vago entre uma alta e a próxima admissão. Ajuda a monitorar eficiência de limpeza/preparo do leito.',
+    formula: 'Para cada leito, pareia eventos de alta e próxima admissão e calcula o intervalo em dias.',
+    codigo: `for (let l = 1; l <= TOTAL; l++) {
+  const eventos = [
+    ...altas.filter(a => a.leito===l).map(a => ({tipo:'alta', data:_dataLocal(a.dataAlta)})),
+    ...admissoes.filter(a => a.leito===l).map(a => ({tipo:'adm', data:_dataLocal(a.admUTI)}))
+  ].filter(e => e.data).sort((a,b) => a.data - b.data);
+  for (let i=1; i<eventos.length; i++) {
+    if (eventos[i-1].tipo==='alta' && eventos[i].tipo==='adm')
+      intervalos.push(Math.floor((eventos[i].data - eventos[i-1].data)/86400000));
+  }
+}`
+  },
+  ocup_origem: {
+    nome: 'Admissões por origem',
+    finalidade: 'Distribuição das admissões pelos locais de procedência (Pronto Socorro, Centro Cirúrgico, Enfermarias, Transferência externa). Revela o perfil do fluxo que alimenta a UTI.',
+    formula: 'Agrupa admPer pelo campo "origem" e conta ocorrências.',
+    codigo: `const origens = {};
+admPer.forEach(a => {
+  const o = a.origem || 'Não informado';
+  origens[o] = (origens[o]||0) + 1;
+});`
+  },
+  ocup_procedencia: {
+    nome: 'Procedência (transferências externas)',
+    finalidade: 'Quais hospitais ou serviços mais encaminham pacientes para a UTI. Útil para discussão de regulação de vagas e parcerias.',
+    formula: 'Filtra admissões com origem = "Transferência de outro serviço" e agrupa pelo texto livre do campo origemOutro.',
+    codigo: `const procedencias = admPer
+  .filter(a => a.origem === 'Transferência de outro serviço' && a.origemOutro)
+  .map(a => a.origemOutro);
+const ranking = _contarTermos(procedencias);`
+  },
+
+  // Saída
+  saida_total: {
+    nome: 'Total de altas',
+    finalidade: 'Base para cálculo das demais taxas de saída (mortalidade, encaminhamentos). Inclui todos os tipos de alta.',
+    formula: 'Contagem de registros em uti_alta_log com dataAlta no período.',
+    codigo: `const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+const total = altasPer.length;`
+  },
+  saida_mortalidade: {
+    nome: 'Taxa de mortalidade',
+    finalidade: 'Proporção de óbitos entre os pacientes que saíram da UTI no período. Um dos indicadores mais monitorados em terapia intensiva.',
+    formula: 'Taxa = óbitos / total de altas × 100. Refere-se apenas à mortalidade intra-UTI.',
+    codigo: `const obitos = altasPer.filter(a => a.tipoAlta === 'Óbito').length;
+const taxa = (obitos * 100) / altasPer.length;`
+  },
+  saida_enfermaria: {
+    nome: 'Alta para enfermaria',
+    finalidade: 'Proporção de pacientes que saíram estáveis para continuar tratamento fora da UTI. Um desfecho favorável.',
+    formula: 'Taxa = altas para enfermaria / total de altas × 100.',
+    codigo: `const enf = altasPer.filter(a => a.tipoAlta === 'Alta para enfermaria').length;
+const taxa = (enf * 100) / altasPer.length;`
+  },
+  saida_transf: {
+    nome: 'Transferências externas',
+    finalidade: 'Proporção de pacientes encaminhados para outros serviços. Pode indicar ausência de recursos locais (ex: diálise, neurocirurgia) ou fluxos regionais.',
+    formula: 'Taxa = transferências / total de altas × 100.',
+    codigo: `const transf = altasPer.filter(a => a.tipoAlta === 'Transferência para outro serviço').length;
+const taxa = (transf * 100) / altasPer.length;`
+  },
+  saida_tipos: {
+    nome: 'Distribuição por tipo de alta',
+    finalidade: 'Visão panorâmica dos desfechos: proporção entre alta para enfermaria, transferência e óbito.',
+    formula: 'Agrupa altasPer pelo campo tipoAlta.',
+    codigo: `const tipos = {};
+altasPer.forEach(a => {
+  const t = a.tipoAlta || 'Não informado';
+  tipos[t] = (tipos[t]||0) + 1;
+});`
+  },
+  saida_destinos: {
+    nome: 'Destinos mais frequentes',
+    finalidade: 'Para quais hospitais ou serviços os pacientes são transferidos. Útil para planejamento regional.',
+    formula: 'Agrupa campo destino entre altas do tipo "Transferência para outro serviço".',
+    codigo: `const destinos = altasPer
+  .filter(a => a.tipoAlta === 'Transferência para outro serviço' && a.destino)
+  .map(a => a.destino);
+const ranking = _contarTermos(destinos);`
+  },
+
+  // Demográficos
+  demo_total: {
+    nome: 'Total de admissões (base demográfica)',
+    finalidade: 'Número total de pacientes admitidos no período. Denominador para distribuições por sexo e idade.',
+    formula: 'Contagem de registros em uti_admissao_log com admUTI no período.',
+    codigo: `const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+const total = admPer.length;`
+  },
+  demo_idade_media: {
+    nome: 'Idade média',
+    finalidade: 'Idade média dos pacientes admitidos. Caracteriza o perfil etário da unidade.',
+    formula: 'Calcula idade = (admUTI − dn)/365.25 para cada paciente e tira a média. Idades inválidas (< 0 ou > 120) são descartadas.',
+    codigo: `const idades = admPer.map(a => {
+  if (!a.dn || !a.admUTI) return null;
+  const dn = _dataLocal(a.dn), adm = _dataLocal(a.admUTI);
+  const idade = Math.floor((adm - dn) / (365.25 * 86400000));
+  return idade >= 0 && idade <= 120 ? idade : null;
+}).filter(i => i !== null);
+const media = idades.reduce((s,x)=>s+x,0) / idades.length;`
+  },
+  demo_sexo: {
+    nome: 'Distribuição por sexo',
+    finalidade: 'Proporção de admissões masculinas, femininas e não informadas. Importante para análises estratificadas.',
+    formula: 'Agrupa admPer pelo campo sexo (M, F, NI = não informado).',
+    codigo: `const sexos = { M: 0, F: 0, NI: 0 };
+admPer.forEach(a => {
+  const s = a.sexo || 'NI';
+  sexos[s] = (sexos[s]||0) + 1;
+});`
+  },
+  demo_faixas: {
+    nome: 'Distribuição por faixa etária',
+    finalidade: 'Agrupa pacientes por faixa etária (< 18, 18–40, 41–60, 61–80, > 80 anos). Ajuda a dimensionar demanda de idosos vs. jovens.',
+    formula: 'Classifica cada idade calculada em uma das 5 faixas.',
+    codigo: `const faixas = { '< 18':0, '18–40':0, '41–60':0, '61–80':0, '> 80':0 };
+idades.forEach(i => {
+  if (i < 18) faixas['< 18']++;
+  else if (i <= 40) faixas['18–40']++;
+  else if (i <= 60) faixas['41–60']++;
+  else if (i <= 80) faixas['61–80']++;
+  else faixas['> 80']++;
+});`
+  },
+  demo_idade_diag: {
+    nome: 'Idade média por diagnóstico',
+    finalidade: 'Relaciona diagnósticos com perfil etário — por exemplo, eventos cardiovasculares tendem a ter pacientes mais velhos; traumas, mais jovens.',
+    formula: 'Agrupa idades pelo texto livre do diagnóstico e calcula a média por grupo (exige no mínimo 2 casos). A padronização por CID melhorará esta análise.',
+    codigo: `const diagIdades = {};
+admPer.forEach(a => {
+  if (!a.diagnostico || !a.dn || !a.admUTI) return;
+  const idade = Math.floor((_dataLocal(a.admUTI) - _dataLocal(a.dn)) / (365.25*86400000));
+  const diag = a.diagnostico.trim().toUpperCase();
+  if (!diagIdades[diag]) diagIdades[diag] = [];
+  diagIdades[diag].push(idade);
+});
+// só grupos com 2+ casos, média arredondada`
+  },
+
+  // Sazonalidade
+  saz_meses: {
+    nome: 'Admissões por mês',
+    finalidade: 'Distribuição temporal das admissões. Revela tendências e picos sazonais (ex: síndromes respiratórias no inverno).',
+    formula: 'Agrupa admPer por ano-mês (YYYY-MM) e conta ocorrências.',
+    codigo: `const porMes = {};
+admPer.forEach(a => {
+  if (!a.admUTI) return;
+  const mes = a.admUTI.slice(0, 7); // YYYY-MM
+  porMes[mes] = (porMes[mes]||0) + 1;
+});`
+  },
+  saz_mortalidade: {
+    nome: 'Mortalidade por mês',
+    finalidade: 'Variação da taxa de mortalidade ao longo dos meses. Ajuda a identificar períodos críticos e correlações sazonais.',
+    formula: 'Para cada mês: (óbitos / total de altas do mês) × 100.',
+    codigo: `const mortPorMes = {}, totPorMes = {};
+altasPer.forEach(a => {
+  const mes = a.dataAlta.slice(0, 7);
+  totPorMes[mes] = (totPorMes[mes]||0) + 1;
+  if (a.tipoAlta === 'Óbito') mortPorMes[mes] = (mortPorMes[mes]||0) + 1;
+});
+// taxa = Math.round(mortPorMes[mes]*100/totPorMes[mes])`
+  },
+
+  // Clínicos
+  clin_evolucoes: {
+    nome: 'Evoluções no período',
+    finalidade: 'Número total de evoluções de enfermagem registradas. Base para cálculo de prevalências diárias.',
+    formula: 'Conta registros em uti_ev_* com campo data dentro do período.',
+    codigo: `const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+const total = evPer.length;`
+  },
+  clin_isolamento: {
+    nome: 'Isolamento (contato/gotículas/aerossóis)',
+    finalidade: 'Proporção de evoluções em que o paciente estava em isolamento. Indicador de carga de precauções e potencial prevalência de multirresistentes.',
+    formula: 'Taxa = evoluções com isolamento = X / total de evoluções × 100.',
+    codigo: `const isolContato = evPer.filter(e => e.isolamento === 'Contato').length;
+const taxa = _pct(isolContato, total);`
+  },
+  clin_lpp: {
+    nome: 'LPP – Risco alto',
+    finalidade: 'Proporção de pacientes com Braden ≤ 11, considerado risco muito alto para lesão por pressão. Sinaliza demanda por cuidados preventivos intensivos.',
+    formula: 'Taxa = evoluções com Braden ≤ 11 / evoluções com Braden avaliado × 100.',
+    codigo: `const lppAlto = evPer.filter(e =>
+  parseInt(e.bradScore) > 0 && parseInt(e.bradScore) <= 11
+).length;
+const comBraden = evPer.filter(e =>
+  e.bradScore && e.bradScore !== '–'
+).length;
+const taxa = (lppAlto * 100) / comBraden;`
+  },
+  clin_queda: {
+    nome: 'Queda – Risco alto',
+    finalidade: 'Proporção de evoluções com Morse ≥ 45. Alto risco de queda requer medidas específicas (grades, supervisão).',
+    formula: 'Taxa = evoluções com Morse ≥ 45 / evoluções com Morse avaliado × 100.',
+    codigo: `const quedaAlto = evPer.filter(e =>
+  parseInt(e.morseScore) >= 45
+).length;`
+  },
+  clin_pulseira: {
+    nome: 'Pulseira de identificação',
+    finalidade: 'Conformidade com a Meta Internacional de Segurança 1 (identificação do paciente). Deve tender a 100%.',
+    formula: 'Taxa = evoluções com pulseira = "Sim" / total de evoluções × 100.',
+    codigo: `const pulseira = evPer.filter(e => e.pulseira === 'Sim').length;
+const taxa = _pct(pulseira, total);`
+  },
+
+  // Dispositivos
+  disp_diaspaciente: {
+    nome: 'Dias-paciente',
+    finalidade: 'Denominador-padrão ANVISA/CDC para cálculo de taxas de uso de dispositivos. Cada turno com evolução registrada conta como 1 dia-paciente para aquele leito.',
+    formula: 'Chaves únicas (leito, data) nas evoluções do período.',
+    codigo: `const diasPaciente = new Set(
+  evolucoes
+    .filter(e => _dentroPeriodo(e.data, periodo))
+    .map(e => e.leito + '|' + e.data)
+).size;`
+  },
+  disp_uso: {
+    nome: 'Taxa de utilização de dispositivos',
+    finalidade: 'Proporção do tempo em que um dispositivo invasivo esteve em uso. Taxa alta indica exposição prolongada ao risco de IRAS (infecções relacionadas à assistência).',
+    formula: 'Taxa = dias com o dispositivo ativo / dias-paciente × 100. Padrão ANVISA/CDC.',
+    codigo: `const diasDisp = { AVC:0, CDL:0, SVD:0, SNE:0, TOT:0, TQT:0 };
+evolucoes.forEach(e => {
+  if (!_dentroPeriodo(e.data, periodo)) return;
+  if (e.avc_l) diasDisp.AVC++;
+  if (e.dial_l) diasDisp.CDL++;
+  if (e.svd_n) diasDisp.SVD++;
+  if (e.sne_n) diasDisp.SNE++;
+  if (e.tot_n || (e.vent && e.vent.includes('TOT'))) diasDisp.TOT++;
+  if (e.tqt_n || (e.vent && e.vent.includes('TQT'))) diasDisp.TQT++;
+});
+const taxa = (diasDisp[tipo] * 100) / diasPaciente;`
+  },
+  disp_tempo: {
+    nome: 'Tempo médio de uso por dispositivo',
+    finalidade: 'Média de dias que cada tipo de dispositivo permanece instalado (entre instalação e retirada). Dispositivos de uso prolongado podem exigir troca ou revisão de indicação.',
+    formula: 'Para cada retirada no período, calcula dias = dataRetirada − dataInstalacao, e faz média por tipo.',
+    codigo: `dispLog.forEach(d => {
+  if (!d.data_instalacao || !d.data_retirada) return;
+  if (!_dentroPeriodo(d.data_retirada, periodo)) return;
+  const dias = _diasEntre(d.data_instalacao, d.data_retirada);
+  if (dias !== null) tempos[d.tipo].push(dias);
+});
+const media = tempos[tipo].reduce((s,x)=>s+x,0) / tempos[tipo].length;`
+  },
+
+  // Ventilação
+  vent_vmi: {
+    nome: 'Evoluções com VMI',
+    finalidade: 'Número de turnos em que pacientes estavam em ventilação mecânica invasiva (TOT ou TQT).',
+    formula: 'Conta evoluções cujo campo vent inclui "TOT" ou "TQT".',
+    codigo: `const diasVMI = evPer.filter(e =>
+  e.vent && (e.vent.includes('TOT') || e.vent.includes('TQT'))
+).length;`
+  },
+  vent_taxa: {
+    nome: 'Taxa de VMI',
+    finalidade: 'Proporção do tempo em que os pacientes da UTI estiveram em ventilação mecânica invasiva. Indicador de gravidade e uso de recurso crítico.',
+    formula: 'Taxa = dias-VMI / dias-paciente × 100.',
+    codigo: `const taxa = (diasVMI * 100) / diasPac;`
+  },
+  vent_fio2: {
+    nome: 'FiO₂ médio (VMI)',
+    finalidade: 'Fração inspirada de oxigênio média entre pacientes em VMI. FiO₂ alta persistente sugere hipoxemia grave (SDRA).',
+    formula: 'Média de todos os valores numéricos válidos (1–100%) do campo vmi_fio2.',
+    codigo: `const fio2s = evPer
+  .map(e => parseFloat(e.vmi_fio2))
+  .filter(n => !isNaN(n) && n > 0 && n <= 100);
+const media = fio2s.reduce((s,x)=>s+x,0) / fio2s.length;`
+  },
+  vent_oxigenio: {
+    nome: 'Tipo de oxigenoterapia',
+    finalidade: 'Distribuição dos modos de suporte respiratório: ar ambiente, cateter nasal, máscara NR, MV, VNI, VMI. Retrato da intensidade de suporte ventilatório.',
+    formula: 'Agrupa evoluções pelo campo vent.',
+    codigo: `const oxig = {};
+evPer.forEach(e => {
+  const v = e.vent || 'Não informado';
+  oxig[v] = (oxig[v]||0) + 1;
+});`
+  },
+  vent_modos: {
+    nome: 'Modos ventilatórios mais usados',
+    finalidade: 'Quais modos de VMI são mais empregados (PCV, VCV, PSV, SIMV, APRV). Reflete preferências institucionais e perfil respiratório dos pacientes.',
+    formula: 'Agrupa evoluções com vmi_modo preenchido pelo modo.',
+    codigo: `const modos = {};
+evPer.forEach(e => {
+  if (!e.vmi_modo) return;
+  modos[e.vmi_modo] = (modos[e.vmi_modo]||0) + 1;
+});`
+  },
+
+  // Infusões
+  inf_dva: {
+    nome: 'Prevalência de DVA',
+    finalidade: 'Proporção de evoluções com ao menos uma droga vasoativa em uso. Marcador de choque e instabilidade hemodinâmica.',
+    formula: 'Taxa = evoluções com pelo menos um item de dva marcado OU dvaOutros não-vazio / total de evoluções.',
+    codigo: `const comDVA = evPer.filter(e => {
+  if (e.dva && Object.values(e.dva).some(v => v.checked)) return true;
+  return (e.dvaOutros || []).length > 0;
+}).length;`
+  },
+  inf_sedo: {
+    nome: 'Prevalência de sedoanalgesia',
+    finalidade: 'Proporção de evoluções com sedação/analgesia contínua. Usualmente associada à VMI e à necessidade de conforto do paciente crítico.',
+    formula: 'Taxa = evoluções com pelo menos um sedativo/analgésico marcado / total.',
+    codigo: `const comSedo = evPer.filter(e => {
+  if (e.sedo && Object.values(e.sedo).some(v => v.checked)) return true;
+  return (e.sedoOutros || []).length > 0;
+}).length;`
+  },
+  inf_dva_rank: {
+    nome: 'DVAs mais utilizadas',
+    finalidade: 'Ranking de drogas vasoativas. Noradrenalina costuma liderar (1ª linha em choque séptico).',
+    formula: 'Soma, por droga, o número de evoluções em que ela aparecia marcada.',
+    codigo: `const count = {};
+evPer.forEach(e => {
+  if (e.dva) Object.entries(e.dva).forEach(([nome, v]) => {
+    if (v.checked) count[nome] = (count[nome]||0) + 1;
+  });
+  (e.dvaOutros||[]).forEach(o => {
+    if (o.nome) count[o.nome.trim().toUpperCase()] =
+      (count[o.nome.trim().toUpperCase()]||0) + 1;
+  });
+});`
+  },
+  inf_sedo_rank: {
+    nome: 'Sedativos/analgésicos mais utilizados',
+    finalidade: 'Ranking de agentes sedativos e analgésicos (Fentanil, Midazolam, Propofol, Dexmedetomidina etc.).',
+    formula: 'Soma, por droga, o número de evoluções em que ela aparecia marcada (mesma lógica de DVAs).',
+    codigo: `const count = {};
+evPer.forEach(e => {
+  if (e.sedo) Object.entries(e.sedo).forEach(([nome, v]) => {
+    if (v.checked) count[nome] = (count[nome]||0) + 1;
+  });
+  (e.sedoOutros||[]).forEach(o => {
+    if (o.nome) count[o.nome.trim().toUpperCase()] =
+      (count[o.nome.trim().toUpperCase()]||0) + 1;
+  });
+});`
+  },
+
+  // ATBs
+  atb_prev: {
+    nome: 'Evoluções com ATB',
+    finalidade: 'Proporção de evoluções com pelo menos um antimicrobiano registrado. Indicador de prevalência de infecção ou profilaxia.',
+    formula: 'Taxa = evoluções com ao menos um atbs[].nome não-vazio / total de evoluções.',
+    codigo: `const comATB = evPer.filter(e =>
+  (e.atbs || []).some(a => a.nome && a.nome.trim())
+).length;`
+  },
+  atb_multi: {
+    nome: '2+ ATBs simultâneos',
+    finalidade: 'Proporção de evoluções com dois ou mais antimicrobianos em uso ao mesmo tempo. Pode sinalizar gravidade, infecção polimicrobiana ou descalonamento necessário.',
+    formula: 'Taxa = evoluções com ≥ 2 atbs[].nome preenchidos / total.',
+    codigo: `const multi = evPer.filter(e =>
+  (e.atbs || []).filter(a => a.nome && a.nome.trim()).length >= 2
+).length;`
+  },
+  atb_carba: {
+    nome: 'Uso de carbapenêmicos',
+    finalidade: 'Uso acumulado de meropenem, imipenem, ertapenem ou doripenem. Monitoramento importante para política de antimicrobianos — são antibióticos de largo espectro, reservados para infecções graves.',
+    formula: 'Soma das ocorrências de nomes que contenham MEROPENEM, IMIPENEM, ERTAPENEM ou DORIPENEM.',
+    codigo: `const carba = ['MEROPENEM','IMIPENEM','ERTAPENEM','DORIPENEM'];
+const count = Object.entries(atbCount)
+  .filter(([n]) => carba.some(c => n.includes(c)))
+  .reduce((s, [,v]) => s + v, 0);`
+  },
+  atb_rank: {
+    nome: 'Antimicrobianos mais utilizados',
+    finalidade: 'Ranking geral de antimicrobianos. Base para auditoria de uso racional e discussão com CCIH.',
+    formula: 'Extrai a primeira palavra de cada atbs[].nome (ex: "Meropenem 1g 8/8h" → "MEROPENEM") e soma ocorrências.',
+    codigo: `const count = {};
+evPer.forEach(e => {
+  (e.atbs||[]).forEach(a => {
+    if (!a.nome) return;
+    const nome = a.nome.trim().toUpperCase().split(/\\s+/)[0];
+    if (nome) count[nome] = (count[nome]||0) + 1;
+  });
+});`
+  },
+
+  // NAS
+  nas_registros: {
+    nome: 'Registros NAS no período',
+    finalidade: 'Número total de avaliações NAS (Nursing Activities Score) registradas. Cada paciente/turno conta como 1.',
+    formula: 'Conta entradas em uti_nas_* com campo data no período.',
+    codigo: `const nasPer = nas.filter(n => _dentroPeriodo(n.data, periodo));
+const total = nasPer.length;`
+  },
+  nas_medio: {
+    nome: 'NAS médio por paciente',
+    finalidade: 'Pontuação NAS média das avaliações. NAS de 100% equivale à dedicação integral de 1 enfermeiro por paciente em 24h.',
+    formula: 'Média aritmética dos valores válidos do campo total.',
+    codigo: `const medias = nasPer
+  .map(n => parseFloat(n.total))
+  .filter(n => !isNaN(n) && n > 0);
+const media = medias.reduce((s,x)=>s+x,0) / medias.length;`
+  },
+  nas_max: {
+    nome: 'NAS máximo',
+    finalidade: 'Maior pontuação NAS registrada no período. Sinaliza casos de carga extrema de enfermagem.',
+    formula: 'Math.max(...totais_validos).',
+    codigo: `const max = Math.max(...medias);`
+  },
+  nas_diurno: {
+    nome: 'NAS médio – Diurno',
+    finalidade: 'Média de NAS apenas para o turno diurno. Permite comparar carga de trabalho entre turnos.',
+    formula: 'Média dos totais onde turno = "DIURNO".',
+    codigo: `const diurno = nasPer
+  .filter(n => n.turno === 'DIURNO')
+  .map(n => parseFloat(n.total))
+  .filter(n => !isNaN(n));
+const media = diurno.reduce((s,x)=>s+x,0) / diurno.length;`
+  },
+  nas_noturno: {
+    nome: 'NAS médio – Noturno',
+    finalidade: 'Média de NAS apenas para o turno noturno. Comparação com o diurno pode revelar diferenças de dimensionamento.',
+    formula: 'Média dos totais onde turno = "NOTURNO".',
+    codigo: `const noturno = nasPer
+  .filter(n => n.turno === 'NOTURNO')
+  .map(n => parseFloat(n.total))
+  .filter(n => !isNaN(n));
+const media = noturno.reduce((s,x)=>s+x,0) / noturno.length;`
+  },
+  nas_sobrecarga: {
+    nome: 'Turnos com sobrecarga',
+    finalidade: 'Número de turnos em que a soma do NAS de todos os leitos ≥ 100% × número de leitos. Indica demanda assistencial maior que a capacidade teórica.',
+    formula: 'Agrupa NAS por (data, turno), soma os totais, e conta turnos cujo somatório excede 100% × TOTAL.',
+    codigo: `const porTurno = {};
+nasPer.forEach(n => {
+  const k = n.data + '|' + n.turno;
+  porTurno[k] = (porTurno[k] || 0) + (parseFloat(n.total) || 0);
+});
+const sobrecarga = Object.values(porTurno)
+  .filter(t => t >= 100 * TOTAL).length;`
+  },
+
+  // Nutrição
+  nut_enteral: {
+    nome: 'Dieta enteral (SNE/SOE)',
+    finalidade: 'Proporção de evoluções em que o paciente recebia nutrição enteral por sonda nasoenteral ou orogástrica. Via mais comum em pacientes críticos sedados ou em VMI.',
+    formula: 'Taxa = evoluções com dieta = SNE OU SOE / total × 100.',
+    codigo: `const sne = evPer.filter(e => e.dieta === 'SNE').length;
+const soe = evPer.filter(e => e.dieta === 'SOE').length;
+const taxa = _pct(sne + soe, total);`
+  },
+  nut_oral: {
+    nome: 'Dieta oral',
+    finalidade: 'Proporção de evoluções com dieta por via oral. Indicador de recuperação funcional e extubação.',
+    formula: 'Taxa = evoluções com dieta = "Oral" / total × 100.',
+    codigo: `const oral = evPer.filter(e => e.dieta === 'Oral').length;
+const taxa = _pct(oral, total);`
+  },
+  nut_npt: {
+    nome: 'NPT (Nutrição Parenteral Total)',
+    finalidade: 'Proporção de evoluções em NPT. Via reservada para pacientes com trato digestivo inviável — monitoramento importante por custo e risco de complicações.',
+    formula: 'Taxa = evoluções com dieta = "NPT" / total × 100.',
+    codigo: `const npt = evPer.filter(e => e.dieta === 'NPT').length;
+const taxa = _pct(npt, total);`
+  },
+  nut_jejum: {
+    nome: 'Jejum',
+    finalidade: 'Proporção de evoluções em jejum. Jejum prolongado em UTI está associado a piores desfechos — indicador a ser monitorado.',
+    formula: 'Taxa = evoluções com dieta = "Jejum/Zero" / total × 100.',
+    codigo: `const jejum = evPer.filter(e => e.dieta === 'Jejum/Zero').length;
+const taxa = _pct(jejum, total);`
+  },
+
+  // Neurológicos
+  neuro_glasgow: {
+    nome: 'Glasgow médio',
+    finalidade: 'Escala de Coma de Glasgow média (3–15). Valores baixos indicam rebaixamento do nível de consciência.',
+    formula: 'Média dos valores válidos de glas (3 a 15).',
+    codigo: `const glasgows = evPer
+  .map(e => parseInt(e.glas))
+  .filter(n => !isNaN(n) && n >= 3 && n <= 15);
+const media = glasgows.reduce((s,x)=>s+x,0) / glasgows.length;`
+  },
+  neuro_comatosos: {
+    nome: 'Pacientes comatosos',
+    finalidade: 'Proporção de evoluções em que o paciente estava comatoso. Caracteriza a gravidade neurológica da unidade.',
+    formula: 'Taxa = evoluções com "Comatoso" em neuro / total × 100.',
+    codigo: `const comatosos = evPer.filter(e =>
+  (e.neuro || []).includes('Comatoso')
+).length;
+const taxa = _pct(comatosos, total);`
+  },
+  neuro_rass: {
+    nome: 'Sedação profunda (RASS ≤ -3)',
+    finalidade: 'Proporção de evoluções com RASS ≤ -3. Sedação profunda prolongada está associada a desfechos piores — métrica de ajuste de sedação.',
+    formula: 'Taxa = evoluções com rass ≤ -3 / total × 100.',
+    codigo: `const sedadoProf = evPer.filter(e => {
+  const r = parseInt(e.rass);
+  return !isNaN(r) && r <= -3;
+}).length;
+const taxa = _pct(sedadoProf, total);`
+  },
+
+  // Operacionais
+  op_evolucoes: {
+    nome: 'Evoluções registradas',
+    finalidade: 'Contagem única de (leito, turno, data) com evolução salva. Reflete cobertura documental.',
+    formula: 'Tamanho do conjunto de chaves únicas.',
+    codigo: `const evKeys = new Set(
+  evPer.map(e => \`\${e.leito}|\${e.turno}|\${e.data}\`)
+);`
+  },
+  op_nas_reg: {
+    nome: 'Registros NAS',
+    finalidade: 'Contagem única de (leito, turno, data) com NAS salvo.',
+    formula: 'Tamanho do conjunto de chaves únicas.',
+    codigo: `const nasKeys = new Set(
+  nasPer.map(n => \`\${n.leito}|\${n.turno}|\${n.data}\`)
+);`
+  },
+  op_cobertura: {
+    nome: 'Cobertura do NAS',
+    finalidade: 'Percentual de turnos com evolução que também têm NAS preenchido. Meta: 100% (todo paciente avaliado tem NAS do turno).',
+    formula: 'Cobertura = turnos-com-evolução-e-NAS / turnos-com-evolução × 100.',
+    codigo: `const comAmbos = Array.from(evKeys)
+  .filter(k => nasKeys.has(k)).length;
+const cobertura = _pct(comAmbos, evKeys.size);`
+  },
+
+  // Cruzamentos
+  cruz_altas: {
+    nome: 'Altas analisadas (base cruzamento)',
+    finalidade: 'Número de altas consideradas para os cruzamentos entre origem × mortalidade e outras análises.',
+    formula: 'Altas do período.',
+    codigo: `const altasPer = altas.filter(a =>
+  _dentroPeriodo(a.dataAlta, periodo)
+);`
+  },
+  cruz_gravidade: {
+    nome: 'Gravidade máxima (DVA + VMI + ATB)',
+    finalidade: 'Proporção de evoluções em que o paciente tinha simultaneamente droga vasoativa, ventilação mecânica invasiva e antimicrobiano em uso. Proxy clínico de máxima gravidade.',
+    formula: 'Taxa = evoluções com as 3 condições / total de evoluções × 100.',
+    codigo: `const gravMax = evPer.filter(e => {
+  const temDVA = (e.dva && Object.values(e.dva).some(v => v.checked))
+    || (e.dvaOutros || []).length > 0;
+  const temVMI = e.vent && (e.vent.includes('TOT') || e.vent.includes('TQT'));
+  const temATB = (e.atbs || []).some(a => a.nome && a.nome.trim());
+  return temDVA && temVMI && temATB;
+}).length;`
+  },
+  cruz_correlacao: {
+    nome: 'Correlação permanência × NAS',
+    finalidade: 'Coeficiente de Pearson (−1 a +1) entre tempo de permanência e NAS médio de cada paciente. Valor positivo forte sugere que pacientes mais graves ficam mais tempo.',
+    formula: 'Para cada alta, calcula permanência e NAS médio do paciente. Aplica Pearson.',
+    codigo: `function _correlacao(xs, ys) {
+  const n = xs.length;
+  const mx = xs.reduce((s,x)=>s+x,0) / n;
+  const my = ys.reduce((s,x)=>s+x,0) / n;
+  let num=0, dx2=0, dy2=0;
+  for (let i=0; i<n; i++) {
+    num += (xs[i]-mx) * (ys[i]-my);
+    dx2 += (xs[i]-mx) ** 2;
+    dy2 += (ys[i]-my) ** 2;
+  }
+  return Math.sqrt(dx2*dy2) === 0 ? 0 : num / Math.sqrt(dx2*dy2);
+}`
+  },
+  cruz_origem_mort: {
+    nome: 'Mortalidade por origem',
+    finalidade: 'Taxa de óbito estratificada por local de procedência. Permite avaliar se certas origens (ex: transferências externas) chegam em pior estado.',
+    formula: 'Para cada origem: (óbitos / total de altas daquela origem) × 100.',
+    codigo: `const porOrigem = {};
+altasPer.forEach(a => {
+  const o = a.origem || 'Não informado';
+  if (!porOrigem[o]) porOrigem[o] = { total: 0, obitos: 0 };
+  porOrigem[o].total++;
+  if (a.tipoAlta === 'Óbito') porOrigem[o].obitos++;
+});
+// para cada origem: taxa = obitos*100/total`
+  }
+};
+
+// Escape HTML (para exibir código com <, > etc. sem quebrar)
+function _esc(s){
+  return String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function abrirFichaIndicador(id){
+  const f = FICHAS_INDICADORES[id];
+  if (!f) { toast('Ficha não encontrada', true); return; }
+  document.getElementById('ficha-titulo').textContent = '📋 ' + f.nome;
+  document.getElementById('ficha-body').innerHTML = `
+    <div class="ficha-sec">
+      <div class="ficha-sec-t">Finalidade</div>
+      <div class="ficha-sec-c">${_esc(f.finalidade)}</div>
+    </div>
+    <div class="ficha-sec">
+      <div class="ficha-sec-t">Como é calculado</div>
+      <div class="ficha-sec-c">${_esc(f.formula)}</div>
+    </div>
+    <div class="ficha-sec">
+      <div class="ficha-sec-t">Trecho do código</div>
+      <pre class="ficha-codigo">${_esc(f.codigo)}</pre>
+    </div>
+    <div style="display:flex;justify-content:flex-end;padding-top:4px;">
+      <button class="btn btn-sec btn-sm" onclick="fecharFichaIndicador()">Fechar</button>
+    </div>
+  `;
+  document.getElementById('modal-ficha').classList.add('show');
+}
+
+function fecharFichaIndicador(){
+  document.getElementById('modal-ficha').classList.remove('show');
 }
 
 // Conta ocorrências de um array de strings (case-insensitive, trim, separa por ,/|/+)
@@ -670,17 +1362,17 @@ function _indOcupacao(periodo){
   const procList = _contarTermos(procedencias);
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Admissões no período', admPer.length, `${TOTAL} leitos`);
-  h += _cardInd('Altas no período', altasPer.length);
-  h += _cardInd('Taxa de ocupação', taxaOcup, `${pacientesDia} pacientes-dia / ${TOTAL*diasPeriodo} possíveis`);
-  h += _cardInd('Pacientes-dia', pacientesDia, `em ${diasPeriodo} dias`);
-  h += _cardInd('Giro de leito', giro, 'admissões por leito');
-  h += _cardInd('Permanência média', permMedia !== '–' ? permMedia + ' dias' : '–', `${permanencias.length} altas computadas`);
-  h += _cardInd('Intervalo entre ocupações', intervMedio !== '–' ? intervMedio + ' dias' : '–', 'tempo médio leito vago');
+  h += _cardInd('Admissões no período', admPer.length, `${TOTAL} leitos`, '', 'ocup_admissoes');
+  h += _cardInd('Altas no período', altasPer.length, '', '', 'ocup_altas');
+  h += _cardInd('Taxa de ocupação', taxaOcup, `${pacientesDia} pacientes-dia / ${TOTAL*diasPeriodo} possíveis`, '', 'ocup_taxa');
+  h += _cardInd('Pacientes-dia', pacientesDia, `em ${diasPeriodo} dias`, '', 'ocup_pacientesdia');
+  h += _cardInd('Giro de leito', giro, 'admissões por leito', '', 'ocup_giro');
+  h += _cardInd('Permanência média', permMedia !== '–' ? permMedia + ' dias' : '–', `${permanencias.length} altas computadas`, '', 'ocup_permanencia');
+  h += _cardInd('Intervalo entre ocupações', intervMedio !== '–' ? intervMedio + ' dias' : '–', 'tempo médio leito vago', '', 'ocup_intervalo');
   h += '</div>';
 
-  h += _rankingBarras('Admissões por origem', origensList);
-  h += _rankingBarras('Procedência (transferências externas)', procList, 10);
+  h += _rankingBarras('Admissões por origem', origensList, null, 'ocup_origem');
+  h += _rankingBarras('Procedência (transferências externas)', procList, 10, 'ocup_procedencia');
 
   return h;
 }
@@ -707,15 +1399,15 @@ function _indSaida(periodo){
   const destList = _contarTermos(destinos);
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Total de altas', total);
-  h += _cardInd('Taxa de mortalidade', _pct(obitos, total), `${obitos} óbitos`, obitos>0 ? 'vermelho' : 'verde');
-  h += _cardInd('Alta para enfermaria', _pct(enf, total), `${enf} pacientes`, 'verde');
-  h += _cardInd('Transferências externas', _pct(transf, total), `${transf} pacientes`);
+  h += _cardInd('Total de altas', total, '', '', 'saida_total');
+  h += _cardInd('Taxa de mortalidade', _pct(obitos, total), `${obitos} óbitos`, obitos>0 ? 'vermelho' : 'verde', 'saida_mortalidade');
+  h += _cardInd('Alta para enfermaria', _pct(enf, total), `${enf} pacientes`, 'verde', 'saida_enfermaria');
+  h += _cardInd('Transferências externas', _pct(transf, total), `${transf} pacientes`, '', 'saida_transf');
   h += '</div>';
 
   const tiposList = Object.entries(tipos).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
-  h += _rankingBarras('Distribuição por tipo de alta', tiposList);
-  h += _rankingBarras('Destinos mais frequentes (transferências)', destList, 10);
+  h += _rankingBarras('Distribuição por tipo de alta', tiposList, null, 'saida_tipos');
+  h += _rankingBarras('Destinos mais frequentes (transferências)', destList, 10, 'saida_destinos');
   return h;
 }
 
@@ -754,15 +1446,15 @@ function _indDemograficos(periodo){
   });
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Total de admissões', totalSexo);
-  h += _cardInd('Idade média', idadeMedia !== '–' ? idadeMedia + ' anos' : '–', `${idades.length} pacientes com DN registrada`);
-  h += _cardInd('Masculinos', _pct(sexos.M, totalSexo), `${sexos.M} pacientes`);
-  h += _cardInd('Femininos', _pct(sexos.F, totalSexo), `${sexos.F} pacientes`);
-  if (sexos.NI > 0) h += _cardInd('Sexo não informado', _pct(sexos.NI, totalSexo), `${sexos.NI} pacientes`, 'laranja');
+  h += _cardInd('Total de admissões', totalSexo, '', '', 'demo_total');
+  h += _cardInd('Idade média', idadeMedia !== '–' ? idadeMedia + ' anos' : '–', `${idades.length} pacientes com DN registrada`, '', 'demo_idade_media');
+  h += _cardInd('Masculinos', _pct(sexos.M, totalSexo), `${sexos.M} pacientes`, '', 'demo_sexo');
+  h += _cardInd('Femininos', _pct(sexos.F, totalSexo), `${sexos.F} pacientes`, '', 'demo_sexo');
+  if (sexos.NI > 0) h += _cardInd('Sexo não informado', _pct(sexos.NI, totalSexo), `${sexos.NI} pacientes`, 'laranja', 'demo_sexo');
   h += '</div>';
 
   const faixasList = Object.entries(faixas).map(([label,valor])=>({label,valor}));
-  h += _rankingBarras('Distribuição por faixa etária', faixasList);
+  h += _rankingBarras('Distribuição por faixa etária', faixasList, null, 'demo_faixas');
 
   // Idade média por diagnóstico (top 5)
   const diagIdades = {};
@@ -783,7 +1475,7 @@ function _indDemograficos(periodo){
       valor: Math.round(arr.reduce((s,x)=>s+x,0)/arr.length)
     }))
     .sort((a,b) => b.valor - a.valor);
-  h += _rankingBarras('Idade média por diagnóstico (texto livre, 2+ casos)', diagIdList, 10);
+  h += _rankingBarras('Idade média por diagnóstico (texto livre, 2+ casos)', diagIdList, 10, 'demo_idade_diag');
   h += '<div class="ind-hint">⚠️ Agrupamento por texto livre — implantação de CID/categorias padronizadas melhorará esta análise.</div>';
   return h;
 }
@@ -823,8 +1515,8 @@ function _indSazonalidade(periodo){
   h += _cardInd('Média mensal', mesesOrd.length ? (admPer.length/mesesOrd.length).toFixed(1) : '–', 'admissões/mês');
   h += '</div>';
 
-  h += _rankingBarras('Admissões por mês', mesesList);
-  h += _rankingBarras('Taxa de mortalidade por mês (%)', mortList);
+  h += _rankingBarras('Admissões por mês', mesesList, null, 'saz_meses');
+  h += _rankingBarras('Taxa de mortalidade por mês (%)', mortList, null, 'saz_mortalidade');
   h += '<div class="ind-hint">📆 Use período "12 meses" ou maior para ver tendências sazonais.</div>';
   return h;
 }
@@ -847,14 +1539,14 @@ function _indClinicos(periodo){
   const pulseira  = evPer.filter(e => e.pulseira === 'Sim').length;
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Evoluções no período', total);
-  h += _cardInd('Isolamento de contato', _pct(isolContato, total), `${isolContato} evoluções`);
-  h += _cardInd('Isolamento de gotículas', _pct(isolGoticulas, total), `${isolGoticulas} evoluções`);
-  h += _cardInd('Isolamento de aerossóis', _pct(isolAerossois, total), `${isolAerossois} evoluções`);
-  h += _cardInd('Vigilância', _pct(isolVigilancia, total), `${isolVigilancia} evoluções`);
-  h += _cardInd('LPP – Risco alto', _pct(lppAlto, comBraden), `${lppAlto} de ${comBraden} Braden avaliados`, lppAlto>0?'vermelho':'verde');
-  h += _cardInd('Queda – Risco alto', _pct(quedaAlto, comMorse), `${quedaAlto} de ${comMorse} Morse avaliados`, quedaAlto>0?'vermelho':'verde');
-  h += _cardInd('Pulseira de identificação', _pct(pulseira, total), `${pulseira} evoluções`, 'verde');
+  h += _cardInd('Evoluções no período', total, '', '', 'clin_evolucoes');
+  h += _cardInd('Isolamento de contato', _pct(isolContato, total), `${isolContato} evoluções`, '', 'clin_isolamento');
+  h += _cardInd('Isolamento de gotículas', _pct(isolGoticulas, total), `${isolGoticulas} evoluções`, '', 'clin_isolamento');
+  h += _cardInd('Isolamento de aerossóis', _pct(isolAerossois, total), `${isolAerossois} evoluções`, '', 'clin_isolamento');
+  h += _cardInd('Vigilância', _pct(isolVigilancia, total), `${isolVigilancia} evoluções`, '', 'clin_isolamento');
+  h += _cardInd('LPP – Risco alto', _pct(lppAlto, comBraden), `${lppAlto} de ${comBraden} Braden avaliados`, lppAlto>0?'vermelho':'verde', 'clin_lpp');
+  h += _cardInd('Queda – Risco alto', _pct(quedaAlto, comMorse), `${quedaAlto} de ${comMorse} Morse avaliados`, quedaAlto>0?'vermelho':'verde', 'clin_queda');
+  h += _cardInd('Pulseira de identificação', _pct(pulseira, total), `${pulseira} evoluções`, 'verde', 'clin_pulseira');
   h += '</div>';
   return h;
 }
@@ -891,14 +1583,14 @@ function _indDispositivos(periodo){
   });
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Dias-paciente no período', diasPaciente, 'base para cálculo das taxas');
+  h += _cardInd('Dias-paciente no período', diasPaciente, 'base para cálculo das taxas', '', 'disp_diaspaciente');
   tipos.forEach(t => {
     const tx = diasPaciente > 0 ? (diasDisp[t]*100/diasPaciente).toFixed(1)+'%' : '–';
-    h += _cardInd(`Uso de ${t}`, tx, `${diasDisp[t]} dias-dispositivo`);
+    h += _cardInd(`Uso de ${t}`, tx, `${diasDisp[t]} dias-dispositivo`, '', 'disp_uso');
   });
   h += '</div>';
 
-  h += '<div class="ind-grupo"><div class="ind-grupo-t">Tempo médio de uso (retiradas no período)</div><div class="ind-bar-wrap">';
+  h += '<div class="ind-grupo"><div class="ind-grupo-t">Tempo médio de uso (retiradas no período)</div><button class="ind-info-btn ind-grupo-info" onclick="abrirFichaIndicador(\'disp_tempo\')" title="Sobre este indicador">ℹ️</button><div class="ind-bar-wrap">';
   tipos.forEach(t => {
     const arr = tempos[t];
     const media = arr.length ? (arr.reduce((s,x)=>s+x,0)/arr.length).toFixed(1) : '–';
@@ -943,13 +1635,13 @@ function _indVentilacao(periodo){
   const fio2Medio = fio2s.length ? (fio2s.reduce((s,x)=>s+x,0)/fio2s.length).toFixed(1) : '–';
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Evoluções com VMI', diasVMI, `em ${total} evoluções`);
-  h += _cardInd('Taxa de VMI', taxaVMI, 'dias-VMI / dias-paciente');
-  h += _cardInd('FiO₂ médio (VMI)', fio2Medio !== '–' ? fio2Medio + '%' : '–', `${fio2s.length} registros`);
+  h += _cardInd('Evoluções com VMI', diasVMI, `em ${total} evoluções`, '', 'vent_vmi');
+  h += _cardInd('Taxa de VMI', taxaVMI, 'dias-VMI / dias-paciente', '', 'vent_taxa');
+  h += _cardInd('FiO₂ médio (VMI)', fio2Medio !== '–' ? fio2Medio + '%' : '–', `${fio2s.length} registros`, '', 'vent_fio2');
   h += '</div>';
 
-  h += _rankingBarras('Tipo de oxigenoterapia', oxigList);
-  h += _rankingBarras('Modos ventilatórios mais usados', modosList);
+  h += _rankingBarras('Tipo de oxigenoterapia', oxigList, null, 'vent_oxigenio');
+  h += _rankingBarras('Modos ventilatórios mais usados', modosList, null, 'vent_modos');
   return h;
 }
 
@@ -1007,12 +1699,12 @@ function _indInfusoes(periodo){
   const sedoList = Object.entries(sedoCount).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Prevalência de DVA', _pct(comDVA, total), `${comDVA} evoluções`);
-  h += _cardInd('Prevalência de sedoanalgesia', _pct(comSedo, total), `${comSedo} evoluções`);
+  h += _cardInd('Prevalência de DVA', _pct(comDVA, total), `${comDVA} evoluções`, '', 'inf_dva');
+  h += _cardInd('Prevalência de sedoanalgesia', _pct(comSedo, total), `${comSedo} evoluções`, '', 'inf_sedo');
   h += '</div>';
 
-  h += _rankingBarras('DVAs mais utilizadas', dvaList);
-  h += _rankingBarras('Sedativos/analgésicos mais utilizados', sedoList);
+  h += _rankingBarras('DVAs mais utilizadas', dvaList, null, 'inf_dva_rank');
+  h += _rankingBarras('Sedativos/analgésicos mais utilizados', sedoList, null, 'inf_sedo_rank');
   return h;
 }
 
@@ -1046,12 +1738,12 @@ function _indATBs(periodo){
     .reduce((s,[,v]) => s+v, 0);
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Evoluções com ATB', _pct(comATB, total), `${comATB} evoluções`);
-  h += _cardInd('2+ ATBs simultâneos', _pct(multiATB, total), `${multiATB} evoluções`, 'laranja');
-  h += _cardInd('Uso de carbapenêmicos', _pct(carbaCount, total), `${carbaCount} registros`);
+  h += _cardInd('Evoluções com ATB', _pct(comATB, total), `${comATB} evoluções`, '', 'atb_prev');
+  h += _cardInd('2+ ATBs simultâneos', _pct(multiATB, total), `${multiATB} evoluções`, 'laranja', 'atb_multi');
+  h += _cardInd('Uso de carbapenêmicos', _pct(carbaCount, total), `${carbaCount} registros`, '', 'atb_carba');
   h += '</div>';
 
-  h += _rankingBarras('Antimicrobianos mais utilizados', atbList, 15);
+  h += _rankingBarras('Antimicrobianos mais utilizados', atbList, 15, 'atb_rank');
   return h;
 }
 
@@ -1082,12 +1774,12 @@ function _indNASIndicadores(periodo){
   const medN = noturnoNAS.length ? (noturnoNAS.reduce((s,x)=>s+x,0)/noturnoNAS.length).toFixed(1) : '–';
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Registros NAS no período', total);
-  h += _cardInd('NAS médio por paciente', mediaNAS !== '–' ? mediaNAS + '%' : '–');
-  h += _cardInd('NAS máximo', maxNAS !== '–' ? maxNAS + '%' : '–');
-  h += _cardInd('NAS médio (Diurno)', medD !== '–' ? medD + '%' : '–', `${diurnoNAS.length} registros`);
-  h += _cardInd('NAS médio (Noturno)', medN !== '–' ? medN + '%' : '–', `${noturnoNAS.length} registros`);
-  h += _cardInd('Turnos com sobrecarga', sobrecarga, `de ${turnosTot} turnos (NAS total ≥ 100%/leito)`, sobrecarga>0?'vermelho':'verde');
+  h += _cardInd('Registros NAS no período', total, '', '', 'nas_registros');
+  h += _cardInd('NAS médio por paciente', mediaNAS !== '–' ? mediaNAS + '%' : '–', '', '', 'nas_medio');
+  h += _cardInd('NAS máximo', maxNAS !== '–' ? maxNAS + '%' : '–', '', '', 'nas_max');
+  h += _cardInd('NAS médio (Diurno)', medD !== '–' ? medD + '%' : '–', `${diurnoNAS.length} registros`, '', 'nas_diurno');
+  h += _cardInd('NAS médio (Noturno)', medN !== '–' ? medN + '%' : '–', `${noturnoNAS.length} registros`, '', 'nas_noturno');
+  h += _cardInd('Turnos com sobrecarga', sobrecarga, `de ${turnosTot} turnos (NAS total ≥ 100%/leito)`, sobrecarga>0?'vermelho':'verde', 'nas_sobrecarga');
   h += '</div>';
   h += '<div class="ind-hint">Profissional COFEN: 36,36% equivale a 1 enfermeiro no turno.</div>';
   return h;
@@ -1105,11 +1797,11 @@ function _indNutricao(periodo){
   const jejum = evPer.filter(e => e.dieta === 'Jejum/Zero').length;
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Evoluções no período', total);
-  h += _cardInd('Dieta enteral (SNE/SOE)', _pct(sne+soe, total), `${sne+soe} evoluções`);
-  h += _cardInd('Dieta oral', _pct(oral, total), `${oral} evoluções`);
-  h += _cardInd('NPT', _pct(npt, total), `${npt} evoluções`);
-  h += _cardInd('Jejum', _pct(jejum, total), `${jejum} evoluções`, jejum>0?'laranja':'');
+  h += _cardInd('Evoluções no período', total, '', '', 'clin_evolucoes');
+  h += _cardInd('Dieta enteral (SNE/SOE)', _pct(sne+soe, total), `${sne+soe} evoluções`, '', 'nut_enteral');
+  h += _cardInd('Dieta oral', _pct(oral, total), `${oral} evoluções`, '', 'nut_oral');
+  h += _cardInd('NPT', _pct(npt, total), `${npt} evoluções`, '', 'nut_npt');
+  h += _cardInd('Jejum', _pct(jejum, total), `${jejum} evoluções`, jejum>0?'laranja':'', 'nut_jejum');
   h += '</div>';
   return h;
 }
@@ -1129,10 +1821,10 @@ function _indNeuro(periodo){
   }).length;
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Evoluções no período', total);
-  h += _cardInd('Glasgow médio', glasgowMed, `${glasgows.length} registros`);
-  h += _cardInd('Pacientes comatosos', _pct(comatosos, total), `${comatosos} evoluções`);
-  h += _cardInd('Sedação profunda (RASS ≤ -3)', _pct(sedadoProf, total), `${sedadoProf} evoluções`);
+  h += _cardInd('Evoluções no período', total, '', '', 'clin_evolucoes');
+  h += _cardInd('Glasgow médio', glasgowMed, `${glasgows.length} registros`, '', 'neuro_glasgow');
+  h += _cardInd('Pacientes comatosos', _pct(comatosos, total), `${comatosos} evoluções`, '', 'neuro_comatosos');
+  h += _cardInd('Sedação profunda (RASS ≤ -3)', _pct(sedadoProf, total), `${sedadoProf} evoluções`, '', 'neuro_rass');
   h += '</div>';
   return h;
 }
@@ -1149,9 +1841,9 @@ function _indOperacionais(periodo){
   const comAmbos = Array.from(evKeys).filter(k => nasKeys.has(k)).length;
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Evoluções registradas', evKeys.size, 'no período');
-  h += _cardInd('Registros NAS', nasKeys.size, 'no período');
-  h += _cardInd('Cobertura do NAS', _pct(comAmbos, evKeys.size), `${comAmbos} de ${evKeys.size} turnos com evolução`, comAmbos===evKeys.size?'verde':'laranja');
+  h += _cardInd('Evoluções registradas', evKeys.size, 'no período', '', 'op_evolucoes');
+  h += _cardInd('Registros NAS', nasKeys.size, 'no período', '', 'op_nas_reg');
+  h += _cardInd('Cobertura do NAS', _pct(comAmbos, evKeys.size), `${comAmbos} de ${evKeys.size} turnos com evolução`, comAmbos===evKeys.size?'verde':'laranja', 'op_cobertura');
   h += '</div>';
   h += '<div class="ind-hint">Cobertura = % de turnos com evolução que também têm NAS preenchido.</div>';
   return h;
@@ -1199,16 +1891,16 @@ function _indCruzamentos(periodo){
   }).length;
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Altas analisadas', altasPer.length);
-  h += _cardInd('Gravidade máxima (DVA+VMI+ATB)', _pct(gravMax, evPer.length), `${gravMax} evoluções`, gravMax>0?'vermelho':'');
+  h += _cardInd('Altas analisadas', altasPer.length, '', '', 'cruz_altas');
+  h += _cardInd('Gravidade máxima (DVA+VMI+ATB)', _pct(gravMax, evPer.length), `${gravMax} evoluções`, gravMax>0?'vermelho':'', 'cruz_gravidade');
   if (correlacaoNAS !== null) {
     const interp = Math.abs(correlacaoNAS) < 0.3 ? 'fraca' : Math.abs(correlacaoNAS) < 0.6 ? 'moderada' : 'forte';
     const sinal = correlacaoNAS > 0 ? 'positiva' : 'negativa';
-    h += _cardInd('Correlação permanência × NAS', correlacaoNAS.toFixed(2), `${sinal}, ${interp}`);
+    h += _cardInd('Correlação permanência × NAS', correlacaoNAS.toFixed(2), `${sinal}, ${interp}`, '', 'cruz_correlacao');
   }
   h += '</div>';
 
-  h += _rankingBarras('Taxa de mortalidade por origem (%)', origemMortList);
+  h += _rankingBarras('Taxa de mortalidade por origem (%)', origemMortList, null, 'cruz_origem_mort');
   h += '<div class="ind-hint">💡 Mais cruzamentos (diagnóstico × VMI, diagnóstico × alta) exigem padronização por CID — implantação futura.</div>';
   return h;
 }
