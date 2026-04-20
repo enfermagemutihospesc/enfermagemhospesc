@@ -464,6 +464,9 @@ async function abrirModal(n) {
   document.getElementById('m-comor').value = (l.comor||'').toUpperCase();
   document.getElementById('m-adm-hosp').value = l.admHosp||'';
   document.getElementById('m-alergia').value  = (l.alergia||'').toUpperCase();
+  document.getElementById('m-origem').value   = l.origem||'';
+  document.getElementById('m-origem-outro').value = (l.origemOutro||'').toUpperCase();
+  document.getElementById('m-origem-outro-wrap').style.display = l.origem==='Transferência de outro serviço' ? 'flex' : 'none';
   document.getElementById('btn-alta').style.display = l.ocupado?'':'none';
   document.getElementById('modal-adm').classList.add('show');
   _ativarCaixaAlta();
@@ -471,23 +474,56 @@ async function abrirModal(n) {
 function fecharModal(){ document.getElementById('modal-adm').classList.remove('show'); }
 
 async function salvarAdmissao() {
+  const origem = gf('m-origem');
+  const origemOutro = gf('m-origem-outro');
+  if (origem === 'Transferência de outro serviço' && !origemOutro.trim()) {
+    toast('Informe o serviço de origem',true);
+    return;
+  }
   showLoading('Salvando admissão...');
   const d = await leitosData();
-  d[modalLeito] = {ocupado:true, pac:gf('m-pac'), diag:gf('m-diag'), dn:gf('m-dn'),
-  adm:gf('m-adm'), admHosp:gf('m-adm-hosp'), comor:gf('m-comor'), alergia:gf('m-alergia')};
+  const leitoExistente = d[modalLeito] || {};
+  // Se está admitindo (não estava ocupado) → registra data/hora e log
+  const novaAdmissao = !leitoExistente.ocupado;
+  d[modalLeito] = {
+    ocupado:true,
+    pac:gf('m-pac'), diag:gf('m-diag'), dn:gf('m-dn'),
+    adm:gf('m-adm'), admHosp:gf('m-adm-hosp'),
+    comor:gf('m-comor'), alergia:gf('m-alergia'),
+    origem: origem,
+    origemOutro: origem==='Transferência de outro serviço' ? origemOutro : '',
+    admissaoRegistradaEm: leitoExistente.admissaoRegistradaEm || new Date().toISOString()
+  };
   await dbSet('uti_leitos', d);
+
+  // Log de admissão (para relatório de indicadores)
+  if (novaAdmissao) {
+    try {
+      const key = 'uti_admissao_log';
+      const log = (await dbGet(key)) || [];
+      log.push({
+        leito: modalLeito,
+        paciente: gf('m-pac'),
+        diagnostico: gf('m-diag'),
+        admUTI: gf('m-adm'),
+        admHospesc: gf('m-adm-hosp'),
+        origem: origem,
+        origemOutro: origem==='Transferência de outro serviço' ? origemOutro : '',
+        autor: usuarioEmail,
+        registradoEm: new Date().toISOString()
+      });
+      await dbSet(key, log);
+    } catch(e){ console.warn('Log admissão:', e); }
+  }
+
   hideLoading(); fecharModal(); await renderLeitos();
   toast('Paciente admitido no leito '+pad(modalLeito));
 }
 
+// Botão "Alta / Desocupar leito" do modal de admissão → abre modal de alta
 async function darAlta() {
-  if (!confirm('Confirma alta/desocupação do leito '+modalLeito+'?')) return;
-  showLoading('Registrando alta...');
-  const d = await leitosData();
-  d[modalLeito] = {ocupado:false,pac:'',diag:'',dn:'',adm:'',admHosp:'',comor:'',alergia:''};
-  await dbSet('uti_leitos', d);
-  hideLoading(); fecharModal(); await renderLeitos();
-  toast('Leito '+pad(modalLeito)+' liberado');
+  fecharModal();
+  abrirModalAlta(modalLeito);
 }
 
 // ── FORMULÁRIO – helpers ──────────────────────────────────────────────────────
@@ -983,20 +1019,93 @@ async function gerarPDF(){
   btn.disabled = false; btn.textContent = '☁ Salvar PDF no Drive';
 }
 
-// ── FUNÇÃO DE ALTA (APAGAR DO FIREBASE) ──────────────────────────────────────
+// ── FUNÇÃO DE ALTA (modal com tipo de alta, data, hora) ──────────────────────
+// leitoParaAlta guarda qual leito vai receber alta — usado pelo modal
+let leitoParaAlta = 0;
+
 async function confirmarAlta(){
-  if(!confirm(`Alta de "${gf('f-pac')}" do Leito ${pad(leitoAtual)}?`)) return;
-  showLoading('Alta...');
-  try{
-    const ld=await leitosData();
-    ld[leitoAtual]={ocupado:false,pac:'',diag:'',dn:'',adm:'',admHosp:'',comor:'',alergia:''};
-    await dbSet('uti_leitos',ld);
-    // apaga evoluções do dia para não herdar dados
-    await dbDelete(evKey(leitoAtual,'DIURNO',hoje()));
-    await dbDelete(evKey(leitoAtual,'NOTURNO',hoje()));
-    hideLoading(); toast('✓ Leito '+pad(leitoAtual)+' liberado');
+  abrirModalAlta(leitoAtual);
+}
+
+function abrirModalAlta(leito){
+  leitoParaAlta = leito;
+  const nomePac = gf('f-pac') || '';
+  document.getElementById('modal-alta-titulo').textContent = `🏥 Alta – Leito ${pad(leito)}`;
+  document.getElementById('alta-tipo').value = '';
+  document.getElementById('alta-destino').value = '';
+  document.getElementById('alta-destino-wrap').style.display = 'none';
+  document.getElementById('alta-data').value = hoje();
+  // hora atual no formato HH:mm
+  const agora = new Date();
+  const hh = String(agora.getHours()).padStart(2,'0');
+  const mm = String(agora.getMinutes()).padStart(2,'0');
+  document.getElementById('alta-hora').value = `${hh}:${mm}`;
+  document.getElementById('alta-obs').value = '';
+  document.getElementById('modal-alta').classList.add('show');
+  _ativarCaixaAlta();
+}
+
+function fecharModalAlta(){
+  document.getElementById('modal-alta').classList.remove('show');
+}
+
+async function confirmarAltaFinal(){
+  const tipo = gf('alta-tipo');
+  const destino = gf('alta-destino');
+  const data = gf('alta-data');
+  const hora = gf('alta-hora');
+  const obs = gf('alta-obs');
+
+  if (!tipo) { toast('Selecione o tipo de alta', true); return; }
+  if (tipo === 'Transferência para outro serviço' && !destino.trim()) {
+    toast('Informe o serviço de destino', true); return;
+  }
+  if (!data || !hora) { toast('Informe data e hora da alta', true); return; }
+
+  showLoading('Registrando alta...');
+  try {
+    const ld = await leitosData();
+    const pacAntes = ld[leitoParaAlta] || {};
+
+    // Log de alta (para relatório de indicadores)
+    try {
+      const key = 'uti_alta_log';
+      const log = (await dbGet(key)) || [];
+      log.push({
+        leito: leitoParaAlta,
+        paciente: pacAntes.pac || '',
+        diagnostico: pacAntes.diag || '',
+        admUTI: pacAntes.adm || '',
+        admHospesc: pacAntes.admHosp || '',
+        origem: pacAntes.origem || '',
+        origemOutro: pacAntes.origemOutro || '',
+        tipoAlta: tipo,
+        destino: tipo === 'Transferência para outro serviço' ? destino : '',
+        dataAlta: data,
+        horaAlta: hora,
+        observacao: obs,
+        autor: usuarioEmail,
+        registradoEm: new Date().toISOString()
+      });
+      await dbSet(key, log);
+    } catch(e){ console.warn('Log alta:', e); }
+
+    // Libera o leito
+    ld[leitoParaAlta] = {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:'', origem:'', origemOutro:''};
+    await dbSet('uti_leitos', ld);
+
+    // Apaga evoluções do dia (pra próxima admissão não herdar dados)
+    await dbDelete(evKey(leitoParaAlta,'DIURNO',hoje()));
+    await dbDelete(evKey(leitoParaAlta,'NOTURNO',hoje()));
+
+    hideLoading();
+    fecharModalAlta();
+    toast(`✓ ${tipo} registrada – Leito ${pad(leitoParaAlta)} liberado`);
     await irLeitos();
-  }catch(e){ hideLoading(); toast('Erro: '+e.message,true); }
+  } catch(e) {
+    hideLoading();
+    toast('Erro: ' + e.message, true);
+  }
 }
 
 // ── FUNÇÃO DE TRANSFERÊNCIA (MOVER REGISTRO) ──────────────────────────────────
