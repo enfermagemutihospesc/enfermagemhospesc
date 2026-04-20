@@ -630,12 +630,70 @@
   <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Alergias</label>
   <input type="text" id="m-alergia" placeholder="Ex: Dipirona, Penicilina... ou NKDA" style="width:100%;">
 </div>
+<div style="display:flex;flex-direction:column;gap:5px;">
+  <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Origem do paciente</label>
+  <select id="m-origem" style="width:100%;" onchange="document.getElementById('m-origem-outro-wrap').style.display=this.value==='Transferência de outro serviço'?'flex':'none'">
+    <option value="">– selecione –</option>
+    <option value="Pronto Socorro">Pronto Socorro</option>
+    <option value="Transferência de outro serviço">Transferência de outro serviço</option>
+    <option value="Centro Cirúrgico">Centro Cirúrgico</option>
+    <option value="Enfermarias">Enfermarias</option>
+  </select>
+</div>
+<div id="m-origem-outro-wrap" style="display:none;flex-direction:column;gap:5px;">
+  <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Qual serviço?</label>
+  <input type="text" id="m-origem-outro" placeholder="Ex: UPA Esperança, Hospital Walfredo..." style="width:100%;">
+</div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding-top:4px;">
         <button class="btn btn-imp btn-sm" id="btn-alta" onclick="darAlta()">Alta / Desocupar leito</button>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-sec btn-sm" onclick="fecharModal()">Cancelar</button>
           <button class="btn btn-ok btn-sm" onclick="salvarAdmissao()">Salvar</button>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DE ALTA -->
+<div class="overlay" id="modal-alta">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-alta-titulo">🏥 Alta do Paciente</h3>
+      <button class="modal-close" onclick="fecharModalAlta()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:.78rem;color:var(--muted);line-height:1.5;">Registre o tipo de alta, a data e a hora para manter o histórico clínico e permitir o cálculo de indicadores futuros.</p>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Tipo de alta</label>
+        <select id="alta-tipo" style="width:100%;" onchange="document.getElementById('alta-destino-wrap').style.display=this.value==='Transferência para outro serviço'?'flex':'none'">
+          <option value="">– selecione –</option>
+          <option value="Alta para enfermaria">Alta para enfermaria</option>
+          <option value="Transferência para outro serviço">Transferência para outro serviço</option>
+          <option value="Óbito">Óbito</option>
+        </select>
+      </div>
+      <div id="alta-destino-wrap" style="display:none;flex-direction:column;gap:5px;">
+        <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Para qual serviço?</label>
+        <input type="text" id="alta-destino" placeholder="Ex: UPA Esperança, Hospital Walfredo..." style="width:100%;">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Data da alta</label>
+          <input type="date" id="alta-data" style="width:100%;">
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Hora da alta</label>
+          <input type="time" id="alta-hora" style="width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Observação (opcional)</label>
+        <textarea id="alta-obs" placeholder="Qualquer informação adicional sobre a alta..." style="width:100%;min-height:60px;"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:6px;padding-top:4px;">
+        <button class="btn btn-sec btn-sm" onclick="fecharModalAlta()">Cancelar</button>
+        <button class="btn btn-imp btn-sm" onclick="confirmarAltaFinal()">Confirmar Alta</button>
       </div>
     </div>
   </div>
