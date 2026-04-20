@@ -183,10 +183,30 @@ async function renderNAS(){
   lista.innerHTML='';
   for(const [k,pac] of ocupados){
     const leito=parseInt(k);
-    const saved=await dbGet('uti_nas_'+leito+'_'+turno+'_'+hoje());
+    // Busca NAS salvo no turno atual
+    let saved=await dbGet('uti_nas_'+leito+'_'+turno+'_'+hoje());
+    let herdado=false;
+    // 1ª tentativa: outro turno do MESMO DIA
+    if(!saved){
+      const outroTurno = turno==='DIURNO' ? 'NOTURNO' : 'DIURNO';
+      const savedOutro = await dbGet('uti_nas_'+leito+'_'+outroTurno+'_'+hoje());
+      if(savedOutro && savedOutro.respostas){
+        saved = { respostas: savedOutro.respostas, total: savedOutro.total, herdadoDe: outroTurno.toLowerCase() };
+        herdado = true;
+      }
+    }
+    // 2ª tentativa: último NAS do MESMO paciente/leito em dias anteriores
+    if(!saved){
+      const ultimo = await _ultimoNASDoLeito(leito, pac.pac);
+      if(ultimo && ultimo.respostas){
+        saved = { respostas: ultimo.respostas, total: ultimo.total, herdadoDe: `${fmtD(ultimo.data)} (${ultimo.turno.toLowerCase()})` };
+        herdado = true;
+      }
+    }
     const t=saved&&saved.total?parseFloat(saved.total):0;
     const badgeCls=t<=0?'lb-ok':t<50?'lb-ok':t<100?'lb-warn':'lb-high';
     const badgeTxt=t>0?`NAS ${t.toFixed(1)}%`:'Não avaliado';
+    const herdTag = herdado ? `<span style="font-size:.62rem;background:#fff3cd;color:#856404;padding:1px 6px;border-radius:10px;font-weight:600;margin-left:4px;">↻ ${saved.herdadoDe}</span>` : '';
 
     const card=document.createElement('div');
     card.className='nas-card'; card.id='nas-card-'+leito;
@@ -198,7 +218,7 @@ async function renderNAS(){
           ${pac.diag?`<div style="font-size:.7rem;color:var(--muted);margin-top:2px;">${pac.diag}</div>`:''}
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-          <span class="lb ${badgeCls}" id="nas-badge-${leito}">${badgeTxt}</span>
+          <span class="lb ${badgeCls}" id="nas-badge-${leito}">${badgeTxt}</span>${herdTag}
           <span id="nas-arrow-${leito}" style="color:var(--muted);font-size:.75rem;">▼</span>
         </div>
       </div>
@@ -220,17 +240,19 @@ function toggleNASCard(leito){
 
 function _buildNASForm(leito, saved){
   const L=pad(leito);
+  // Suporta novo formato (saved.respostas) e antigo (respostas no raiz de saved)
+  const resp = (saved && saved.respostas) ? saved.respostas : saved;
   let h='';
   for(const item of NAS_ITEMS){
     h+=`<div class="nas-item"><div class="nas-item-t">${item.label}</div><div class="nas-item-c">`;
     if(item.tipo==='radio'){
       for(const opt of item.opcoes){
-        const chk=saved&&saved[item.id]===opt.id?'checked':'';
+        const chk=resp&&resp[item.id]===opt.id?'checked':'';
         h+=`<label class="nas-opt"><input type="radio" name="nasR_${item.id}_L${L}" value="${opt.id}" data-val="${opt.val}" ${chk} onchange="calcNASTotal(${leito})">
           ${opt.label} <em style="color:var(--muted);font-size:.7rem;margin-left:4px;">${opt.val}%</em></label>`;
       }
     } else {
-      const chk=saved&&saved[item.id]?'checked':'';
+      const chk=resp&&resp[item.id]?'checked':'';
       h+=`<label class="nas-opt"><input type="checkbox" id="nasC_${item.id}_L${L}" data-val="${item.val}" ${chk} onchange="calcNASTotal(${leito})">
         Sim — <em style="color:var(--muted);font-size:.7rem;">${item.val}%</em></label>`;
     }
@@ -281,19 +303,75 @@ function calcNASTotal(leito){
 
 async function salvarNAS(leito){
   const L=pad(leito);
-  const data={leito,turno,data:hoje(),autor:usuarioEmail,criadoEm:new Date().toISOString()};
+  const leitos = await leitosData();
+  const pac = leitos[leito]?.pac || '';
+  const respostas = {};
   for(const item of NAS_ITEMS){
     if(item.tipo==='radio'){
       const sel=document.querySelector(`input[name="nasR_${item.id}_L${L}"]:checked`);
-      data[item.id]=sel?sel.value:null;
+      respostas[item.id]=sel?sel.value:null;
     } else {
       const cb=document.getElementById(`nasC_${item.id}_L${L}`);
-      data[item.id]=cb?cb.checked:false;
+      respostas[item.id]=cb?cb.checked:false;
     }
   }
-  data.total=calcNASTotal(leito);
+  const data = {
+    leito, turno, data:hoje(),
+    paciente: pac,
+    respostas,
+    total: calcNASTotal(leito),
+    autor: usuarioEmail,
+    criadoEm: new Date().toISOString()
+  };
+  // Compatibilidade retroativa: também expõe as respostas no raiz (legado)
+  Object.assign(data, respostas);
   await dbSet('uti_nas_'+leito+'_'+turno+'_'+hoje(),data);
   toast('✓ NAS Leito '+L+' salvo');
+}
+
+// Busca o NAS mais recente para um leito (usado pra herdar quando paciente
+// ainda não tem NAS do dia). Varre localStorage e Firestore, ordena por data
+// desc, e retorna o primeiro que bater com o mesmo paciente do leito.
+async function _ultimoNASDoLeito(leito, pacienteAtual){
+  const chaves = new Set();
+  const prefixo = 'uti_nas_' + leito + '_';
+  const hj = hoje();
+  // localStorage
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(prefixo)) chaves.add(k);
+  }
+  // Firestore
+  if (!modoOffline && db) {
+    try {
+      const snap = await db.collection('uti').get();
+      snap.forEach(doc => { if (doc.id.startsWith(prefixo)) chaves.add(doc.id); });
+    } catch(e) { console.warn('Busca NAS anterior:', e); }
+  }
+  // Cada chave: uti_nas_<leito>_<TURNO>_<YYYY-MM-DD>
+  const candidatos = [];
+  for (const chave of chaves) {
+    const partes = chave.split('_');
+    // ['uti','nas',<leito>,<TURNO>,<DATA>]
+    if (partes.length < 5) continue;
+    const dataChave = partes.slice(4).join('_'); // caso a data tenha hífens
+    if (dataChave >= hj) continue; // ignora o próprio dia
+    const turnoChave = partes[3];
+    candidatos.push({ chave, data: dataChave, turno: turnoChave });
+  }
+  // Ordena por data desc, turno desc (NOTURNO antes de DIURNO do mesmo dia)
+  candidatos.sort((a, b) => {
+    if (a.data !== b.data) return b.data.localeCompare(a.data);
+    return b.turno.localeCompare(a.turno);
+  });
+  // Percorre até achar um que seja do mesmo paciente atual
+  for (const c of candidatos) {
+    const r = await dbGet(c.chave);
+    if (r && r.respostas && (!pacienteAtual || !r.paciente || r.paciente === pacienteAtual)) {
+      return { ...r, data: c.data, turno: c.turno };
+    }
+  }
+  return null;
 }
 
 function _atualizarResumoNAS(){
@@ -1255,7 +1333,12 @@ async function renderLeitos() {
   for (let i=1;i<=TOTAL;i++) {
     const l = d[i] || {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:''};
     const evHoje = await dbGet('uti_ev_'+i+'_'+turno+'_'+hoje());
-    const nasHoje = l.ocupado ? await dbGet('uti_nas_'+i+'_'+turno+'_'+hoje()) : null;
+    let nasHoje = l.ocupado ? await dbGet('uti_nas_'+i+'_'+turno+'_'+hoje()) : null;
+    // Sem NAS no turno atual → tenta o outro turno do mesmo dia (NAS é 24h)
+    if (l.ocupado && !nasHoje) {
+      const outroTurno = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
+      nasHoje = await dbGet('uti_nas_'+i+'_'+outroTurno+'_'+hoje());
+    }
     const card = document.getElementById('leito-card-'+i);
     card.classList.remove('loading');
     if (l.ocupado) card.classList.add('ocupado');
