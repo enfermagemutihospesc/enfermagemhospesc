@@ -324,6 +324,833 @@ function _atualizarResumoNAS(){
     </div>`;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── INDICADORES ASSISTENCIAIS ────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _indCategoriaAtiva = 'ocupacao';
+let _indCache = null; // dados brutos carregados (admissões, altas, dispositivos, evoluções, NAS)
+
+function irIndicadores(){
+  mostrarTela('t-indicadores');
+  // liga os botões de categoria
+  document.querySelectorAll('.ind-cat-btn').forEach(b=>{
+    b.onclick = () => {
+      document.querySelectorAll('.ind-cat-btn').forEach(x=>x.classList.remove('ativa'));
+      b.classList.add('ativa');
+      _indCategoriaAtiva = b.dataset.cat;
+      renderIndicadores();
+    };
+  });
+  renderIndicadores();
+  window.scrollTo(0,0);
+}
+
+function _atualizarPeriodoIndicadores(){
+  const sel = gf('ind-periodo');
+  document.getElementById('ind-custom').style.display = sel==='custom' ? 'flex' : 'none';
+}
+
+// Retorna {inicio, fim} como objetos Date para o período selecionado
+function _indPeriodo(){
+  const tipo = gf('ind-periodo');
+  const hoje = new Date(); hoje.setHours(23,59,59,999);
+  if (tipo === 'all') return { inicio: new Date(2000,0,1), fim: hoje, rotulo: 'Todo o histórico' };
+  if (tipo === 'custom') {
+    const de = gf('ind-de'), ate = gf('ind-ate');
+    if (!de || !ate) return null;
+    const [ay,am,ad] = de.split('-').map(Number);
+    const [by,bm,bd] = ate.split('-').map(Number);
+    return {
+      inicio: new Date(ay, am-1, ad, 0,0,0),
+      fim:    new Date(by, bm-1, bd, 23,59,59),
+      rotulo: `${fmtD(de)} até ${fmtD(ate)}`
+    };
+  }
+  const dias = parseInt(tipo);
+  const inicio = new Date();
+  inicio.setDate(inicio.getDate() - dias);
+  inicio.setHours(0,0,0,0);
+  return { inicio, fim: hoje, rotulo: `Últimos ${dias} dias` };
+}
+
+// Carrega todos os dados brutos necessários (uma vez por Atualizar)
+async function _carregarDadosInd(){
+  showLoading('Carregando indicadores...');
+  try {
+    const admissoes = (await dbGet('uti_admissao_log')) || [];
+    const altas     = (await dbGet('uti_alta_log')) || [];
+    const dispLog   = (await dbGet('uti_disp_log')) || [];
+    // Evoluções: varremos todas as chaves uti_ev_*
+    const evolucoes = [];
+    const keysEv = await _listarChaves('uti_ev_');
+    for (const k of keysEv) {
+      const ev = await dbGet(k);
+      if (ev) evolucoes.push(ev);
+    }
+    // NAS: todas as chaves uti_nas_*
+    const nasList = [];
+    const keysNas = await _listarChaves('uti_nas_');
+    for (const k of keysNas) {
+      const n = await dbGet(k);
+      if (n) nasList.push(n);
+    }
+    _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList };
+  } finally {
+    hideLoading();
+  }
+  return _indCache;
+}
+
+// Lista todas as chaves com um prefixo (Firestore + localStorage fallback)
+async function _listarChaves(prefixo){
+  const chaves = new Set();
+  // Do localStorage
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(prefixo)) chaves.add(k);
+  }
+  // Do Firestore
+  if (!modoOffline && db) {
+    try {
+      const snap = await db.collection('uti').get();
+      snap.forEach(doc => { if (doc.id.startsWith(prefixo)) chaves.add(doc.id); });
+    } catch(e) { console.warn('Lista chaves:', e); }
+  }
+  return Array.from(chaves);
+}
+
+// Helper: transforma "YYYY-MM-DD" em Date local
+function _dataLocal(s){
+  if (!s) return null;
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d, 12, 0, 0);
+}
+// Helper: dias entre duas datas YYYY-MM-DD
+function _diasEntre(a, b){
+  if (!a || !b) return null;
+  const da = _dataLocal(a), dbt = _dataLocal(b);
+  if (!da || !dbt) return null;
+  return Math.max(0, Math.round((dbt - da) / 86400000));
+}
+// Helper: está dentro do período? (recebe string YYYY-MM-DD)
+function _dentroPeriodo(dataStr, periodo){
+  if (!dataStr) return false;
+  const d = _dataLocal(dataStr);
+  if (!d) return false;
+  return d >= periodo.inicio && d <= periodo.fim;
+}
+// Helper: formata percentual
+function _pct(num, den, casas=1){
+  if (!den || den===0) return '0%';
+  return (num*100/den).toFixed(casas) + '%';
+}
+function _num(v, casas=0){
+  if (v==null || isNaN(v)) return '–';
+  return Number(v).toFixed(casas);
+}
+
+// Renderiza um card compacto com valor + legenda
+function _cardInd(label, valor, sub='', cls=''){
+  return `<div class="ind-card ${cls}">
+    <div class="ind-card-l">${label}</div>
+    <div class="ind-card-v">${valor}</div>
+    ${sub?`<div class="ind-card-s">${sub}</div>`:''}
+  </div>`;
+}
+
+// Renderiza um ranking horizontal tipo barra
+function _rankingBarras(titulo, itens, max=null){
+  if (!itens.length) return `<div class="ind-grupo"><div class="ind-grupo-t">${titulo}</div><div class="ind-vazio">Sem dados no período.</div></div>`;
+  const top = max ? itens.slice(0, max) : itens;
+  const maior = Math.max(...top.map(i=>i.valor));
+  let h = `<div class="ind-grupo"><div class="ind-grupo-t">${titulo}</div><div class="ind-bar-wrap">`;
+  top.forEach(i => {
+    const pct = maior>0 ? (i.valor*100/maior) : 0;
+    h += `<div class="ind-bar">
+      <span class="ind-bar-l" title="${i.label}">${i.label}</span>
+      <div class="ind-bar-bg"><div class="ind-bar-fill" style="width:${pct}%;"></div></div>
+      <span class="ind-bar-n">${i.valor}</span>
+    </div>`;
+  });
+  h += `</div></div>`;
+  return h;
+}
+
+// Conta ocorrências de um array de strings (case-insensitive, trim, separa por ,/|/+)
+function _contarTermos(textos){
+  const mapa = {};
+  textos.forEach(t => {
+    if (!t) return;
+    // Quebra por separadores comuns
+    const termos = String(t).split(/[,\|\+]/).map(x => x.trim().toUpperCase()).filter(x => x);
+    termos.forEach(term => {
+      mapa[term] = (mapa[term]||0) + 1;
+    });
+  });
+  return Object.entries(mapa).map(([label,valor]) => ({label, valor})).sort((a,b) => b.valor - a.valor);
+}
+
+// ── RENDER PRINCIPAL ─────────────────────────────────────────────────────────
+async function renderIndicadores(){
+  const periodo = _indPeriodo();
+  if (!periodo) { toast('Informe o período personalizado',true); return; }
+  await _carregarDadosInd();
+  const container = document.getElementById('ind-conteudo');
+  container.innerHTML = '';
+
+  const renderers = {
+    ocupacao:      _indOcupacao,
+    saida:         _indSaida,
+    demograficos:  _indDemograficos,
+    sazonalidade:  _indSazonalidade,
+    clinicos:      _indClinicos,
+    dispositivos:  _indDispositivos,
+    ventilacao:    _indVentilacao,
+    infusoes:      _indInfusoes,
+    atbs:          _indATBs,
+    nas:           _indNASIndicadores,
+    nutricao:      _indNutricao,
+    neuro:         _indNeuro,
+    operacionais:  _indOperacionais,
+    cruzamentos:   _indCruzamentos
+  };
+  const fn = renderers[_indCategoriaAtiva] || _indOcupacao;
+  container.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px;">Período: <strong>${periodo.rotulo}</strong></div>` + fn(periodo);
+}
+
+// ── 1. OCUPAÇÃO E FLUXO ──────────────────────────────────────────────────────
+function _indOcupacao(periodo){
+  const { admissoes, altas } = _indCache;
+  const diasPeriodo = Math.round((periodo.fim - periodo.inicio)/86400000) + 1;
+
+  // Filtra admissões do período
+  const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+  const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+
+  // Calcula pacientes-dia e taxa de ocupação
+  // Para cada admissão concluída (com alta), conta dias de internação no período
+  let pacientesDia = 0;
+  admissoes.forEach(adm => {
+    if (!adm.admUTI) return;
+    const inicio = _dataLocal(adm.admUTI);
+    if (!inicio) return;
+    // Encontra a alta desse paciente (match pelo leito + ordem cronológica)
+    const alta = altas.find(a =>
+      a.leito === adm.leito &&
+      a.paciente === adm.paciente &&
+      _dataLocal(a.dataAlta) >= inicio
+    );
+    const fimInt = alta ? _dataLocal(alta.dataAlta) : new Date(); // em curso → hoje
+    // Sobreposição com período
+    const s = inicio > periodo.inicio ? inicio : periodo.inicio;
+    const e = fimInt < periodo.fim ? fimInt : periodo.fim;
+    if (e >= s) pacientesDia += Math.floor((e-s)/86400000) + 1;
+  });
+
+  const taxaOcup = TOTAL * diasPeriodo > 0 ? (pacientesDia*100/(TOTAL*diasPeriodo)).toFixed(1) + '%' : '–';
+
+  // Giro de leito (admissões/leito no período)
+  const giro = TOTAL > 0 ? (admPer.length/TOTAL).toFixed(1) : '–';
+
+  // Tempo médio de permanência (admissões com alta no período)
+  const permanencias = altasPer
+    .map(a => _diasEntre(a.admUTI, a.dataAlta))
+    .filter(d => d !== null);
+  const permMedia = permanencias.length ? (permanencias.reduce((s,x)=>s+x,0)/permanencias.length).toFixed(1) : '–';
+
+  // Intervalo médio entre altas e admissões no mesmo leito
+  const intervalos = [];
+  for (let l = 1; l <= TOTAL; l++) {
+    const eventosLeito = [
+      ...altas.filter(a => a.leito === l).map(a => ({tipo:'alta', data: _dataLocal(a.dataAlta)})),
+      ...admissoes.filter(a => a.leito === l).map(a => ({tipo:'adm',  data: _dataLocal(a.admUTI)}))
+    ].filter(e => e.data).sort((a,b) => a.data - b.data);
+    for (let i = 1; i < eventosLeito.length; i++) {
+      if (eventosLeito[i-1].tipo === 'alta' && eventosLeito[i].tipo === 'adm') {
+        const d = Math.floor((eventosLeito[i].data - eventosLeito[i-1].data)/86400000);
+        if (d >= 0 && _dentroPeriodo(eventosLeito[i].data.toISOString().slice(0,10), periodo)) {
+          intervalos.push(d);
+        }
+      }
+    }
+  }
+  const intervMedio = intervalos.length ? (intervalos.reduce((s,x)=>s+x,0)/intervalos.length).toFixed(1) : '–';
+
+  // Origem: distribuição
+  const origens = {};
+  admPer.forEach(a => {
+    const o = a.origem || 'Não informado';
+    origens[o] = (origens[o]||0) + 1;
+  });
+  const origensList = Object.entries(origens).map(([label,valor]) => ({label,valor})).sort((a,b)=>b.valor-a.valor);
+
+  // Procedência de transferências externas
+  const procedencias = admPer
+    .filter(a => a.origem === 'Transferência de outro serviço' && a.origemOutro)
+    .map(a => a.origemOutro);
+  const procList = _contarTermos(procedencias);
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Admissões no período', admPer.length, `${TOTAL} leitos`);
+  h += _cardInd('Altas no período', altasPer.length);
+  h += _cardInd('Taxa de ocupação', taxaOcup, `${pacientesDia} pacientes-dia / ${TOTAL*diasPeriodo} possíveis`);
+  h += _cardInd('Pacientes-dia', pacientesDia, `em ${diasPeriodo} dias`);
+  h += _cardInd('Giro de leito', giro, 'admissões por leito');
+  h += _cardInd('Permanência média', permMedia !== '–' ? permMedia + ' dias' : '–', `${permanencias.length} altas computadas`);
+  h += _cardInd('Intervalo entre ocupações', intervMedio !== '–' ? intervMedio + ' dias' : '–', 'tempo médio leito vago');
+  h += '</div>';
+
+  h += _rankingBarras('Admissões por origem', origensList);
+  h += _rankingBarras('Procedência (transferências externas)', procList, 10);
+
+  return h;
+}
+
+// ── 2. SAÍDA ─────────────────────────────────────────────────────────────────
+function _indSaida(periodo){
+  const { altas } = _indCache;
+  const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+  const total = altasPer.length;
+
+  const tipos = {};
+  altasPer.forEach(a => {
+    const t = a.tipoAlta || 'Não informado';
+    tipos[t] = (tipos[t]||0) + 1;
+  });
+  const obitos = tipos['Óbito'] || 0;
+  const enf    = tipos['Alta para enfermaria'] || 0;
+  const transf = tipos['Transferência para outro serviço'] || 0;
+
+  // Destinos de transferência
+  const destinos = altasPer
+    .filter(a => a.tipoAlta === 'Transferência para outro serviço' && a.destino)
+    .map(a => a.destino);
+  const destList = _contarTermos(destinos);
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Total de altas', total);
+  h += _cardInd('Taxa de mortalidade', _pct(obitos, total), `${obitos} óbitos`, obitos>0 ? 'vermelho' : 'verde');
+  h += _cardInd('Alta para enfermaria', _pct(enf, total), `${enf} pacientes`, 'verde');
+  h += _cardInd('Transferências externas', _pct(transf, total), `${transf} pacientes`);
+  h += '</div>';
+
+  const tiposList = Object.entries(tipos).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
+  h += _rankingBarras('Distribuição por tipo de alta', tiposList);
+  h += _rankingBarras('Destinos mais frequentes (transferências)', destList, 10);
+  return h;
+}
+
+// ── 3. DEMOGRÁFICOS ──────────────────────────────────────────────────────────
+function _indDemograficos(periodo){
+  const { admissoes, altas } = _indCache;
+  const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+
+  // Sexo
+  const sexos = { M: 0, F: 0, NI: 0 };
+  admPer.forEach(a => {
+    const s = a.sexo || 'NI';
+    sexos[s] = (sexos[s]||0) + 1;
+  });
+  const totalSexo = admPer.length;
+
+  // Idade (dn + admUTI)
+  const idades = admPer
+    .map(a => {
+      if (!a.dn || !a.admUTI) return null;
+      const dn = _dataLocal(a.dn), adm = _dataLocal(a.admUTI);
+      if (!dn || !adm) return null;
+      const idade = Math.floor((adm - dn) / (365.25 * 86400000));
+      return idade >= 0 && idade <= 120 ? idade : null;
+    })
+    .filter(i => i !== null);
+
+  const idadeMedia = idades.length ? (idades.reduce((s,x)=>s+x,0)/idades.length).toFixed(1) : '–';
+  const faixas = { '< 18': 0, '18–40': 0, '41–60': 0, '61–80': 0, '> 80': 0 };
+  idades.forEach(i => {
+    if (i < 18) faixas['< 18']++;
+    else if (i <= 40) faixas['18–40']++;
+    else if (i <= 60) faixas['41–60']++;
+    else if (i <= 80) faixas['61–80']++;
+    else faixas['> 80']++;
+  });
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Total de admissões', totalSexo);
+  h += _cardInd('Idade média', idadeMedia !== '–' ? idadeMedia + ' anos' : '–', `${idades.length} pacientes com DN registrada`);
+  h += _cardInd('Masculinos', _pct(sexos.M, totalSexo), `${sexos.M} pacientes`);
+  h += _cardInd('Femininos', _pct(sexos.F, totalSexo), `${sexos.F} pacientes`);
+  if (sexos.NI > 0) h += _cardInd('Sexo não informado', _pct(sexos.NI, totalSexo), `${sexos.NI} pacientes`, 'laranja');
+  h += '</div>';
+
+  const faixasList = Object.entries(faixas).map(([label,valor])=>({label,valor}));
+  h += _rankingBarras('Distribuição por faixa etária', faixasList);
+
+  // Idade média por diagnóstico (top 5)
+  const diagIdades = {};
+  admPer.forEach(a => {
+    if (!a.diagnostico || !a.dn || !a.admUTI) return;
+    const dn = _dataLocal(a.dn), adm = _dataLocal(a.admUTI);
+    if (!dn || !adm) return;
+    const idade = Math.floor((adm - dn) / (365.25 * 86400000));
+    if (idade < 0 || idade > 120) return;
+    const diag = a.diagnostico.trim().toUpperCase();
+    if (!diagIdades[diag]) diagIdades[diag] = [];
+    diagIdades[diag].push(idade);
+  });
+  const diagIdList = Object.entries(diagIdades)
+    .filter(([,arr]) => arr.length >= 2) // só diagnósticos com 2+ casos
+    .map(([label, arr]) => ({
+      label: label.slice(0, 40),
+      valor: Math.round(arr.reduce((s,x)=>s+x,0)/arr.length)
+    }))
+    .sort((a,b) => b.valor - a.valor);
+  h += _rankingBarras('Idade média por diagnóstico (texto livre, 2+ casos)', diagIdList, 10);
+  h += '<div class="ind-hint">⚠️ Agrupamento por texto livre — implantação de CID/categorias padronizadas melhorará esta análise.</div>';
+  return h;
+}
+
+// ── 4. SAZONALIDADE ──────────────────────────────────────────────────────────
+function _indSazonalidade(periodo){
+  const { admissoes, altas } = _indCache;
+  const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+  const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+
+  // Admissões por mês (YYYY-MM)
+  const porMes = {};
+  admPer.forEach(a => {
+    if (!a.admUTI) return;
+    const mes = a.admUTI.slice(0, 7);
+    porMes[mes] = (porMes[mes]||0) + 1;
+  });
+  const mesesOrd = Object.keys(porMes).sort();
+  const mesesList = mesesOrd.map(k => ({label: k, valor: porMes[k]}));
+
+  // Mortalidade por mês
+  const mortPorMes = {};
+  const totPorMes = {};
+  altasPer.forEach(a => {
+    if (!a.dataAlta) return;
+    const mes = a.dataAlta.slice(0, 7);
+    totPorMes[mes] = (totPorMes[mes]||0) + 1;
+    if (a.tipoAlta === 'Óbito') mortPorMes[mes] = (mortPorMes[mes]||0) + 1;
+  });
+  const mortList = Object.keys(totPorMes).sort().map(k => ({
+    label: k,
+    valor: Math.round((mortPorMes[k]||0) * 100 / totPorMes[k])
+  }));
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Meses com admissões', mesesOrd.length);
+  h += _cardInd('Média mensal', mesesOrd.length ? (admPer.length/mesesOrd.length).toFixed(1) : '–', 'admissões/mês');
+  h += '</div>';
+
+  h += _rankingBarras('Admissões por mês', mesesList);
+  h += _rankingBarras('Taxa de mortalidade por mês (%)', mortList);
+  h += '<div class="ind-hint">📆 Use período "12 meses" ou maior para ver tendências sazonais.</div>';
+  return h;
+}
+
+// ── Categorias que ainda serão detalhadas ────────────────────────────────────
+function _indClinicos(periodo){
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const total = evPer.length;
+
+  const isolContato    = evPer.filter(e => e.isolamento === 'Contato').length;
+  const isolGoticulas  = evPer.filter(e => e.isolamento === 'Gotículas').length;
+  const isolAerossois  = evPer.filter(e => e.isolamento === 'Aerossóis').length;
+  const isolVigilancia = evPer.filter(e => e.isolamento === 'Vigilância').length;
+
+  const lppAlto   = evPer.filter(e => parseInt(e.bradScore) > 0 && parseInt(e.bradScore) <= 11).length;
+  const quedaAlto = evPer.filter(e => parseInt(e.morseScore) >= 45).length;
+  const comBraden = evPer.filter(e => e.bradScore && e.bradScore !== '–').length;
+  const comMorse  = evPer.filter(e => e.morseScore && e.morseScore !== '–' && e.morseScore !== '0').length;
+  const pulseira  = evPer.filter(e => e.pulseira === 'Sim').length;
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Evoluções no período', total);
+  h += _cardInd('Isolamento de contato', _pct(isolContato, total), `${isolContato} evoluções`);
+  h += _cardInd('Isolamento de gotículas', _pct(isolGoticulas, total), `${isolGoticulas} evoluções`);
+  h += _cardInd('Isolamento de aerossóis', _pct(isolAerossois, total), `${isolAerossois} evoluções`);
+  h += _cardInd('Vigilância', _pct(isolVigilancia, total), `${isolVigilancia} evoluções`);
+  h += _cardInd('LPP – Risco alto', _pct(lppAlto, comBraden), `${lppAlto} de ${comBraden} Braden avaliados`, lppAlto>0?'vermelho':'verde');
+  h += _cardInd('Queda – Risco alto', _pct(quedaAlto, comMorse), `${quedaAlto} de ${comMorse} Morse avaliados`, quedaAlto>0?'vermelho':'verde');
+  h += _cardInd('Pulseira de identificação', _pct(pulseira, total), `${pulseira} evoluções`, 'verde');
+  h += '</div>';
+  return h;
+}
+
+function _indDispositivos(periodo){
+  const { dispLog, evolucoes } = _indCache;
+  const tipos = ['AVC','CDL','SVD','SNE','TOT','TQT'];
+
+  // Dias-paciente no período = soma de evoluções no período (1 evolução = 1 turno = 0,5 dia, mas simplificamos: 1 leito/dia = 1)
+  const diasPaciente = new Set(evolucoes.filter(e => _dentroPeriodo(e.data, periodo)).map(e => e.leito + '|' + e.data)).size;
+
+  // Para cada tipo, soma dias-dispositivo: conta evoluções onde o dispositivo estava presente
+  const diasDisp = {};
+  tipos.forEach(t => { diasDisp[t] = 0; });
+
+  evolucoes.forEach(e => {
+    if (!_dentroPeriodo(e.data, periodo)) return;
+    if (e.avc_l)  diasDisp.AVC++;
+    if (e.dial_l) diasDisp.CDL++;
+    if (e.svd_n)  diasDisp.SVD++;
+    if (e.sne_n)  diasDisp.SNE++;
+    if (e.tot_n || (e.vent && e.vent.includes('TOT'))) diasDisp.TOT++;
+    if (e.tqt_n || (e.vent && e.vent.includes('TQT'))) diasDisp.TQT++;
+  });
+
+  // Tempo médio de uso por paciente: entre instalação e retirada no log
+  const tempos = {};
+  tipos.forEach(t => { tempos[t] = []; });
+  dispLog.forEach(d => {
+    if (!d.data_instalacao || !d.data_retirada) return;
+    if (!_dentroPeriodo(d.data_retirada, periodo)) return;
+    const dias = _diasEntre(d.data_instalacao, d.data_retirada);
+    if (dias !== null && tempos[d.tipo]) tempos[d.tipo].push(dias);
+  });
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Dias-paciente no período', diasPaciente, 'base para cálculo das taxas');
+  tipos.forEach(t => {
+    const tx = diasPaciente > 0 ? (diasDisp[t]*100/diasPaciente).toFixed(1)+'%' : '–';
+    h += _cardInd(`Uso de ${t}`, tx, `${diasDisp[t]} dias-dispositivo`);
+  });
+  h += '</div>';
+
+  h += '<div class="ind-grupo"><div class="ind-grupo-t">Tempo médio de uso (retiradas no período)</div><div class="ind-bar-wrap">';
+  tipos.forEach(t => {
+    const arr = tempos[t];
+    const media = arr.length ? (arr.reduce((s,x)=>s+x,0)/arr.length).toFixed(1) : '–';
+    h += `<div class="ind-bar">
+      <span class="ind-bar-l">${t}</span>
+      <div class="ind-bar-bg"><div class="ind-bar-fill" style="width:${arr.length?Math.min(100, parseFloat(media)*5):0}%;"></div></div>
+      <span class="ind-bar-n">${media !== '–' ? media + 'd' : '–'}</span>
+    </div>`;
+  });
+  h += '</div></div>';
+  h += '<div class="ind-hint">📌 Taxa = dias com o dispositivo ativo / dias-paciente × 100 (padrão ANVISA/CDC).</div>';
+  return h;
+}
+
+function _indVentilacao(periodo){
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const total = evPer.length;
+
+  const diasVMI = evPer.filter(e => e.vent && (e.vent.includes('TOT') || e.vent.includes('TQT'))).length;
+  const diasPac = new Set(evPer.map(e => e.leito + '|' + e.data)).size;
+  const taxaVMI = diasPac > 0 ? (diasVMI*100/diasPac).toFixed(1)+'%' : '–';
+
+  // Tipo de oxigenoterapia
+  const oxig = {};
+  evPer.forEach(e => {
+    const v = e.vent || 'Não informado';
+    oxig[v] = (oxig[v]||0) + 1;
+  });
+  const oxigList = Object.entries(oxig).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
+
+  // Modos ventilatórios
+  const modos = {};
+  evPer.forEach(e => {
+    if (!e.vmi_modo) return;
+    modos[e.vmi_modo] = (modos[e.vmi_modo]||0) + 1;
+  });
+  const modosList = Object.entries(modos).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
+
+  // FiO2 médio
+  const fio2s = evPer.map(e => parseFloat(e.vmi_fio2)).filter(n => !isNaN(n) && n>0 && n<=100);
+  const fio2Medio = fio2s.length ? (fio2s.reduce((s,x)=>s+x,0)/fio2s.length).toFixed(1) : '–';
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Evoluções com VMI', diasVMI, `em ${total} evoluções`);
+  h += _cardInd('Taxa de VMI', taxaVMI, 'dias-VMI / dias-paciente');
+  h += _cardInd('FiO₂ médio (VMI)', fio2Medio !== '–' ? fio2Medio + '%' : '–', `${fio2s.length} registros`);
+  h += '</div>';
+
+  h += _rankingBarras('Tipo de oxigenoterapia', oxigList);
+  h += _rankingBarras('Modos ventilatórios mais usados', modosList);
+  return h;
+}
+
+function _indInfusoes(periodo){
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const total = evPer.length;
+
+  // Prevalência de DVA
+  const comDVA = evPer.filter(e => {
+    if (e.dva) {
+      const algum = Object.values(e.dva).some(v => v.checked);
+      if (algum) return true;
+    }
+    return (e.dvaOutros||[]).length > 0;
+  }).length;
+
+  // Prevalência de sedo
+  const comSedo = evPer.filter(e => {
+    if (e.sedo) {
+      const algum = Object.values(e.sedo).some(v => v.checked);
+      if (algum) return true;
+    }
+    return (e.sedoOutros||[]).length > 0;
+  }).length;
+
+  // Ranking DVAs
+  const dvaCount = {};
+  evPer.forEach(e => {
+    if (e.dva) Object.entries(e.dva).forEach(([nome,v]) => {
+      if (v.checked) dvaCount[nome] = (dvaCount[nome]||0)+1;
+    });
+    (e.dvaOutros||[]).forEach(o => {
+      if (o.nome) {
+        const n = o.nome.trim().toUpperCase();
+        dvaCount[n] = (dvaCount[n]||0)+1;
+      }
+    });
+  });
+  const dvaList = Object.entries(dvaCount).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
+
+  // Ranking Sedo
+  const sedoCount = {};
+  evPer.forEach(e => {
+    if (e.sedo) Object.entries(e.sedo).forEach(([nome,v]) => {
+      if (v.checked) sedoCount[nome] = (sedoCount[nome]||0)+1;
+    });
+    (e.sedoOutros||[]).forEach(o => {
+      if (o.nome) {
+        const n = o.nome.trim().toUpperCase();
+        sedoCount[n] = (sedoCount[n]||0)+1;
+      }
+    });
+  });
+  const sedoList = Object.entries(sedoCount).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Prevalência de DVA', _pct(comDVA, total), `${comDVA} evoluções`);
+  h += _cardInd('Prevalência de sedoanalgesia', _pct(comSedo, total), `${comSedo} evoluções`);
+  h += '</div>';
+
+  h += _rankingBarras('DVAs mais utilizadas', dvaList);
+  h += _rankingBarras('Sedativos/analgésicos mais utilizados', sedoList);
+  return h;
+}
+
+function _indATBs(periodo){
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const total = evPer.length;
+
+  // Evoluções com ATB
+  const comATB = evPer.filter(e => (e.atbs||[]).some(a => a.nome && a.nome.trim())).length;
+
+  // Com 2+ ATBs simultâneos
+  const multiATB = evPer.filter(e => (e.atbs||[]).filter(a => a.nome && a.nome.trim()).length >= 2).length;
+
+  // Ranking
+  const atbCount = {};
+  evPer.forEach(e => {
+    (e.atbs||[]).forEach(a => {
+      if (!a.nome) return;
+      // Usa só a primeira palavra relevante (Meropenem 1g 8/8h → MEROPENEM)
+      const nome = a.nome.trim().toUpperCase().split(/\s+/)[0];
+      if (nome) atbCount[nome] = (atbCount[nome]||0)+1;
+    });
+  });
+  const atbList = Object.entries(atbCount).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
+
+  // Carbapenêmicos
+  const carba = ['MEROPENEM','IMIPENEM','ERTAPENEM','DORIPENEM'];
+  const carbaCount = Object.entries(atbCount)
+    .filter(([n]) => carba.some(c => n.includes(c)))
+    .reduce((s,[,v]) => s+v, 0);
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Evoluções com ATB', _pct(comATB, total), `${comATB} evoluções`);
+  h += _cardInd('2+ ATBs simultâneos', _pct(multiATB, total), `${multiATB} evoluções`, 'laranja');
+  h += _cardInd('Uso de carbapenêmicos', _pct(carbaCount, total), `${carbaCount} registros`);
+  h += '</div>';
+
+  h += _rankingBarras('Antimicrobianos mais utilizados', atbList, 15);
+  return h;
+}
+
+function _indNASIndicadores(periodo){
+  const { nas } = _indCache;
+  const nasPer = nas.filter(n => _dentroPeriodo(n.data, periodo));
+  const total = nasPer.length;
+
+  const medias = nasPer.map(n => parseFloat(n.total)).filter(n => !isNaN(n) && n>0);
+  const mediaNAS = medias.length ? (medias.reduce((s,x)=>s+x,0)/medias.length).toFixed(1) : '–';
+  const maxNAS = medias.length ? Math.max(...medias).toFixed(1) : '–';
+
+  // Turnos com sobrecarga (NAS total do setor > 100% × leitos)
+  // Agrupa por data+turno
+  const porTurno = {};
+  nasPer.forEach(n => {
+    const k = n.data + '|' + n.turno;
+    if (!porTurno[k]) porTurno[k] = 0;
+    porTurno[k] += parseFloat(n.total) || 0;
+  });
+  const sobrecarga = Object.values(porTurno).filter(t => t >= 100*TOTAL).length;
+  const turnosTot = Object.keys(porTurno).length;
+
+  // Diurno vs noturno
+  const diurnoNAS = nasPer.filter(n => n.turno==='DIURNO').map(n=>parseFloat(n.total)).filter(n=>!isNaN(n));
+  const noturnoNAS = nasPer.filter(n => n.turno==='NOTURNO').map(n=>parseFloat(n.total)).filter(n=>!isNaN(n));
+  const medD = diurnoNAS.length ? (diurnoNAS.reduce((s,x)=>s+x,0)/diurnoNAS.length).toFixed(1) : '–';
+  const medN = noturnoNAS.length ? (noturnoNAS.reduce((s,x)=>s+x,0)/noturnoNAS.length).toFixed(1) : '–';
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Registros NAS no período', total);
+  h += _cardInd('NAS médio por paciente', mediaNAS !== '–' ? mediaNAS + '%' : '–');
+  h += _cardInd('NAS máximo', maxNAS !== '–' ? maxNAS + '%' : '–');
+  h += _cardInd('NAS médio (Diurno)', medD !== '–' ? medD + '%' : '–', `${diurnoNAS.length} registros`);
+  h += _cardInd('NAS médio (Noturno)', medN !== '–' ? medN + '%' : '–', `${noturnoNAS.length} registros`);
+  h += _cardInd('Turnos com sobrecarga', sobrecarga, `de ${turnosTot} turnos (NAS total ≥ 100%/leito)`, sobrecarga>0?'vermelho':'verde');
+  h += '</div>';
+  h += '<div class="ind-hint">Profissional COFEN: 36,36% equivale a 1 enfermeiro no turno.</div>';
+  return h;
+}
+
+function _indNutricao(periodo){
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const total = evPer.length;
+
+  const sne = evPer.filter(e => e.dieta === 'SNE').length;
+  const soe = evPer.filter(e => e.dieta === 'SOE').length;
+  const oral = evPer.filter(e => e.dieta === 'Oral').length;
+  const npt = evPer.filter(e => e.dieta === 'NPT').length;
+  const jejum = evPer.filter(e => e.dieta === 'Jejum/Zero').length;
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Evoluções no período', total);
+  h += _cardInd('Dieta enteral (SNE/SOE)', _pct(sne+soe, total), `${sne+soe} evoluções`);
+  h += _cardInd('Dieta oral', _pct(oral, total), `${oral} evoluções`);
+  h += _cardInd('NPT', _pct(npt, total), `${npt} evoluções`);
+  h += _cardInd('Jejum', _pct(jejum, total), `${jejum} evoluções`, jejum>0?'laranja':'');
+  h += '</div>';
+  return h;
+}
+
+function _indNeuro(periodo){
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const total = evPer.length;
+
+  const glasgows = evPer.map(e => parseInt(e.glas)).filter(n => !isNaN(n) && n>=3 && n<=15);
+  const glasgowMed = glasgows.length ? (glasgows.reduce((s,x)=>s+x,0)/glasgows.length).toFixed(1) : '–';
+
+  const comatosos = evPer.filter(e => (e.neuro||[]).includes('Comatoso')).length;
+  const sedadoProf = evPer.filter(e => {
+    const r = parseInt(e.rass);
+    return !isNaN(r) && r <= -3;
+  }).length;
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Evoluções no período', total);
+  h += _cardInd('Glasgow médio', glasgowMed, `${glasgows.length} registros`);
+  h += _cardInd('Pacientes comatosos', _pct(comatosos, total), `${comatosos} evoluções`);
+  h += _cardInd('Sedação profunda (RASS ≤ -3)', _pct(sedadoProf, total), `${sedadoProf} evoluções`);
+  h += '</div>';
+  return h;
+}
+
+function _indOperacionais(periodo){
+  const { evolucoes, nas } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const nasPer = nas.filter(n => _dentroPeriodo(n.data, periodo));
+
+  // Chaves únicas leito+turno+data no período
+  const evKeys = new Set(evPer.map(e => `${e.leito}|${e.turno}|${e.data}`));
+  const nasKeys = new Set(nasPer.map(n => `${n.leito}|${n.turno}|${n.data}`));
+  // Interseção → turnos com evolução que também têm NAS
+  const comAmbos = Array.from(evKeys).filter(k => nasKeys.has(k)).length;
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Evoluções registradas', evKeys.size, 'no período');
+  h += _cardInd('Registros NAS', nasKeys.size, 'no período');
+  h += _cardInd('Cobertura do NAS', _pct(comAmbos, evKeys.size), `${comAmbos} de ${evKeys.size} turnos com evolução`, comAmbos===evKeys.size?'verde':'laranja');
+  h += '</div>';
+  h += '<div class="ind-hint">Cobertura = % de turnos com evolução que também têm NAS preenchido.</div>';
+  return h;
+}
+
+function _indCruzamentos(periodo){
+  const { admissoes, altas, evolucoes, nas } = _indCache;
+  const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+
+  // Origem × Mortalidade
+  const porOrigem = {};
+  altasPer.forEach(a => {
+    const o = a.origem || 'Não informado';
+    if (!porOrigem[o]) porOrigem[o] = { total: 0, obitos: 0 };
+    porOrigem[o].total++;
+    if (a.tipoAlta === 'Óbito') porOrigem[o].obitos++;
+  });
+  const origemMortList = Object.entries(porOrigem)
+    .filter(([,v]) => v.total > 0)
+    .map(([label,v]) => ({ label, valor: Math.round(v.obitos*100/v.total) }))
+    .sort((a,b) => b.valor - a.valor);
+
+  // Permanência × NAS (para cada alta, calcula permanência e correlaciona com NAS médio do paciente)
+  const pacPermNAS = [];
+  altasPer.forEach(a => {
+    const perm = _diasEntre(a.admUTI, a.dataAlta);
+    if (perm === null || !a.paciente) return;
+    // NAS médio do paciente
+    const nasPac = nas
+      .filter(n => n.paciente === a.paciente || (n.leito === a.leito && _dataLocal(n.data) >= _dataLocal(a.admUTI) && _dataLocal(n.data) <= _dataLocal(a.dataAlta)))
+      .map(n => parseFloat(n.total))
+      .filter(v => !isNaN(v));
+    const nasMed = nasPac.length ? nasPac.reduce((s,x)=>s+x,0)/nasPac.length : null;
+    if (nasMed !== null) pacPermNAS.push({ perm, nas: nasMed });
+  });
+  const correlacaoNAS = pacPermNAS.length >= 3 ? _correlacao(pacPermNAS.map(p=>p.perm), pacPermNAS.map(p=>p.nas)) : null;
+
+  // Proxy de gravidade máxima: evoluções com DVA + VMI + ATB
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const gravMax = evPer.filter(e => {
+    const temDVA = (e.dva && Object.values(e.dva).some(v => v.checked)) || (e.dvaOutros||[]).length > 0;
+    const temVMI = e.vent && (e.vent.includes('TOT') || e.vent.includes('TQT'));
+    const temATB = (e.atbs||[]).some(a => a.nome && a.nome.trim());
+    return temDVA && temVMI && temATB;
+  }).length;
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Altas analisadas', altasPer.length);
+  h += _cardInd('Gravidade máxima (DVA+VMI+ATB)', _pct(gravMax, evPer.length), `${gravMax} evoluções`, gravMax>0?'vermelho':'');
+  if (correlacaoNAS !== null) {
+    const interp = Math.abs(correlacaoNAS) < 0.3 ? 'fraca' : Math.abs(correlacaoNAS) < 0.6 ? 'moderada' : 'forte';
+    const sinal = correlacaoNAS > 0 ? 'positiva' : 'negativa';
+    h += _cardInd('Correlação permanência × NAS', correlacaoNAS.toFixed(2), `${sinal}, ${interp}`);
+  }
+  h += '</div>';
+
+  h += _rankingBarras('Taxa de mortalidade por origem (%)', origemMortList);
+  h += '<div class="ind-hint">💡 Mais cruzamentos (diagnóstico × VMI, diagnóstico × alta) exigem padronização por CID — implantação futura.</div>';
+  return h;
+}
+
+// Correlação de Pearson
+function _correlacao(xs, ys){
+  const n = xs.length;
+  if (n < 2) return null;
+  const mx = xs.reduce((s,x)=>s+x,0)/n;
+  const my = ys.reduce((s,x)=>s+x,0)/n;
+  let num=0, dx2=0, dy2=0;
+  for (let i=0;i<n;i++) {
+    num += (xs[i]-mx)*(ys[i]-my);
+    dx2 += (xs[i]-mx)**2;
+    dy2 += (ys[i]-my)**2;
+  }
+  const denom = Math.sqrt(dx2*dy2);
+  return denom === 0 ? 0 : num/denom;
+}
+
 // ── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
 async function fazerLogin() {
   const email = gf('li-email').trim();
@@ -467,6 +1294,7 @@ async function abrirModal(n) {
   document.getElementById('m-origem').value   = l.origem||'';
   document.getElementById('m-origem-outro').value = (l.origemOutro||'').toUpperCase();
   document.getElementById('m-origem-outro-wrap').style.display = l.origem==='Transferência de outro serviço' ? 'flex' : 'none';
+  document.getElementById('m-sexo').value = l.sexo||'';
   document.getElementById('btn-alta').style.display = l.ocupado?'':'none';
   document.getElementById('modal-adm').classList.add('show');
   _ativarCaixaAlta();
@@ -492,6 +1320,7 @@ async function salvarAdmissao() {
     comor:gf('m-comor'), alergia:gf('m-alergia'),
     origem: origem,
     origemOutro: origem==='Transferência de outro serviço' ? origemOutro : '',
+    sexo: gf('m-sexo'),
     admissaoRegistradaEm: leitoExistente.admissaoRegistradaEm || new Date().toISOString()
   };
   await dbSet('uti_leitos', d);
@@ -505,6 +1334,8 @@ async function salvarAdmissao() {
         leito: modalLeito,
         paciente: gf('m-pac'),
         diagnostico: gf('m-diag'),
+        dn: gf('m-dn'),
+        sexo: gf('m-sexo'),
         admUTI: gf('m-adm'),
         admHospesc: gf('m-adm-hosp'),
         origem: origem,
@@ -1075,6 +1906,8 @@ async function confirmarAltaFinal(){
         leito: leitoParaAlta,
         paciente: pacAntes.pac || '',
         diagnostico: pacAntes.diag || '',
+        dn: pacAntes.dn || '',
+        sexo: pacAntes.sexo || '',
         admUTI: pacAntes.adm || '',
         admHospesc: pacAntes.admHosp || '',
         origem: pacAntes.origem || '',
