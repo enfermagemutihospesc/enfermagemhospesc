@@ -129,6 +129,16 @@ body{font-family:var(--fonte);background:#e0e8f2;color:var(--texto);min-height:1
 .ind-bar-n{font-weight:700;color:var(--azul);text-align:right;}
 .ind-vazio{text-align:center;padding:1.2rem;color:var(--muted);font-size:.8rem;font-style:italic;}
 .ind-hint{font-size:.72rem;color:var(--muted);margin-top:4px;font-style:italic;}
+.ind-info-btn{position:absolute;top:6px;right:8px;background:transparent;border:none;color:var(--muted);font-size:.78rem;cursor:pointer;padding:2px 4px;border-radius:4px;opacity:.55;transition:opacity .15s, background .15s;}
+.ind-info-btn:hover{opacity:1;background:var(--cinza);}
+.ind-card{position:relative;}
+.ind-grupo{position:relative;}
+.ind-grupo-info{position:absolute;top:0;right:0;}
+.ficha-modal{max-width:620px;}
+.ficha-sec{margin-bottom:14px;}
+.ficha-sec-t{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
+.ficha-sec-c{font-size:.85rem;line-height:1.5;color:var(--texto);}
+.ficha-codigo{background:#0f172a;color:#e2e8f0;font-family:var(--fonte-mono);font-size:.72rem;padding:10px 12px;border-radius:6px;overflow-x:auto;white-space:pre;line-height:1.5;max-height:240px;overflow-y:auto;}
 
 /* ── FORMULÁRIO ── */
 .secao{border:1px solid var(--borda);border-radius:var(--r);overflow:hidden;}
