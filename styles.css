@@ -99,6 +99,37 @@ body{font-family:var(--fonte);background:#e0e8f2;color:var(--texto);min-height:1
 .nas-resumo-row{display:flex;align-items:center;justify-content:space-between;font-size:.78rem;padding:4px 0;border-bottom:1px solid var(--borda);}
 .nas-resumo-row:last-child{border-bottom:none;}
 
+/* ── INDICADORES ── */
+.ind-filtros{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;background:var(--cinza);border:1px solid var(--borda);border-radius:8px;}
+.ind-filtro-g{display:flex;align-items:center;gap:6px;}
+.ind-filtro-g label{font-size:.74rem;color:var(--muted);font-weight:600;}
+.ind-filtro-g select,.ind-filtro-g input[type=date]{font-size:.78rem;padding:5px 8px;}
+.ind-cats{display:flex;gap:5px;flex-wrap:wrap;padding-bottom:4px;border-bottom:1px solid var(--borda);}
+.ind-cat-btn{background:white;border:1px solid var(--borda);color:var(--muted);padding:5px 11px;border-radius:16px;font-size:.74rem;font-weight:600;cursor:pointer;font-family:var(--fonte);}
+.ind-cat-btn:hover{background:var(--azul-xl);border-color:var(--azul-m);color:var(--azul);}
+.ind-cat-btn.ativa{background:var(--azul);color:white;border-color:var(--azul);}
+.ind-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:4px;}
+.ind-card{border:1px solid var(--borda);border-radius:8px;padding:12px 14px;background:white;display:flex;flex-direction:column;gap:4px;}
+.ind-card-l{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.ind-card-v{font-size:1.6rem;font-weight:700;color:var(--azul);line-height:1.15;}
+.ind-card-s{font-size:.68rem;color:var(--muted);margin-top:2px;}
+.ind-card.verde .ind-card-v{color:var(--verde);}
+.ind-card.vermelho .ind-card-v{color:var(--vermelho);}
+.ind-card.laranja .ind-card-v{color:var(--laranja);}
+.ind-grupo{margin-top:10px;}
+.ind-grupo-t{font-size:.8rem;font-weight:700;color:var(--azul);margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid var(--borda);}
+.ind-lista{display:flex;flex-direction:column;gap:3px;}
+.ind-lista-row{display:flex;justify-content:space-between;align-items:center;padding:5px 9px;background:var(--cinza);border-radius:5px;font-size:.78rem;}
+.ind-lista-row .n{font-weight:700;color:var(--azul);}
+.ind-bar-wrap{display:flex;flex-direction:column;gap:5px;}
+.ind-bar{display:grid;grid-template-columns:120px 1fr 40px;gap:8px;align-items:center;font-size:.74rem;}
+.ind-bar-l{color:var(--texto);}
+.ind-bar-bg{background:var(--cinza);border-radius:4px;height:14px;overflow:hidden;}
+.ind-bar-fill{background:var(--azul-m);height:100%;border-radius:4px;transition:width .3s;}
+.ind-bar-n{font-weight:700;color:var(--azul);text-align:right;}
+.ind-vazio{text-align:center;padding:1.2rem;color:var(--muted);font-size:.8rem;font-style:italic;}
+.ind-hint{font-size:.72rem;color:var(--muted);margin-top:4px;font-style:italic;}
+
 /* ── FORMULÁRIO ── */
 .secao{border:1px solid var(--borda);border-radius:var(--r);overflow:hidden;}
 .secao-t{background:var(--azul-cl);color:var(--azul);font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-bottom:1px solid var(--borda);display:flex;align-items:center;gap:6px;}
