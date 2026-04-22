@@ -558,662 +558,732 @@ function _rankingBarras(titulo, itens, max=null, fichaId=''){
   return h;
 }
 
-// ── CATÁLOGO DE FICHAS DOS INDICADORES ───────────────────────────────────────
-// Cada ficha tem: nome, finalidade, formula, codigo (trecho). Os códigos abaixo
-// são snippets representativos do cálculo real em cada renderer.
+// ── CATÁLOGO DE FICHAS DOS INDICADORES (formato ANS) ─────────────────────────
+// Cada ficha tem: sigla, nome, conceituacao, dominio, relevancia, importancia,
+// numerador, denominador, formula, interpretacao. Seguindo o modelo de QUALISS/
+// ANS usado em hospitais brasileiros.
 const FICHAS_INDICADORES = {
-  // Ocupação e fluxo
+  // ═══ OCUPAÇÃO E FLUXO ═══
   ocup_admissoes: {
-    nome: 'Admissões no período',
-    finalidade: 'Contagem de novas admissões na UTI no intervalo selecionado. Base para calcular giro de leito e taxa de ocupação.',
-    formula: 'Número de registros em uti_admissao_log com admUTI dentro do período.',
-    codigo: `const admPer = admissoes.filter(a =>
-  _dentroPeriodo(a.admUTI, periodo)
-);
-return admPer.length;`
+    sigla: 'OCUP-01',
+    nome: 'Admissões na UTI no período',
+    conceituacao: 'Número absoluto de pacientes admitidos na Unidade de Terapia Intensiva durante o intervalo de tempo selecionado.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Mede o volume de entradas da UTI e serve de base para o cálculo do giro de leito, da taxa de ocupação e de análises demográficas. Ajuda o gestor a dimensionar recursos humanos e materiais conforme a demanda observada.',
+    numerador: 'Número de admissões registradas em uti_admissao_log cujo campo admUTI esteja dentro do período selecionado.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   ocup_altas: {
+    sigla: 'OCUP-02',
     nome: 'Altas no período',
-    finalidade: 'Contagem de pacientes que saíram da UTI no intervalo (por qualquer motivo: enfermaria, transferência ou óbito).',
-    formula: 'Número de registros em uti_alta_log com dataAlta dentro do período.',
-    codigo: `const altasPer = altas.filter(a =>
-  _dentroPeriodo(a.dataAlta, periodo)
-);
-return altasPer.length;`
+    conceituacao: 'Número de pacientes que saíram da UTI no intervalo, por qualquer motivo (alta para enfermaria, transferência externa ou óbito).',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Serve de denominador para todos os indicadores de desfecho (mortalidade, transferências, altas para enfermaria). Junto com admissões, mostra o equilíbrio do fluxo da unidade.',
+    numerador: 'Número de registros em uti_alta_log cujo campo dataAlta esteja dentro do período selecionado.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   ocup_taxa: {
-    nome: 'Taxa de ocupação',
-    finalidade: 'Percentual do tempo em que os leitos da UTI estiveram ocupados. Indicador-chave de pressão assistencial e dimensionamento.',
-    formula: 'Taxa = pacientes-dia / (leitos × dias do período) × 100. Pacientes-dia é a soma dos dias de permanência de cada admissão cuja internação se sobrepõe ao período.',
-    codigo: `let pacientesDia = 0;
-admissoes.forEach(adm => {
-  const inicio = _dataLocal(adm.admUTI);
-  const alta = altas.find(a =>
-    a.leito === adm.leito &&
-    a.paciente === adm.paciente &&
-    _dataLocal(a.dataAlta) >= inicio
-  );
-  const fimInt = alta ? _dataLocal(alta.dataAlta) : new Date();
-  const s = inicio > periodo.inicio ? inicio : periodo.inicio;
-  const e = fimInt < periodo.fim ? fimInt : periodo.fim;
-  if (e >= s) pacientesDia += Math.floor((e-s)/86400000) + 1;
-});
-const taxa = (pacientesDia * 100) / (TOTAL * diasPeriodo);`
+    sigla: 'OCUP-03',
+    nome: 'Taxa de ocupação da UTI',
+    conceituacao: 'Percentual do tempo em que os leitos da unidade estiveram ocupados durante o período analisado.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Indicador-chave de pressão assistencial e de dimensionamento. Taxas próximas ou superiores a 100% sinalizam falta de leitos e risco de recusa de admissões; taxas muito baixas podem indicar subutilização. É recomendado pela ANS e pela CCIH para monitoramento contínuo.',
+    numerador: 'Pacientes-dia no período (soma dos dias de internação de todas as admissões que se sobrepõem ao período).',
+    denominador: 'Número de leitos operacionais × número de dias do período.',
+    formula: '(Pacientes-dia ÷ Leitos-dia possíveis) × 100'
   },
   ocup_pacientesdia: {
+    sigla: 'OCUP-04',
     nome: 'Pacientes-dia',
-    finalidade: 'Denominador-padrão para taxas de infecção, uso de dispositivos e carga de trabalho. Cada dia em que um leito está ocupado por um paciente conta como 1 paciente-dia.',
-    formula: 'Soma dos dias de sobreposição entre cada internação e o período selecionado.',
-    codigo: `// Mesma lógica da taxa de ocupação, mas retorna só o numerador
-let pacientesDia = 0;
-admissoes.forEach(adm => {
-  const inicio = _dataLocal(adm.admUTI);
-  const alta = altas.find(a =>
-    a.leito === adm.leito && a.paciente === adm.paciente
-    && _dataLocal(a.dataAlta) >= inicio);
-  const fim = alta ? _dataLocal(alta.dataAlta) : new Date();
-  // intersecção com o período
-  const s = inicio > periodo.inicio ? inicio : periodo.inicio;
-  const e = fim < periodo.fim ? fim : periodo.fim;
-  if (e >= s) pacientesDia += Math.floor((e-s)/86400000) + 1;
-});`
+    conceituacao: 'Somatório dos dias em que cada paciente esteve internado na UTI durante o período. Cada dia de permanência de um paciente conta como 1 paciente-dia.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Denominador-padrão ANVISA/CDC para o cálculo de taxas de infecção hospitalar, taxa de utilização de dispositivos invasivos e densidade de eventos assistenciais. Sem pacientes-dia não é possível comparar indicadores entre unidades ou períodos.',
+    numerador: 'Soma dos dias de sobreposição entre cada internação e o período selecionado, considerando admissões com e sem alta (em curso até a data atual).',
+    denominador: '—',
+    formula: 'Σ (dias de internação) no período.'
   },
   ocup_giro: {
+    sigla: 'OCUP-05',
     nome: 'Giro de leito',
-    finalidade: 'Quantas admissões cada leito recebeu em média no período. Indicador de rotatividade: giro alto pode indicar internações curtas ou alta pressão.',
-    formula: 'Giro = admissões no período / número total de leitos.',
-    codigo: `const giro = admPer.length / TOTAL;`
+    conceituacao: 'Número médio de admissões que cada leito recebeu ao longo do período. Representa a rotatividade dos leitos.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Giro alto pode refletir alta demanda, boa resolutividade (internações curtas) ou alta mortalidade precoce. Giro baixo pode indicar internações prolongadas ou baixa demanda. Deve ser lido junto com a permanência média e a mortalidade.',
+    numerador: 'Número de admissões no período.',
+    denominador: 'Número total de leitos operacionais da UTI.',
+    formula: 'Admissões ÷ Leitos'
   },
   ocup_permanencia: {
-    nome: 'Permanência média',
-    finalidade: 'Tempo médio em dias que um paciente passou internado na UTI. Permanências muito longas podem indicar complexidade clínica, e muito curtas podem refletir alta mortalidade precoce.',
-    formula: 'Média de (dataAlta − admUTI), em dias, entre todas as altas do período.',
-    codigo: `const permanencias = altasPer
-  .map(a => _diasEntre(a.admUTI, a.dataAlta))
-  .filter(d => d !== null);
-const media = permanencias.reduce((s,x)=>s+x,0) / permanencias.length;`
+    sigla: 'OCUP-06',
+    nome: 'Tempo médio de permanência na UTI',
+    conceituacao: 'Média, em dias, do tempo que os pacientes permaneceram internados na UTI, considerando apenas internações já encerradas no período.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Permanência prolongada aumenta custos e risco de infecções; permanência muito curta pode indicar mortalidade precoce ou altas prematuras. Recomendado pela ANS como indicador de eficiência assistencial.',
+    numerador: 'Soma (dataAlta − admUTI) em dias, para cada alta do período.',
+    denominador: 'Número de altas com datas válidas de admissão e alta.',
+    formula: 'Σ (dias de permanência) ÷ Nº de altas'
   },
   ocup_intervalo: {
-    nome: 'Intervalo entre ocupações',
-    finalidade: 'Tempo médio que um leito permanece vago entre uma alta e a próxima admissão. Ajuda a monitorar eficiência de limpeza/preparo do leito.',
-    formula: 'Para cada leito, pareia eventos de alta e próxima admissão e calcula o intervalo em dias.',
-    codigo: `for (let l = 1; l <= TOTAL; l++) {
-  const eventos = [
-    ...altas.filter(a => a.leito===l).map(a => ({tipo:'alta', data:_dataLocal(a.dataAlta)})),
-    ...admissoes.filter(a => a.leito===l).map(a => ({tipo:'adm', data:_dataLocal(a.admUTI)}))
-  ].filter(e => e.data).sort((a,b) => a.data - b.data);
-  for (let i=1; i<eventos.length; i++) {
-    if (eventos[i-1].tipo==='alta' && eventos[i].tipo==='adm')
-      intervalos.push(Math.floor((eventos[i].data - eventos[i-1].data)/86400000));
-  }
-}`
+    sigla: 'OCUP-07',
+    nome: 'Intervalo médio entre ocupações',
+    conceituacao: 'Tempo médio, em dias, que um leito permanece vago entre uma alta e a próxima admissão no mesmo leito.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Reflete a eficiência dos processos de limpeza, preparo do leito e regulação de vagas. Valores altos em unidades com fila de espera indicam gargalo operacional.',
+    numerador: 'Soma dos intervalos (próxima_admissao − alta_anterior), em dias, por leito.',
+    denominador: 'Número de transições alta→admissão observadas no período.',
+    formula: 'Σ (intervalos em dias) ÷ Nº de transições'
   },
   ocup_origem: {
-    nome: 'Admissões por origem',
-    finalidade: 'Distribuição das admissões pelos locais de procedência (Pronto Socorro, Centro Cirúrgico, Enfermarias, Transferência externa). Revela o perfil do fluxo que alimenta a UTI.',
-    formula: 'Agrupa admPer pelo campo "origem" e conta ocorrências.',
-    codigo: `const origens = {};
-admPer.forEach(a => {
-  const o = a.origem || 'Não informado';
-  origens[o] = (origens[o]||0) + 1;
-});`
+    sigla: 'OCUP-08',
+    nome: 'Distribuição de admissões por origem',
+    conceituacao: 'Proporção de admissões na UTI provenientes de cada local de origem: Pronto Socorro, Centro Cirúrgico, Enfermarias ou Transferência de outro serviço.',
+    dominio: 'Perfil epidemiológico',
+    relevancia: 'Essencial',
+    importancia: 'Revela o perfil do fluxo que alimenta a UTI. Predominância de PS pode indicar sobrecarga de urgência; predominância de CC pode indicar UTI cirúrgica; muitas transferências externas podem refletir referência regional ou dificuldade na porta de entrada.',
+    numerador: 'Número de admissões com a origem X.',
+    denominador: 'Total de admissões no período.',
+    formula: '(Admissões por origem ÷ Total) × 100'
   },
   ocup_procedencia: {
-    nome: 'Procedência (transferências externas)',
-    finalidade: 'Quais hospitais ou serviços mais encaminham pacientes para a UTI. Útil para discussão de regulação de vagas e parcerias.',
-    formula: 'Filtra admissões com origem = "Transferência de outro serviço" e agrupa pelo texto livre do campo origemOutro.',
-    codigo: `const procedencias = admPer
-  .filter(a => a.origem === 'Transferência de outro serviço' && a.origemOutro)
-  .map(a => a.origemOutro);
-const ranking = _contarTermos(procedencias);`
+    sigla: 'OCUP-09',
+    nome: 'Procedência de transferências externas',
+    conceituacao: 'Ranking dos hospitais ou serviços de saúde que mais encaminham pacientes para a UTI via transferência.',
+    dominio: 'Perfil epidemiológico',
+    relevancia: 'Complementar',
+    importancia: 'Útil para planejamento regional, negociação de parcerias, pactuação com a regulação municipal/estadual e discussão de referência/contra-referência.',
+    numerador: 'Número de transferências externas de cada serviço de procedência.',
+    denominador: 'Total de transferências externas no período.',
+    formula: '(Transferências do serviço X ÷ Total de transferências) × 100'
   },
 
-  // Saída
+  // ═══ SAÍDA ═══
   saida_total: {
-    nome: 'Total de altas',
-    finalidade: 'Base para cálculo das demais taxas de saída (mortalidade, encaminhamentos). Inclui todos os tipos de alta.',
-    formula: 'Contagem de registros em uti_alta_log com dataAlta no período.',
-    codigo: `const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
-const total = altasPer.length;`
+    sigla: 'SAID-01',
+    nome: 'Total de altas (denominador)',
+    conceituacao: 'Número total de saídas da UTI no período, independentemente do tipo (alta para enfermaria, transferência externa ou óbito).',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Base de cálculo para todos os indicadores de desfecho da UTI: mortalidade, taxa de alta para enfermaria, taxa de transferência. Sem esse denominador, as taxas de saída não têm significado.',
+    numerador: 'Número de registros em uti_alta_log.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   saida_mortalidade: {
-    nome: 'Taxa de mortalidade',
-    finalidade: 'Proporção de óbitos entre os pacientes que saíram da UTI no período. Um dos indicadores mais monitorados em terapia intensiva.',
-    formula: 'Taxa = óbitos / total de altas × 100. Refere-se apenas à mortalidade intra-UTI.',
-    codigo: `const obitos = altasPer.filter(a => a.tipoAlta === 'Óbito').length;
-const taxa = (obitos * 100) / altasPer.length;`
+    sigla: 'SAID-02',
+    nome: 'Taxa de mortalidade intra-UTI',
+    conceituacao: 'Proporção de pacientes que foram a óbito durante a internação na UTI em relação ao total de pacientes que saíram da unidade.',
+    dominio: 'Desfecho clínico',
+    relevancia: 'Essencial',
+    importancia: 'Um dos indicadores mais monitorados em terapia intensiva. Reflete a gravidade dos pacientes admitidos e a qualidade assistencial. Variações significativas devem disparar auditoria clínica. É recomendado pela ANS, ANVISA e AMIB.',
+    numerador: 'Número de altas com tipoAlta = "Óbito" no período.',
+    denominador: 'Total de altas no período.',
+    formula: '(Óbitos ÷ Total de altas) × 100'
   },
   saida_enfermaria: {
-    nome: 'Alta para enfermaria',
-    finalidade: 'Proporção de pacientes que saíram estáveis para continuar tratamento fora da UTI. Um desfecho favorável.',
-    formula: 'Taxa = altas para enfermaria / total de altas × 100.',
-    codigo: `const enf = altasPer.filter(a => a.tipoAlta === 'Alta para enfermaria').length;
-const taxa = (enf * 100) / altasPer.length;`
+    sigla: 'SAID-03',
+    nome: 'Taxa de alta para enfermaria',
+    conceituacao: 'Proporção de pacientes que saíram estáveis da UTI e foram encaminhados a enfermarias para continuidade do tratamento.',
+    dominio: 'Desfecho clínico',
+    relevancia: 'Essencial',
+    importancia: 'Desfecho favorável. Deve ser lido em conjunto com a taxa de readmissão em 48h (ainda não implementada), que avalia se a alta foi apropriada.',
+    numerador: 'Número de altas com tipoAlta = "Alta para enfermaria" no período.',
+    denominador: 'Total de altas no período.',
+    formula: '(Altas para enfermaria ÷ Total de altas) × 100'
   },
   saida_transf: {
-    nome: 'Transferências externas',
-    finalidade: 'Proporção de pacientes encaminhados para outros serviços. Pode indicar ausência de recursos locais (ex: diálise, neurocirurgia) ou fluxos regionais.',
-    formula: 'Taxa = transferências / total de altas × 100.',
-    codigo: `const transf = altasPer.filter(a => a.tipoAlta === 'Transferência para outro serviço').length;
-const taxa = (transf * 100) / altasPer.length;`
+    sigla: 'SAID-04',
+    nome: 'Taxa de transferência para outro serviço',
+    conceituacao: 'Proporção de pacientes que foram transferidos a outros hospitais ou serviços para continuidade do cuidado.',
+    dominio: 'Desfecho clínico',
+    relevancia: 'Complementar',
+    importancia: 'Pode indicar ausência de recursos específicos no hospital (hemodiálise, neurocirurgia, UTI especializada) ou fluxo de referência regional. Muitas transferências podem sugerir necessidade de ampliação de serviços locais.',
+    numerador: 'Número de altas com tipoAlta = "Transferência para outro serviço" no período.',
+    denominador: 'Total de altas no período.',
+    formula: '(Transferências ÷ Total de altas) × 100'
   },
   saida_tipos: {
+    sigla: 'SAID-05',
     nome: 'Distribuição por tipo de alta',
-    finalidade: 'Visão panorâmica dos desfechos: proporção entre alta para enfermaria, transferência e óbito.',
-    formula: 'Agrupa altasPer pelo campo tipoAlta.',
-    codigo: `const tipos = {};
-altasPer.forEach(a => {
-  const t = a.tipoAlta || 'Não informado';
-  tipos[t] = (tipos[t]||0) + 1;
-});`
+    conceituacao: 'Visão panorâmica da distribuição dos desfechos: alta para enfermaria, transferência externa e óbito.',
+    dominio: 'Desfecho clínico',
+    relevancia: 'Essencial',
+    importancia: 'Permite identificar rapidamente o perfil de saída da UTI e comparar entre períodos.',
+    numerador: 'Número de altas de cada tipo no período.',
+    denominador: 'Total de altas no período.',
+    formula: '(Altas do tipo X ÷ Total de altas) × 100'
   },
   saida_destinos: {
-    nome: 'Destinos mais frequentes',
-    finalidade: 'Para quais hospitais ou serviços os pacientes são transferidos. Útil para planejamento regional.',
-    formula: 'Agrupa campo destino entre altas do tipo "Transferência para outro serviço".',
-    codigo: `const destinos = altasPer
-  .filter(a => a.tipoAlta === 'Transferência para outro serviço' && a.destino)
-  .map(a => a.destino);
-const ranking = _contarTermos(destinos);`
+    sigla: 'SAID-06',
+    nome: 'Destinos mais frequentes de transferências',
+    conceituacao: 'Ranking dos hospitais ou serviços para os quais os pacientes são mais transferidos.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Útil para planejamento logístico, pactuação regional e discussão com setor regulador.',
+    numerador: 'Número de transferências para cada destino.',
+    denominador: 'Total de transferências no período.',
+    formula: '(Transferências para destino X ÷ Total de transferências) × 100'
   },
 
-  // Demográficos
+  // ═══ DEMOGRÁFICOS ═══
   demo_total: {
+    sigla: 'DEMO-01',
     nome: 'Total de admissões (base demográfica)',
-    finalidade: 'Número total de pacientes admitidos no período. Denominador para distribuições por sexo e idade.',
-    formula: 'Contagem de registros em uti_admissao_log com admUTI no período.',
-    codigo: `const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
-const total = admPer.length;`
+    conceituacao: 'Número total de pacientes admitidos no período, servindo de denominador para análises demográficas.',
+    dominio: 'Perfil epidemiológico',
+    relevancia: 'Complementar',
+    importancia: 'Base para as distribuições por sexo, faixa etária e análises epidemiológicas da unidade.',
+    numerador: 'Número de admissões no período.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   demo_idade_media: {
-    nome: 'Idade média',
-    finalidade: 'Idade média dos pacientes admitidos. Caracteriza o perfil etário da unidade.',
-    formula: 'Calcula idade = (admUTI − dn)/365.25 para cada paciente e tira a média. Idades inválidas (< 0 ou > 120) são descartadas.',
-    codigo: `const idades = admPer.map(a => {
-  if (!a.dn || !a.admUTI) return null;
-  const dn = _dataLocal(a.dn), adm = _dataLocal(a.admUTI);
-  const idade = Math.floor((adm - dn) / (365.25 * 86400000));
-  return idade >= 0 && idade <= 120 ? idade : null;
-}).filter(i => i !== null);
-const media = idades.reduce((s,x)=>s+x,0) / idades.length;`
+    sigla: 'DEMO-02',
+    nome: 'Idade média dos pacientes admitidos',
+    conceituacao: 'Idade média dos pacientes internados na UTI durante o período.',
+    dominio: 'Perfil epidemiológico',
+    relevancia: 'Complementar',
+    importancia: 'Caracteriza o perfil etário da unidade. Idades mais avançadas geralmente implicam maior risco de desfechos desfavoráveis e maior consumo de recursos.',
+    numerador: 'Soma das idades calculadas na admissão (admUTI − dn)/365.25.',
+    denominador: 'Número de pacientes com data de nascimento registrada.',
+    formula: 'Σ idades ÷ Nº de pacientes com DN'
   },
   demo_sexo: {
+    sigla: 'DEMO-03',
     nome: 'Distribuição por sexo',
-    finalidade: 'Proporção de admissões masculinas, femininas e não informadas. Importante para análises estratificadas.',
-    formula: 'Agrupa admPer pelo campo sexo (M, F, NI = não informado).',
-    codigo: `const sexos = { M: 0, F: 0, NI: 0 };
-admPer.forEach(a => {
-  const s = a.sexo || 'NI';
-  sexos[s] = (sexos[s]||0) + 1;
-});`
+    conceituacao: 'Proporção de admissões masculinas e femininas.',
+    dominio: 'Perfil epidemiológico',
+    relevancia: 'Complementar',
+    importancia: 'Importante para análises epidemiológicas e estratificação de desfechos. Doenças cardiovasculares, por exemplo, têm distribuição diferente entre sexos.',
+    numerador: 'Número de admissões com sexo = M (ou F).',
+    denominador: 'Total de admissões no período.',
+    formula: '(Admissões do sexo X ÷ Total) × 100'
   },
   demo_faixas: {
+    sigla: 'DEMO-04',
     nome: 'Distribuição por faixa etária',
-    finalidade: 'Agrupa pacientes por faixa etária (< 18, 18–40, 41–60, 61–80, > 80 anos). Ajuda a dimensionar demanda de idosos vs. jovens.',
-    formula: 'Classifica cada idade calculada em uma das 5 faixas.',
-    codigo: `const faixas = { '< 18':0, '18–40':0, '41–60':0, '61–80':0, '> 80':0 };
-idades.forEach(i => {
-  if (i < 18) faixas['< 18']++;
-  else if (i <= 40) faixas['18–40']++;
-  else if (i <= 60) faixas['41–60']++;
-  else if (i <= 80) faixas['61–80']++;
-  else faixas['> 80']++;
-});`
+    conceituacao: 'Distribuição das admissões entre faixas etárias: < 18 anos, 18–40, 41–60, 61–80, > 80 anos.',
+    dominio: 'Perfil epidemiológico',
+    relevancia: 'Complementar',
+    importancia: 'Apoia dimensionamento de equipe e de recursos. Unidades com alta proporção de idosos tendem a demandar mais cuidados de mobilidade, prevenção de LPP e suporte nutricional especializado.',
+    numerador: 'Número de admissões em cada faixa etária.',
+    denominador: 'Total de admissões com idade calculável.',
+    formula: '(Admissões na faixa X ÷ Total) × 100'
   },
   demo_idade_diag: {
+    sigla: 'DEMO-05',
     nome: 'Idade média por diagnóstico',
-    finalidade: 'Relaciona diagnósticos com perfil etário — por exemplo, eventos cardiovasculares tendem a ter pacientes mais velhos; traumas, mais jovens.',
-    formula: 'Agrupa idades pelo texto livre do diagnóstico e calcula a média por grupo (exige no mínimo 2 casos). A padronização por CID melhorará esta análise.',
-    codigo: `const diagIdades = {};
-admPer.forEach(a => {
-  if (!a.diagnostico || !a.dn || !a.admUTI) return;
-  const idade = Math.floor((_dataLocal(a.admUTI) - _dataLocal(a.dn)) / (365.25*86400000));
-  const diag = a.diagnostico.trim().toUpperCase();
-  if (!diagIdades[diag]) diagIdades[diag] = [];
-  diagIdades[diag].push(idade);
-});
-// só grupos com 2+ casos, média arredondada`
+    conceituacao: 'Cruzamento entre perfil etário e diagnóstico principal de admissão.',
+    dominio: 'Perfil epidemiológico',
+    relevancia: 'Complementar',
+    importancia: 'Permite identificar padrões clínicos — por exemplo, eventos cardiovasculares costumam predominar em faixas mais velhas; traumas, em faixas mais jovens. A padronização por CID-10 (a implementar) melhorará muito a acurácia dessa análise, hoje baseada em texto livre.',
+    numerador: 'Soma das idades de pacientes agrupados pelo texto do diagnóstico.',
+    denominador: 'Número de pacientes no grupo (≥ 2 casos).',
+    formula: 'Σ idades (por grupo) ÷ Nº de casos do grupo'
   },
 
-  // Sazonalidade
+  // ═══ SAZONALIDADE ═══
   saz_meses: {
+    sigla: 'SAZO-01',
     nome: 'Admissões por mês',
-    finalidade: 'Distribuição temporal das admissões. Revela tendências e picos sazonais (ex: síndromes respiratórias no inverno).',
-    formula: 'Agrupa admPer por ano-mês (YYYY-MM) e conta ocorrências.',
-    codigo: `const porMes = {};
-admPer.forEach(a => {
-  if (!a.admUTI) return;
-  const mes = a.admUTI.slice(0, 7); // YYYY-MM
-  porMes[mes] = (porMes[mes]||0) + 1;
-});`
+    conceituacao: 'Número de admissões na UTI distribuídas por mês-calendário dentro do período selecionado.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Revela tendências temporais e picos sazonais — por exemplo, aumento de admissões no inverno por síndromes respiratórias agudas, ou aumento de queimaduras em junho. Essencial para planejamento de escalas e insumos.',
+    numerador: 'Número de admissões em cada mês-calendário.',
+    denominador: '—',
+    formula: 'Contagem absoluta por mês (AAAA-MM).'
   },
   saz_mortalidade: {
+    sigla: 'SAZO-02',
     nome: 'Mortalidade por mês',
-    finalidade: 'Variação da taxa de mortalidade ao longo dos meses. Ajuda a identificar períodos críticos e correlações sazonais.',
-    formula: 'Para cada mês: (óbitos / total de altas do mês) × 100.',
-    codigo: `const mortPorMes = {}, totPorMes = {};
-altasPer.forEach(a => {
-  const mes = a.dataAlta.slice(0, 7);
-  totPorMes[mes] = (totPorMes[mes]||0) + 1;
-  if (a.tipoAlta === 'Óbito') mortPorMes[mes] = (mortPorMes[mes]||0) + 1;
-});
-// taxa = Math.round(mortPorMes[mes]*100/totPorMes[mes])`
+    conceituacao: 'Taxa de mortalidade intra-UTI calculada mês a mês.',
+    dominio: 'Desfecho clínico',
+    relevancia: 'Essencial',
+    importancia: 'Permite identificar meses com mortalidade anômala, que podem estar associados a surtos de infecção, falhas assistenciais ou épocas do ano com perfil mais grave.',
+    numerador: 'Número de óbitos no mês.',
+    denominador: 'Total de altas no mês.',
+    formula: '(Óbitos do mês ÷ Altas do mês) × 100'
   },
 
-  // Clínicos
+  // ═══ CLÍNICOS E SEGURANÇA ═══
   clin_evolucoes: {
+    sigla: 'CLIN-01',
     nome: 'Evoluções no período',
-    finalidade: 'Número total de evoluções de enfermagem registradas. Base para cálculo de prevalências diárias.',
-    formula: 'Conta registros em uti_ev_* com campo data dentro do período.',
-    codigo: `const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
-const total = evPer.length;`
+    conceituacao: 'Número total de evoluções de enfermagem registradas no sistema no período.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Base para cálculo de todas as prevalências diárias (isolamento, dispositivos, VMI, dieta etc.). Deve ser aproximadamente igual a 2 × pacientes-dia (diurno + noturno).',
+    numerador: 'Número de registros em uti_ev_* no período.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   clin_isolamento: {
-    nome: 'Isolamento (contato/gotículas/aerossóis)',
-    finalidade: 'Proporção de evoluções em que o paciente estava em isolamento. Indicador de carga de precauções e potencial prevalência de multirresistentes.',
-    formula: 'Taxa = evoluções com isolamento = X / total de evoluções × 100.',
-    codigo: `const isolContato = evPer.filter(e => e.isolamento === 'Contato').length;
-const taxa = _pct(isolContato, total);`
+    sigla: 'CLIN-02',
+    nome: 'Prevalência de isolamento (contato/gotículas/aerossóis/vigilância)',
+    conceituacao: 'Proporção de evoluções em que o paciente estava em precaução por um tipo específico de isolamento.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Indicador de carga de precauções e de potencial prevalência de germes multirresistentes. Indiretamente mede a qualidade do rastreio microbiológico e da adesão às políticas institucionais. É recomendado pela CCIH.',
+    numerador: 'Número de evoluções com isolamento = X (Contato, Gotículas, Aerossóis ou Vigilância).',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com o isolamento X ÷ Total) × 100'
   },
   clin_lpp: {
-    nome: 'LPP – Risco alto',
-    finalidade: 'Proporção de pacientes com Braden ≤ 11, considerado risco muito alto para lesão por pressão. Sinaliza demanda por cuidados preventivos intensivos.',
-    formula: 'Taxa = evoluções com Braden ≤ 11 / evoluções com Braden avaliado × 100.',
-    codigo: `const lppAlto = evPer.filter(e =>
-  parseInt(e.bradScore) > 0 && parseInt(e.bradScore) <= 11
-).length;
-const comBraden = evPer.filter(e =>
-  e.bradScore && e.bradScore !== '–'
-).length;
-const taxa = (lppAlto * 100) / comBraden;`
+    sigla: 'CLIN-03',
+    nome: 'Prevalência de risco alto para LPP (Braden ≤ 11)',
+    conceituacao: 'Proporção de avaliações de risco para Lesão por Pressão que resultaram em risco muito alto (Escala de Braden com pontuação igual ou menor que 11).',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Sinaliza a demanda por cuidados preventivos intensivos — mobilização frequente, colchão de ar, hidratação da pele. Indicador de qualidade assistencial e de Meta Internacional de Segurança 6 (prevenção de quedas e lesões).',
+    numerador: 'Número de evoluções com bradScore > 0 e ≤ 11.',
+    denominador: 'Número de evoluções com Braden avaliado no período.',
+    formula: '(Evoluções com Braden ≤ 11 ÷ Evoluções com Braden) × 100'
   },
   clin_queda: {
-    nome: 'Queda – Risco alto',
-    finalidade: 'Proporção de evoluções com Morse ≥ 45. Alto risco de queda requer medidas específicas (grades, supervisão).',
-    formula: 'Taxa = evoluções com Morse ≥ 45 / evoluções com Morse avaliado × 100.',
-    codigo: `const quedaAlto = evPer.filter(e =>
-  parseInt(e.morseScore) >= 45
-).length;`
+    sigla: 'CLIN-04',
+    nome: 'Prevalência de risco alto para queda (Morse ≥ 45)',
+    conceituacao: 'Proporção de avaliações da Escala de Morse que resultaram em risco alto (pontuação ≥ 45).',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Direciona medidas preventivas específicas: grades elevadas, supervisão contínua, sinalização visual no leito. Parte da Meta Internacional de Segurança 6.',
+    numerador: 'Número de evoluções com morseScore ≥ 45.',
+    denominador: 'Número de evoluções com Morse avaliado no período.',
+    formula: '(Evoluções com Morse ≥ 45 ÷ Evoluções com Morse) × 100'
   },
   clin_pulseira: {
-    nome: 'Pulseira de identificação',
-    finalidade: 'Conformidade com a Meta Internacional de Segurança 1 (identificação do paciente). Deve tender a 100%.',
-    formula: 'Taxa = evoluções com pulseira = "Sim" / total de evoluções × 100.',
-    codigo: `const pulseira = evPer.filter(e => e.pulseira === 'Sim').length;
-const taxa = _pct(pulseira, total);`
+    sigla: 'CLIN-05',
+    nome: 'Conformidade de identificação por pulseira',
+    conceituacao: 'Proporção de evoluções em que o paciente estava corretamente identificado com pulseira.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Conformidade com a Meta Internacional de Segurança do Paciente 1 (identificar corretamente o paciente). Meta institucional esperada: 100%. Qualquer valor abaixo disso deve ser investigado.',
+    numerador: 'Número de evoluções com pulseira = "Sim".',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com pulseira ÷ Total) × 100'
   },
 
-  // Dispositivos
+  // ═══ DISPOSITIVOS ═══
   disp_diaspaciente: {
-    nome: 'Dias-paciente',
-    finalidade: 'Denominador-padrão ANVISA/CDC para cálculo de taxas de uso de dispositivos. Cada turno com evolução registrada conta como 1 dia-paciente para aquele leito.',
-    formula: 'Chaves únicas (leito, data) nas evoluções do período.',
-    codigo: `const diasPaciente = new Set(
-  evolucoes
-    .filter(e => _dentroPeriodo(e.data, periodo))
-    .map(e => e.leito + '|' + e.data)
-).size;`
+    sigla: 'DISP-01',
+    nome: 'Pacientes-dia (base para dispositivos)',
+    conceituacao: 'Soma de todos os pares únicos (leito × data) com evolução registrada, representando o total de dias-paciente no período.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Denominador-padrão ANVISA/CDC para calcular taxas de utilização de dispositivos invasivos. A padronização permite comparação entre unidades e períodos.',
+    numerador: 'Pares únicos (leito, data) nas evoluções do período.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   disp_uso: {
-    nome: 'Taxa de utilização de dispositivos',
-    finalidade: 'Proporção do tempo em que um dispositivo invasivo esteve em uso. Taxa alta indica exposição prolongada ao risco de IRAS (infecções relacionadas à assistência).',
-    formula: 'Taxa = dias com o dispositivo ativo / dias-paciente × 100. Padrão ANVISA/CDC.',
-    codigo: `const diasDisp = { AVC:0, CDL:0, SVD:0, SNE:0, TOT:0, TQT:0 };
-evolucoes.forEach(e => {
-  if (!_dentroPeriodo(e.data, periodo)) return;
-  if (e.avc_l) diasDisp.AVC++;
-  if (e.dial_l) diasDisp.CDL++;
-  if (e.svd_n) diasDisp.SVD++;
-  if (e.sne_n) diasDisp.SNE++;
-  if (e.tot_n || (e.vent && e.vent.includes('TOT'))) diasDisp.TOT++;
-  if (e.tqt_n || (e.vent && e.vent.includes('TQT'))) diasDisp.TQT++;
-});
-const taxa = (diasDisp[tipo] * 100) / diasPaciente;`
+    sigla: 'DISP-02',
+    nome: 'Taxa de utilização de dispositivos invasivos',
+    conceituacao: 'Percentual do tempo em que cada tipo de dispositivo invasivo (AVC, CDL, SVD, SNE, TOT, TQT) esteve presente, medido em dias-dispositivo por 100 dias-paciente. Segue o padrão ANVISA/CDC.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Taxa alta indica exposição prolongada ao fator de risco para IRAS (infecções relacionadas à assistência). Deve ser monitorada continuamente junto com a densidade de incidência de infecção. Reduzir a taxa é ação de alto impacto na prevenção de infecções.',
+    numerador: 'Número de evoluções (dias-dispositivo) em que o dispositivo X estava presente.',
+    denominador: 'Pacientes-dia no período.',
+    formula: '(Dias-dispositivo X ÷ Pacientes-dia) × 100'
   },
   disp_tempo: {
-    nome: 'Tempo médio de uso por dispositivo',
-    finalidade: 'Média de dias que cada tipo de dispositivo permanece instalado (entre instalação e retirada). Dispositivos de uso prolongado podem exigir troca ou revisão de indicação.',
-    formula: 'Para cada retirada no período, calcula dias = dataRetirada − dataInstalacao, e faz média por tipo.',
-    codigo: `dispLog.forEach(d => {
-  if (!d.data_instalacao || !d.data_retirada) return;
-  if (!_dentroPeriodo(d.data_retirada, periodo)) return;
-  const dias = _diasEntre(d.data_instalacao, d.data_retirada);
-  if (dias !== null) tempos[d.tipo].push(dias);
-});
-const media = tempos[tipo].reduce((s,x)=>s+x,0) / tempos[tipo].length;`
+    sigla: 'DISP-03',
+    nome: 'Tempo médio de permanência de dispositivo',
+    conceituacao: 'Média, em dias, do tempo entre a instalação e a retirada de cada tipo de dispositivo invasivo.',
+    dominio: 'Segurança',
+    relevancia: 'Complementar',
+    importancia: 'Tempos muito prolongados sugerem necessidade de revisão da indicação ou de troca programada. Integra a cultura de "cada dia a mais com dispositivo é um dia a mais de risco de infecção".',
+    numerador: 'Soma de (data_retirada − data_instalacao), em dias, por tipo de dispositivo.',
+    denominador: 'Número de retiradas registradas para aquele tipo no período.',
+    formula: 'Σ (dias de uso) ÷ Nº de retiradas'
   },
 
-  // Ventilação
+  // ═══ VENTILAÇÃO MECÂNICA ═══
   vent_vmi: {
-    nome: 'Evoluções com VMI',
-    finalidade: 'Número de turnos em que pacientes estavam em ventilação mecânica invasiva (TOT ou TQT).',
-    formula: 'Conta evoluções cujo campo vent inclui "TOT" ou "TQT".',
-    codigo: `const diasVMI = evPer.filter(e =>
-  e.vent && (e.vent.includes('TOT') || e.vent.includes('TQT'))
-).length;`
+    sigla: 'VENT-01',
+    nome: 'Evoluções com ventilação mecânica invasiva',
+    conceituacao: 'Número de evoluções (turnos) em que o paciente estava em ventilação mecânica invasiva, via TOT ou TQT.',
+    dominio: 'Clínico',
+    relevancia: 'Essencial',
+    importancia: 'Base para o cálculo da taxa de ventilação mecânica. Reflete gravidade respiratória e carga de trabalho especializado.',
+    numerador: 'Evoluções cujo campo "vent" inclui "TOT" ou "TQT".',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   vent_taxa: {
-    nome: 'Taxa de VMI',
-    finalidade: 'Proporção do tempo em que os pacientes da UTI estiveram em ventilação mecânica invasiva. Indicador de gravidade e uso de recurso crítico.',
-    formula: 'Taxa = dias-VMI / dias-paciente × 100.',
-    codigo: `const taxa = (diasVMI * 100) / diasPac;`
+    sigla: 'VENT-02',
+    nome: 'Taxa de utilização de ventilação mecânica',
+    conceituacao: 'Percentual do tempo em que os pacientes da UTI estiveram em VMI. Segue o padrão ANVISA/CDC para comparabilidade com outras unidades.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Indicador de gravidade respiratória e de uso de recurso crítico. Deve ser lido em conjunto com a densidade de incidência de pneumonia associada à VMI (PAV) para orientar medidas preventivas (bundle de VMI).',
+    numerador: 'Dias-VMI (evoluções com TOT ou TQT em VMI).',
+    denominador: 'Pacientes-dia no período.',
+    formula: '(Dias-VMI ÷ Pacientes-dia) × 100'
   },
   vent_fio2: {
-    nome: 'FiO₂ médio (VMI)',
-    finalidade: 'Fração inspirada de oxigênio média entre pacientes em VMI. FiO₂ alta persistente sugere hipoxemia grave (SDRA).',
-    formula: 'Média de todos os valores numéricos válidos (1–100%) do campo vmi_fio2.',
-    codigo: `const fio2s = evPer
-  .map(e => parseFloat(e.vmi_fio2))
-  .filter(n => !isNaN(n) && n > 0 && n <= 100);
-const media = fio2s.reduce((s,x)=>s+x,0) / fio2s.length;`
+    sigla: 'VENT-03',
+    nome: 'FiO₂ média em VMI',
+    conceituacao: 'Fração inspirada de oxigênio média registrada nas evoluções com VMI no período.',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'FiO₂ persistentemente elevada sugere hipoxemia grave (SDRA). Valores médios muito altos podem indicar pacientes em fase aguda prolongada ou necessidade de revisão da estratégia ventilatória.',
+    numerador: 'Soma dos valores registrados no campo vmi_fio2 (1–100%).',
+    denominador: 'Número de registros válidos de FiO₂.',
+    formula: 'Σ FiO₂ ÷ Nº de registros'
   },
   vent_oxigenio: {
-    nome: 'Tipo de oxigenoterapia',
-    finalidade: 'Distribuição dos modos de suporte respiratório: ar ambiente, cateter nasal, máscara NR, MV, VNI, VMI. Retrato da intensidade de suporte ventilatório.',
-    formula: 'Agrupa evoluções pelo campo vent.',
-    codigo: `const oxig = {};
-evPer.forEach(e => {
-  const v = e.vent || 'Não informado';
-  oxig[v] = (oxig[v]||0) + 1;
-});`
+    sigla: 'VENT-04',
+    nome: 'Distribuição dos modos de oxigenoterapia',
+    conceituacao: 'Distribuição das evoluções pelos tipos de suporte respiratório: ar ambiente, cateter nasal, máscara NR, macronebulização, VNI, VMI por TOT, VMI por TQT.',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Retrata a intensidade do suporte respiratório da unidade. Alta prevalência de VMI indica perfil mais grave; muitos pacientes em ar ambiente podem indicar unidade menos invasiva ou perfil misto.',
+    numerador: 'Número de evoluções com o modo X.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com modo X ÷ Total) × 100'
   },
   vent_modos: {
-    nome: 'Modos ventilatórios mais usados',
-    finalidade: 'Quais modos de VMI são mais empregados (PCV, VCV, PSV, SIMV, APRV). Reflete preferências institucionais e perfil respiratório dos pacientes.',
-    formula: 'Agrupa evoluções com vmi_modo preenchido pelo modo.',
-    codigo: `const modos = {};
-evPer.forEach(e => {
-  if (!e.vmi_modo) return;
-  modos[e.vmi_modo] = (modos[e.vmi_modo]||0) + 1;
-});`
+    sigla: 'VENT-05',
+    nome: 'Modos ventilatórios mais utilizados',
+    conceituacao: 'Ranking dos modos de ventilação mecânica invasiva registrados: PCV, VCV, PSV, SIMV, APRV, BiPAP.',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Reflete preferências institucionais e o perfil respiratório dos pacientes. Útil para protocolos de desmame e capacitação da equipe.',
+    numerador: 'Número de evoluções com cada vmi_modo registrado.',
+    denominador: 'Total de evoluções com vmi_modo preenchido.',
+    formula: '(Evoluções com modo X ÷ Total em VMI) × 100'
   },
 
-  // Infusões
+  // ═══ INFUSÕES ═══
   inf_dva: {
-    nome: 'Prevalência de DVA',
-    finalidade: 'Proporção de evoluções com ao menos uma droga vasoativa em uso. Marcador de choque e instabilidade hemodinâmica.',
-    formula: 'Taxa = evoluções com pelo menos um item de dva marcado OU dvaOutros não-vazio / total de evoluções.',
-    codigo: `const comDVA = evPer.filter(e => {
-  if (e.dva && Object.values(e.dva).some(v => v.checked)) return true;
-  return (e.dvaOutros || []).length > 0;
-}).length;`
+    sigla: 'INFU-01',
+    nome: 'Prevalência de uso de drogas vasoativas',
+    conceituacao: 'Proporção de evoluções em que o paciente estava em uso de ao menos uma droga vasoativa (DVA).',
+    dominio: 'Clínico',
+    relevancia: 'Essencial',
+    importancia: 'Marcador clínico de choque e instabilidade hemodinâmica. Pacientes em DVA requerem monitorização contínua e representam maior carga assistencial. Integra o proxy de gravidade máxima nos cruzamentos.',
+    numerador: 'Número de evoluções com pelo menos uma DVA marcada ou em dvaOutros.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com DVA ÷ Total) × 100'
   },
   inf_sedo: {
-    nome: 'Prevalência de sedoanalgesia',
-    finalidade: 'Proporção de evoluções com sedação/analgesia contínua. Usualmente associada à VMI e à necessidade de conforto do paciente crítico.',
-    formula: 'Taxa = evoluções com pelo menos um sedativo/analgésico marcado / total.',
-    codigo: `const comSedo = evPer.filter(e => {
-  if (e.sedo && Object.values(e.sedo).some(v => v.checked)) return true;
-  return (e.sedoOutros || []).length > 0;
-}).length;`
+    sigla: 'INFU-02',
+    nome: 'Prevalência de sedoanalgesia contínua',
+    conceituacao: 'Proporção de evoluções com sedativos ou analgésicos contínuos em infusão.',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Usualmente associada à VMI e à necessidade de conforto em pacientes críticos. Oportunidade para protocolos de sedação mínima (eCASH) e despertar diário.',
+    numerador: 'Número de evoluções com pelo menos um sedativo/analgésico marcado.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com sedoanalgesia ÷ Total) × 100'
   },
   inf_dva_rank: {
-    nome: 'DVAs mais utilizadas',
-    finalidade: 'Ranking de drogas vasoativas. Noradrenalina costuma liderar (1ª linha em choque séptico).',
-    formula: 'Soma, por droga, o número de evoluções em que ela aparecia marcada.',
-    codigo: `const count = {};
-evPer.forEach(e => {
-  if (e.dva) Object.entries(e.dva).forEach(([nome, v]) => {
-    if (v.checked) count[nome] = (count[nome]||0) + 1;
-  });
-  (e.dvaOutros||[]).forEach(o => {
-    if (o.nome) count[o.nome.trim().toUpperCase()] =
-      (count[o.nome.trim().toUpperCase()]||0) + 1;
-  });
-});`
+    sigla: 'INFU-03',
+    nome: 'Ranking de drogas vasoativas utilizadas',
+    conceituacao: 'Ranking das DVAs mais registradas no período (Noradrenalina, Adrenalina, Vasopressina, Dopamina, Dobutamina, Tridil, Nipride, Amiodarona e outras).',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Noradrenalina habitualmente lidera em UTIs gerais (1ª linha em choque séptico). Desvios do esperado podem indicar perfil diferenciado ou oportunidade de alinhamento com diretrizes.',
+    numerador: 'Número de evoluções em que cada DVA aparece marcada.',
+    denominador: '—',
+    formula: 'Contagem absoluta por DVA.'
   },
   inf_sedo_rank: {
-    nome: 'Sedativos/analgésicos mais utilizados',
-    finalidade: 'Ranking de agentes sedativos e analgésicos (Fentanil, Midazolam, Propofol, Dexmedetomidina etc.).',
-    formula: 'Soma, por droga, o número de evoluções em que ela aparecia marcada (mesma lógica de DVAs).',
-    codigo: `const count = {};
-evPer.forEach(e => {
-  if (e.sedo) Object.entries(e.sedo).forEach(([nome, v]) => {
-    if (v.checked) count[nome] = (count[nome]||0) + 1;
-  });
-  (e.sedoOutros||[]).forEach(o => {
-    if (o.nome) count[o.nome.trim().toUpperCase()] =
-      (count[o.nome.trim().toUpperCase()]||0) + 1;
-  });
-});`
+    sigla: 'INFU-04',
+    nome: 'Ranking de sedativos e analgésicos utilizados',
+    conceituacao: 'Ranking dos agentes sedativos e analgésicos mais registrados (Fentanil, Midazolam, Propofol, Dexmedetomidina etc.).',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Base para auditoria de protocolos institucionais de sedação e analgesia. Agentes de ação curta e com despertar controlado (ex: Dexmedetomidina) têm sido preferidos em protocolos modernos.',
+    numerador: 'Número de evoluções em que cada agente aparece marcado.',
+    denominador: '—',
+    formula: 'Contagem absoluta por agente.'
   },
 
-  // ATBs
+  // ═══ ANTIMICROBIANOS ═══
   atb_prev: {
-    nome: 'Evoluções com ATB',
-    finalidade: 'Proporção de evoluções com pelo menos um antimicrobiano registrado. Indicador de prevalência de infecção ou profilaxia.',
-    formula: 'Taxa = evoluções com ao menos um atbs[].nome não-vazio / total de evoluções.',
-    codigo: `const comATB = evPer.filter(e =>
-  (e.atbs || []).some(a => a.nome && a.nome.trim())
-).length;`
+    sigla: 'ATBS-01',
+    nome: 'Prevalência de uso de antimicrobianos',
+    conceituacao: 'Proporção de evoluções em que o paciente estava em uso de ao menos um antimicrobiano registrado.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Indicador de uso racional de antimicrobianos. Taxas muito altas podem sugerir uso empírico excessivo ou profilaxia inadequada. Recomendado pela CCIH e pela ANVISA.',
+    numerador: 'Número de evoluções com pelo menos um item em atbs[] com nome preenchido.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com ATB ÷ Total) × 100'
   },
   atb_multi: {
-    nome: '2+ ATBs simultâneos',
-    finalidade: 'Proporção de evoluções com dois ou mais antimicrobianos em uso ao mesmo tempo. Pode sinalizar gravidade, infecção polimicrobiana ou descalonamento necessário.',
-    formula: 'Taxa = evoluções com ≥ 2 atbs[].nome preenchidos / total.',
-    codigo: `const multi = evPer.filter(e =>
-  (e.atbs || []).filter(a => a.nome && a.nome.trim()).length >= 2
-).length;`
+    sigla: 'ATBS-02',
+    nome: 'Prevalência de uso simultâneo de 2+ antimicrobianos',
+    conceituacao: 'Proporção de evoluções com dois ou mais antimicrobianos registrados simultaneamente.',
+    dominio: 'Segurança',
+    relevancia: 'Complementar',
+    importancia: 'Pode sinalizar gravidade (sepse), infecção polimicrobiana ou oportunidade de descalonamento. Uso prolongado de múltiplos agentes aumenta o risco de resistência bacteriana e de efeitos adversos.',
+    numerador: 'Número de evoluções com 2 ou mais ATBs nomeados.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com ≥2 ATBs ÷ Total) × 100'
   },
   atb_carba: {
+    sigla: 'ATBS-03',
     nome: 'Uso de carbapenêmicos',
-    finalidade: 'Uso acumulado de meropenem, imipenem, ertapenem ou doripenem. Monitoramento importante para política de antimicrobianos — são antibióticos de largo espectro, reservados para infecções graves.',
-    formula: 'Soma das ocorrências de nomes que contenham MEROPENEM, IMIPENEM, ERTAPENEM ou DORIPENEM.',
-    codigo: `const carba = ['MEROPENEM','IMIPENEM','ERTAPENEM','DORIPENEM'];
-const count = Object.entries(atbCount)
-  .filter(([n]) => carba.some(c => n.includes(c)))
-  .reduce((s, [,v]) => s + v, 0);`
+    conceituacao: 'Número de registros de antimicrobianos da classe dos carbapenêmicos (meropenem, imipenem, ertapenem, doripenem).',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Carbapenêmicos são reservados para infecções graves por germes multirresistentes. Monitoramento essencial para política institucional de antimicrobianos e contenção da resistência.',
+    numerador: 'Soma de ocorrências de ATBs cujo nome contenha MEROPENEM, IMIPENEM, ERTAPENEM ou DORIPENEM.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Registros de carbapenêmicos ÷ Total de evoluções) × 100'
   },
   atb_rank: {
-    nome: 'Antimicrobianos mais utilizados',
-    finalidade: 'Ranking geral de antimicrobianos. Base para auditoria de uso racional e discussão com CCIH.',
-    formula: 'Extrai a primeira palavra de cada atbs[].nome (ex: "Meropenem 1g 8/8h" → "MEROPENEM") e soma ocorrências.',
-    codigo: `const count = {};
-evPer.forEach(e => {
-  (e.atbs||[]).forEach(a => {
-    if (!a.nome) return;
-    const nome = a.nome.trim().toUpperCase().split(/\\s+/)[0];
-    if (nome) count[nome] = (count[nome]||0) + 1;
-  });
-});`
+    sigla: 'ATBS-04',
+    nome: 'Ranking geral de antimicrobianos utilizados',
+    conceituacao: 'Lista dos antimicrobianos mais registrados no período, ordenados por frequência.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Base para auditoria de uso racional, discussão com CCIH e ajuste do protocolo institucional de terapia empírica. Desvios inesperados podem indicar mudança do perfil microbiológico da unidade.',
+    numerador: 'Número de evoluções em que cada ATB aparece.',
+    denominador: '—',
+    formula: 'Contagem absoluta por ATB (agrupado pela primeira palavra do nome).'
   },
 
-  // NAS
+  // ═══ NAS (Nursing Activities Score) ═══
   nas_registros: {
+    sigla: 'NASE-01',
     nome: 'Registros NAS no período',
-    finalidade: 'Número total de avaliações NAS (Nursing Activities Score) registradas. Cada paciente/turno conta como 1.',
-    formula: 'Conta entradas em uti_nas_* com campo data no período.',
-    codigo: `const nasPer = nas.filter(n => _dentroPeriodo(n.data, periodo));
-const total = nasPer.length;`
+    conceituacao: 'Número total de avaliações NAS (Nursing Activities Score) registradas no período, por paciente e turno.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Base para todos os cálculos de carga de trabalho de enfermagem. Baixo número de registros em relação às evoluções pode indicar subcobertura de avaliações NAS.',
+    numerador: 'Número de registros em uti_nas_*.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   nas_medio: {
+    sigla: 'NASE-02',
     nome: 'NAS médio por paciente',
-    finalidade: 'Pontuação NAS média das avaliações. NAS de 100% equivale à dedicação integral de 1 enfermeiro por paciente em 24h.',
-    formula: 'Média aritmética dos valores válidos do campo total.',
-    codigo: `const medias = nasPer
-  .map(n => parseFloat(n.total))
-  .filter(n => !isNaN(n) && n > 0);
-const media = medias.reduce((s,x)=>s+x,0) / medias.length;`
+    conceituacao: 'Pontuação NAS média das avaliações realizadas. Escala de 0 a ≥ 100%, em que 100% corresponde a dedicação integral de um enfermeiro para um paciente em 24 horas.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Indicador primário de carga de trabalho da enfermagem, recomendado pelo COFEN (Resolução 543/2017) para dimensionamento de pessoal. Valores médios altos justificam ampliação do quadro.',
+    numerador: 'Soma dos totais NAS válidos.',
+    denominador: 'Número de registros NAS válidos.',
+    formula: 'Σ NAS total ÷ Nº de registros'
   },
   nas_max: {
-    nome: 'NAS máximo',
-    finalidade: 'Maior pontuação NAS registrada no período. Sinaliza casos de carga extrema de enfermagem.',
-    formula: 'Math.max(...totais_validos).',
-    codigo: `const max = Math.max(...medias);`
+    sigla: 'NASE-03',
+    nome: 'NAS máximo registrado',
+    conceituacao: 'Maior pontuação NAS registrada em uma única avaliação no período.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Sinaliza casos de carga extrema de enfermagem, geralmente pacientes em instabilidade máxima ou fase crítica. Valores recorrentes acima de 120% podem exigir escalação especial de equipe.',
+    numerador: 'Max(totais NAS).',
+    denominador: '—',
+    formula: 'Máximo dos valores registrados.'
   },
   nas_diurno: {
-    nome: 'NAS médio – Diurno',
-    finalidade: 'Média de NAS apenas para o turno diurno. Permite comparar carga de trabalho entre turnos.',
-    formula: 'Média dos totais onde turno = "DIURNO".',
-    codigo: `const diurno = nasPer
-  .filter(n => n.turno === 'DIURNO')
-  .map(n => parseFloat(n.total))
-  .filter(n => !isNaN(n));
-const media = diurno.reduce((s,x)=>s+x,0) / diurno.length;`
+    sigla: 'NASE-04',
+    nome: 'NAS médio – turno diurno',
+    conceituacao: 'Média do NAS considerando apenas registros do turno diurno.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Permite comparar carga de trabalho entre turnos. Diferenças significativas podem indicar necessidade de dimensionamento distinto diurno/noturno.',
+    numerador: 'Soma dos totais NAS com turno = DIURNO.',
+    denominador: 'Nº de registros NAS do turno diurno.',
+    formula: 'Σ NAS diurno ÷ Nº registros diurno'
   },
   nas_noturno: {
-    nome: 'NAS médio – Noturno',
-    finalidade: 'Média de NAS apenas para o turno noturno. Comparação com o diurno pode revelar diferenças de dimensionamento.',
-    formula: 'Média dos totais onde turno = "NOTURNO".',
-    codigo: `const noturno = nasPer
-  .filter(n => n.turno === 'NOTURNO')
-  .map(n => parseFloat(n.total))
-  .filter(n => !isNaN(n));
-const media = noturno.reduce((s,x)=>s+x,0) / noturno.length;`
+    sigla: 'NASE-05',
+    nome: 'NAS médio – turno noturno',
+    conceituacao: 'Média do NAS considerando apenas registros do turno noturno.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Complementa o indicador NASE-04. Em UTIs com muitos procedimentos noturnos (dialise, transporte a exames), o NAS noturno pode ser maior que o diurno.',
+    numerador: 'Soma dos totais NAS com turno = NOTURNO.',
+    denominador: 'Nº de registros NAS do turno noturno.',
+    formula: 'Σ NAS noturno ÷ Nº registros noturno'
   },
   nas_sobrecarga: {
-    nome: 'Turnos com sobrecarga',
-    finalidade: 'Número de turnos em que a soma do NAS de todos os leitos ≥ 100% × número de leitos. Indica demanda assistencial maior que a capacidade teórica.',
-    formula: 'Agrupa NAS por (data, turno), soma os totais, e conta turnos cujo somatório excede 100% × TOTAL.',
-    codigo: `const porTurno = {};
-nasPer.forEach(n => {
-  const k = n.data + '|' + n.turno;
-  porTurno[k] = (porTurno[k] || 0) + (parseFloat(n.total) || 0);
-});
-const sobrecarga = Object.values(porTurno)
-  .filter(t => t >= 100 * TOTAL).length;`
+    sigla: 'NASE-06',
+    nome: 'Turnos com sobrecarga assistencial',
+    conceituacao: 'Número de turnos em que a soma do NAS de todos os leitos igualou ou superou 100% × número de leitos operacionais.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Indicador-chave de subdimensionamento de enfermagem. Turnos em sobrecarga implicam que a equipe escalada não tem tempo suficiente para executar todas as atividades requeridas. É recomendação do COFEN revisar a escala quando houver recorrência.',
+    numerador: 'Número de pares (data, turno) em que Σ NAS total ≥ 100% × nº de leitos.',
+    denominador: 'Número total de pares (data, turno) no período.',
+    formula: '(Turnos com sobrecarga ÷ Total de turnos) × 100'
   },
 
-  // Nutrição
+  // ═══ NUTRIÇÃO ═══
   nut_enteral: {
-    nome: 'Dieta enteral (SNE/SOE)',
-    finalidade: 'Proporção de evoluções em que o paciente recebia nutrição enteral por sonda nasoenteral ou orogástrica. Via mais comum em pacientes críticos sedados ou em VMI.',
-    formula: 'Taxa = evoluções com dieta = SNE OU SOE / total × 100.',
-    codigo: `const sne = evPer.filter(e => e.dieta === 'SNE').length;
-const soe = evPer.filter(e => e.dieta === 'SOE').length;
-const taxa = _pct(sne + soe, total);`
+    sigla: 'NUTR-01',
+    nome: 'Prevalência de dieta enteral',
+    conceituacao: 'Proporção de evoluções em que o paciente recebia nutrição enteral por sonda nasoenteral (SNE) ou orogástrica (SOE).',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'A nutrição enteral é a via preferencial em pacientes críticos com trato digestivo funcionante. Altas prevalências refletem perfil de pacientes sedados, em VMI ou com disfunção neurológica.',
+    numerador: 'Número de evoluções com dieta = SNE ou SOE.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções SNE + SOE ÷ Total) × 100'
   },
   nut_oral: {
-    nome: 'Dieta oral',
-    finalidade: 'Proporção de evoluções com dieta por via oral. Indicador de recuperação funcional e extubação.',
-    formula: 'Taxa = evoluções com dieta = "Oral" / total × 100.',
-    codigo: `const oral = evPer.filter(e => e.dieta === 'Oral').length;
-const taxa = _pct(oral, total);`
+    sigla: 'NUTR-02',
+    nome: 'Prevalência de dieta oral',
+    conceituacao: 'Proporção de evoluções com dieta por via oral plena.',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Indicador indireto de recuperação funcional, extubação bem-sucedida e proximidade de alta. Baixas prevalências são esperadas em UTIs com perfil grave.',
+    numerador: 'Número de evoluções com dieta = Oral.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com oral ÷ Total) × 100'
   },
   nut_npt: {
-    nome: 'NPT (Nutrição Parenteral Total)',
-    finalidade: 'Proporção de evoluções em NPT. Via reservada para pacientes com trato digestivo inviável — monitoramento importante por custo e risco de complicações.',
-    formula: 'Taxa = evoluções com dieta = "NPT" / total × 100.',
-    codigo: `const npt = evPer.filter(e => e.dieta === 'NPT').length;
-const taxa = _pct(npt, total);`
+    sigla: 'NUTR-03',
+    nome: 'Prevalência de nutrição parenteral total',
+    conceituacao: 'Proporção de evoluções em que o paciente recebia nutrição parenteral total (NPT).',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'NPT é reservada para pacientes com trato digestivo inviável (íleo prolongado, fístulas, síndromes disabsortivas). Monitoramento importante por alto custo e risco de complicações (infecção, distúrbios metabólicos).',
+    numerador: 'Número de evoluções com dieta = NPT.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com NPT ÷ Total) × 100'
   },
   nut_jejum: {
-    nome: 'Jejum',
-    finalidade: 'Proporção de evoluções em jejum. Jejum prolongado em UTI está associado a piores desfechos — indicador a ser monitorado.',
-    formula: 'Taxa = evoluções com dieta = "Jejum/Zero" / total × 100.',
-    codigo: `const jejum = evPer.filter(e => e.dieta === 'Jejum/Zero').length;
-const taxa = _pct(jejum, total);`
+    sigla: 'NUTR-04',
+    nome: 'Prevalência de jejum',
+    conceituacao: 'Proporção de evoluções em que o paciente estava em jejum (Jejum/Zero).',
+    dominio: 'Clínico',
+    relevancia: 'Essencial',
+    importancia: 'Jejum prolongado em UTI está associado a piores desfechos (desnutrição, translocação bacteriana, atrofia intestinal). Deve ser investigado recorrência elevada — muitas vezes relacionada a exames/procedimentos em excesso.',
+    numerador: 'Número de evoluções com dieta = Jejum/Zero.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções em jejum ÷ Total) × 100'
   },
 
-  // Neurológicos
+  // ═══ NEUROLÓGICOS ═══
   neuro_glasgow: {
-    nome: 'Glasgow médio',
-    finalidade: 'Escala de Coma de Glasgow média (3–15). Valores baixos indicam rebaixamento do nível de consciência.',
-    formula: 'Média dos valores válidos de glas (3 a 15).',
-    codigo: `const glasgows = evPer
-  .map(e => parseInt(e.glas))
-  .filter(n => !isNaN(n) && n >= 3 && n <= 15);
-const media = glasgows.reduce((s,x)=>s+x,0) / glasgows.length;`
+    sigla: 'NEUR-01',
+    nome: 'Escala de Coma de Glasgow — média',
+    conceituacao: 'Média dos valores de Glasgow (3 a 15) registrados nas evoluções do período.',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Valores baixos indicam rebaixamento do nível de consciência por lesão neurológica ou sedação profunda. Permite caracterizar o perfil neurológico da unidade.',
+    numerador: 'Soma dos Glasgow válidos (3 a 15).',
+    denominador: 'Número de registros com Glasgow válido.',
+    formula: 'Σ Glasgow ÷ Nº de registros'
   },
   neuro_comatosos: {
-    nome: 'Pacientes comatosos',
-    finalidade: 'Proporção de evoluções em que o paciente estava comatoso. Caracteriza a gravidade neurológica da unidade.',
-    formula: 'Taxa = evoluções com "Comatoso" em neuro / total × 100.',
-    codigo: `const comatosos = evPer.filter(e =>
-  (e.neuro || []).includes('Comatoso')
-).length;
-const taxa = _pct(comatosos, total);`
+    sigla: 'NEUR-02',
+    nome: 'Prevalência de pacientes comatosos',
+    conceituacao: 'Proporção de evoluções em que foi registrado o estado comatoso.',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Caracteriza a gravidade neurológica da unidade. Pacientes comatosos requerem cuidados intensivos de prevenção de aspiração, mobilização passiva e proteção ocular.',
+    numerador: 'Número de evoluções com "Comatoso" em neuro.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com "Comatoso" ÷ Total) × 100'
   },
   neuro_rass: {
-    nome: 'Sedação profunda (RASS ≤ -3)',
-    finalidade: 'Proporção de evoluções com RASS ≤ -3. Sedação profunda prolongada está associada a desfechos piores — métrica de ajuste de sedação.',
-    formula: 'Taxa = evoluções com rass ≤ -3 / total × 100.',
-    codigo: `const sedadoProf = evPer.filter(e => {
-  const r = parseInt(e.rass);
-  return !isNaN(r) && r <= -3;
-}).length;
-const taxa = _pct(sedadoProf, total);`
+    sigla: 'NEUR-03',
+    nome: 'Prevalência de sedação profunda (RASS ≤ -3)',
+    conceituacao: 'Proporção de evoluções com RASS (Richmond Agitation-Sedation Scale) ≤ -3, que indica sedação profunda.',
+    dominio: 'Clínico',
+    relevancia: 'Essencial',
+    importancia: 'Sedação profunda prolongada está associada a delírio, maior tempo de VMI, fraqueza adquirida na UTI e maior mortalidade. Protocolos atuais preconizam sedação mínima e despertar diário. Indicador-alvo para redução.',
+    numerador: 'Número de evoluções com rass ≤ -3.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com RASS ≤ -3 ÷ Total) × 100'
   },
 
-  // Operacionais
+  // ═══ OPERACIONAIS ═══
   op_evolucoes: {
-    nome: 'Evoluções registradas',
-    finalidade: 'Contagem única de (leito, turno, data) com evolução salva. Reflete cobertura documental.',
-    formula: 'Tamanho do conjunto de chaves únicas.',
-    codigo: `const evKeys = new Set(
-  evPer.map(e => \`\${e.leito}|\${e.turno}|\${e.data}\`)
-);`
+    sigla: 'OPER-01',
+    nome: 'Evoluções registradas (únicas)',
+    conceituacao: 'Contagem única de tríades (leito, turno, data) com evolução salva no período.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Reflete a cobertura documental da unidade. Deve se aproximar de 2 × pacientes-dia em unidades com preenchimento consistente de diurno e noturno.',
+    numerador: 'Tamanho do conjunto de tríades únicas (leito, turno, data).',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   op_nas_reg: {
-    nome: 'Registros NAS',
-    finalidade: 'Contagem única de (leito, turno, data) com NAS salvo.',
-    formula: 'Tamanho do conjunto de chaves únicas.',
-    codigo: `const nasKeys = new Set(
-  nasPer.map(n => \`\${n.leito}|\${n.turno}|\${n.data}\`)
-);`
+    sigla: 'OPER-02',
+    nome: 'Registros NAS (únicos)',
+    conceituacao: 'Contagem única de tríades (leito, turno, data) com avaliação NAS salva no período.',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Comparar com o número de evoluções identifica cobertura de avaliação NAS. O ideal é que todo paciente avaliado tenha NAS do turno.',
+    numerador: 'Tamanho do conjunto de tríades únicas em uti_nas_*.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   op_cobertura: {
-    nome: 'Cobertura do NAS',
-    finalidade: 'Percentual de turnos com evolução que também têm NAS preenchido. Meta: 100% (todo paciente avaliado tem NAS do turno).',
-    formula: 'Cobertura = turnos-com-evolução-e-NAS / turnos-com-evolução × 100.',
-    codigo: `const comAmbos = Array.from(evKeys)
-  .filter(k => nasKeys.has(k)).length;
-const cobertura = _pct(comAmbos, evKeys.size);`
+    sigla: 'OPER-03',
+    nome: 'Taxa de cobertura do NAS',
+    conceituacao: 'Percentual de turnos com evolução que também tiveram NAS preenchido.',
+    dominio: 'Gestão',
+    relevancia: 'Essencial',
+    importancia: 'Meta institucional: 100%. Valores abaixo indicam falha no processo assistencial, comprometendo o uso dos dados de NAS para dimensionamento e indicadores.',
+    numerador: 'Número de tríades (leito, turno, data) com evolução E NAS.',
+    denominador: 'Número de tríades com evolução.',
+    formula: '(Turnos com evolução e NAS ÷ Turnos com evolução) × 100'
   },
 
-  // Cruzamentos
+  // ═══ CRUZAMENTOS ═══
   cruz_altas: {
-    nome: 'Altas analisadas (base cruzamento)',
-    finalidade: 'Número de altas consideradas para os cruzamentos entre origem × mortalidade e outras análises.',
-    formula: 'Altas do período.',
-    codigo: `const altasPer = altas.filter(a =>
-  _dentroPeriodo(a.dataAlta, periodo)
-);`
+    sigla: 'CRUZ-01',
+    nome: 'Altas analisadas (base de cruzamentos)',
+    conceituacao: 'Número de altas consideradas na análise de cruzamentos (mortalidade por origem, correlações).',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Base para interpretar a confiabilidade dos cruzamentos. Amostras pequenas (< 10 altas) podem gerar padrões enganosos.',
+    numerador: 'Número de altas no período.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
   },
   cruz_gravidade: {
-    nome: 'Gravidade máxima (DVA + VMI + ATB)',
-    finalidade: 'Proporção de evoluções em que o paciente tinha simultaneamente droga vasoativa, ventilação mecânica invasiva e antimicrobiano em uso. Proxy clínico de máxima gravidade.',
-    formula: 'Taxa = evoluções com as 3 condições / total de evoluções × 100.',
-    codigo: `const gravMax = evPer.filter(e => {
-  const temDVA = (e.dva && Object.values(e.dva).some(v => v.checked))
-    || (e.dvaOutros || []).length > 0;
-  const temVMI = e.vent && (e.vent.includes('TOT') || e.vent.includes('TQT'));
-  const temATB = (e.atbs || []).some(a => a.nome && a.nome.trim());
-  return temDVA && temVMI && temATB;
-}).length;`
+    sigla: 'CRUZ-02',
+    nome: 'Prevalência de gravidade máxima (DVA + VMI + ATB)',
+    conceituacao: 'Proporção de evoluções em que o paciente tinha simultaneamente: droga vasoativa, ventilação mecânica invasiva e antimicrobiano em uso.',
+    dominio: 'Clínico',
+    relevancia: 'Complementar',
+    importancia: 'Proxy de gravidade máxima — aproxima o conceito de "sepse em UTI com choque e insuficiência respiratória". Pacientes nesse perfil demandam recursos assistenciais no topo da capacidade.',
+    numerador: 'Número de evoluções com as 3 condições simultâneas.',
+    denominador: 'Total de evoluções no período.',
+    formula: '(Evoluções com DVA+VMI+ATB ÷ Total) × 100'
   },
   cruz_correlacao: {
-    nome: 'Correlação permanência × NAS',
-    finalidade: 'Coeficiente de Pearson (−1 a +1) entre tempo de permanência e NAS médio de cada paciente. Valor positivo forte sugere que pacientes mais graves ficam mais tempo.',
-    formula: 'Para cada alta, calcula permanência e NAS médio do paciente. Aplica Pearson.',
-    codigo: `function _correlacao(xs, ys) {
-  const n = xs.length;
-  const mx = xs.reduce((s,x)=>s+x,0) / n;
-  const my = ys.reduce((s,x)=>s+x,0) / n;
-  let num=0, dx2=0, dy2=0;
-  for (let i=0; i<n; i++) {
-    num += (xs[i]-mx) * (ys[i]-my);
-    dx2 += (xs[i]-mx) ** 2;
-    dy2 += (ys[i]-my) ** 2;
-  }
-  return Math.sqrt(dx2*dy2) === 0 ? 0 : num / Math.sqrt(dx2*dy2);
-}`
+    sigla: 'CRUZ-03',
+    nome: 'Correlação entre permanência e NAS médio',
+    conceituacao: 'Coeficiente de correlação de Pearson entre o tempo de permanência de cada paciente e a média do NAS durante sua internação. Varia de −1 (correlação negativa perfeita) a +1 (correlação positiva perfeita).',
+    dominio: 'Gestão',
+    relevancia: 'Complementar',
+    importancia: 'Valor positivo forte sugere que pacientes mais graves (NAS alto) ficam mais tempo, o que é esperado. Valor baixo pode indicar perfil misto ou problemas no preenchimento do NAS. Apoia análise de perfil de complexidade.',
+    numerador: 'Σ (perm − média_perm) × (NAS − média_NAS) para cada paciente.',
+    denominador: '√(Σ(perm − média_perm)² × Σ(NAS − média_NAS)²).',
+    formula: 'Coeficiente de Pearson.'
   },
   cruz_origem_mort: {
-    nome: 'Mortalidade por origem',
-    finalidade: 'Taxa de óbito estratificada por local de procedência. Permite avaliar se certas origens (ex: transferências externas) chegam em pior estado.',
-    formula: 'Para cada origem: (óbitos / total de altas daquela origem) × 100.',
-    codigo: `const porOrigem = {};
-altasPer.forEach(a => {
-  const o = a.origem || 'Não informado';
-  if (!porOrigem[o]) porOrigem[o] = { total: 0, obitos: 0 };
-  porOrigem[o].total++;
-  if (a.tipoAlta === 'Óbito') porOrigem[o].obitos++;
-});
-// para cada origem: taxa = obitos*100/total`
+    sigla: 'CRUZ-04',
+    nome: 'Taxa de mortalidade por origem',
+    conceituacao: 'Taxa de mortalidade intra-UTI estratificada pelo local de procedência do paciente.',
+    dominio: 'Desfecho clínico',
+    relevancia: 'Essencial',
+    importancia: 'Permite identificar se determinadas origens (ex: transferências externas) chegam sistematicamente em pior estado clínico. Apoia pactuação regional e discussão de porta de entrada.',
+    numerador: 'Número de óbitos entre pacientes originários de cada local X.',
+    denominador: 'Total de altas entre pacientes originários do local X.',
+    formula: '(Óbitos da origem X ÷ Altas da origem X) × 100'
   }
 };
-
 // Escape HTML (para exibir código com <, > etc. sem quebrar)
 function _esc(s){
   return String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -1222,21 +1292,48 @@ function _esc(s){
 function abrirFichaIndicador(id){
   const f = FICHAS_INDICADORES[id];
   if (!f) { toast('Ficha não encontrada', true); return; }
-  document.getElementById('ficha-titulo').textContent = '📋 ' + f.nome;
+  document.getElementById('ficha-titulo').textContent = '📋 ' + (f.sigla || '') + ' · ' + f.nome;
+  const relevanciaCor = f.relevancia === 'Essencial' ? '#c0392b' : '#6c757d';
   document.getElementById('ficha-body').innerHTML = `
-    <div class="ficha-sec">
-      <div class="ficha-sec-t">Finalidade</div>
-      <div class="ficha-sec-c">${_esc(f.finalidade)}</div>
+    <div class="ficha-tabela">
+      <div class="ficha-linha">
+        <div class="ficha-celula-l">Sigla</div>
+        <div class="ficha-celula-c"><strong>${_esc(f.sigla||'—')}</strong></div>
+      </div>
+      <div class="ficha-linha">
+        <div class="ficha-celula-l">Nome</div>
+        <div class="ficha-celula-c">${_esc(f.nome||'')}</div>
+      </div>
+      <div class="ficha-linha">
+        <div class="ficha-celula-l">Conceituação</div>
+        <div class="ficha-celula-c">${_esc(f.conceituacao||'')}</div>
+      </div>
+      <div class="ficha-linha">
+        <div class="ficha-celula-l">Domínio</div>
+        <div class="ficha-celula-c">${_esc(f.dominio||'—')}</div>
+      </div>
+      <div class="ficha-linha">
+        <div class="ficha-celula-l">Relevância</div>
+        <div class="ficha-celula-c"><span style="color:${relevanciaCor};font-weight:600;">${_esc(f.relevancia||'—')}</span></div>
+      </div>
+      <div class="ficha-linha">
+        <div class="ficha-celula-l">Importância</div>
+        <div class="ficha-celula-c">${_esc(f.importancia||'')}</div>
+      </div>
+      <div class="ficha-linha ficha-formula">
+        <div class="ficha-celula-l">Numerador</div>
+        <div class="ficha-celula-c">${_esc(f.numerador||'—')}</div>
+      </div>
+      <div class="ficha-linha ficha-formula">
+        <div class="ficha-celula-l">Denominador</div>
+        <div class="ficha-celula-c">${_esc(f.denominador||'—')}</div>
+      </div>
+      <div class="ficha-linha ficha-formula">
+        <div class="ficha-celula-l">Fórmula</div>
+        <div class="ficha-celula-c"><strong>${_esc(f.formula||'—')}</strong></div>
+      </div>
     </div>
-    <div class="ficha-sec">
-      <div class="ficha-sec-t">Como é calculado</div>
-      <div class="ficha-sec-c">${_esc(f.formula)}</div>
-    </div>
-    <div class="ficha-sec">
-      <div class="ficha-sec-t">Trecho do código</div>
-      <pre class="ficha-codigo">${_esc(f.codigo)}</pre>
-    </div>
-    <div style="display:flex;justify-content:flex-end;padding-top:4px;">
+    <div style="display:flex;justify-content:flex-end;padding-top:10px;">
       <button class="btn btn-sec btn-sm" onclick="fecharFichaIndicador()">Fechar</button>
     </div>
   `;
