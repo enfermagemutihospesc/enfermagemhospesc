@@ -2722,6 +2722,227 @@ async function gerarPDF(){
   btn.disabled = false; btn.textContent = '☁ Salvar PDF no Drive';
 }
 
+// ── ENVIO EM LOTE: TODAS AS EVOLUÇÕES DO TURNO ATUAL ─────────────────────────
+// Varre os leitos ocupados do turno/dia atual, para cada um que tenha evolução
+// salva: renderiza o preview em uma área oculta, gera o PDF e envia ao Drive.
+// Mostra uma barra de progresso modal.
+async function enviarTodasEvolucoesTurno(){
+  const leitos = await leitosData();
+  const ocupados = Object.entries(leitos).filter(([,v])=>v.ocupado).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
+  if(!ocupados.length){ toast('Nenhum leito ocupado.'); return; }
+
+  // Primeiro, identifica quais têm evolução salva hoje neste turno
+  const hj = hoje();
+  const comEvolucao = [];
+  for(const [k,pac] of ocupados){
+    const leito = parseInt(k);
+    const ev = await dbGet(evKey(leito, turno, hj));
+    if(ev) comEvolucao.push({leito, pac, ev});
+  }
+
+  if(!comEvolucao.length){
+    toast('Nenhuma evolução salva neste turno para enviar.', true);
+    return;
+  }
+
+  const total = comEvolucao.length;
+  const msg = `Enviar ${total} evolução${total>1?'ões':''} do turno ${turno} para o Google Drive?\n\n` +
+    comEvolucao.map(x=>`• Leito ${pad(x.leito)} – ${x.pac.pac||'(sem nome)'}`).join('\n');
+  if(!confirm(msg)) return;
+
+  // Cria modal de progresso
+  const modal = _criarModalProgresso(total);
+  document.body.appendChild(modal);
+
+  // Cria uma área oculta para renderizar os previews
+  const areaOculta = document.createElement('div');
+  areaOculta.id = '_preview-lote';
+  // Fica fora da tela mas com dimensões reais (html2canvas exige visível)
+  areaOculta.style.cssText = 'position:fixed;top:0;left:-9999px;width:780px;background:white;z-index:-1;';
+  const wrapOculto = document.createElement('div');
+  wrapOculto.id = '_preview-wrap-lote';
+  wrapOculto.style.cssText = 'width:780px;background:white;border:2px solid #000;';
+  const areaInner = document.createElement('div');
+  areaInner.id = '_preview-area-lote';
+  areaInner.style.cssText = 'background:white;';
+  wrapOculto.appendChild(areaInner);
+  areaOculta.appendChild(wrapOculto);
+  document.body.appendChild(areaOculta);
+
+  const resultados = { ok: 0, erro: 0, erros: [] };
+
+  for(let i = 0; i < comEvolucao.length; i++){
+    const item = comEvolucao[i];
+    _atualizarProgresso(modal, i, total, item);
+    try {
+      // Renderiza o preview daquele leito na área oculta
+      renderPreviewEm(areaInner, item.ev);
+      // Pequena espera para garantir que o DOM renderizou completamente
+      await new Promise(r => setTimeout(r, 150));
+      // Gera o PDF a partir dessa área
+      await _gerarPDFdaArea(areaInner, item.ev);
+      resultados.ok++;
+    } catch(e) {
+      console.error('Erro no leito ' + item.leito + ':', e);
+      resultados.erro++;
+      resultados.erros.push(`Leito ${pad(item.leito)}: ${e.message||e}`);
+    }
+  }
+
+  // Limpa
+  document.body.removeChild(areaOculta);
+  document.body.removeChild(modal);
+
+  // Relatório final
+  const sucesso = resultados.ok === total;
+  const msgFinal = sucesso
+    ? `✓ Todas as ${total} evoluções foram enviadas ao Drive.`
+    : `Enviadas: ${resultados.ok}/${total}.\nFalhas: ${resultados.erro}\n\n${resultados.erros.join('\n')}`;
+  alert(msgFinal);
+  toast(sucesso ? '✓ Envio em lote concluído' : `${resultados.ok}/${total} enviados`, !sucesso);
+}
+
+function _criarModalProgresso(total){
+  const m = document.createElement('div');
+  m.className = 'overlay show';
+  m.style.zIndex = '300';
+  m.innerHTML = `
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <h3>☁ Enviando ao Drive...</h3>
+      </div>
+      <div class="modal-body">
+        <div id="_lote-info" style="font-size:.85rem;color:var(--texto);margin-bottom:10px;">Preparando...</div>
+        <div style="background:var(--cinza);border-radius:6px;height:18px;overflow:hidden;">
+          <div id="_lote-barra" style="background:var(--azul-m);height:100%;width:0%;transition:width .3s;"></div>
+        </div>
+        <div id="_lote-contador" style="font-size:.75rem;color:var(--muted);margin-top:6px;text-align:right;">0 de ${total}</div>
+        <div style="font-size:.7rem;color:var(--muted);margin-top:8px;font-style:italic;">Por favor, não feche esta janela até o término.</div>
+      </div>
+    </div>`;
+  return m;
+}
+
+function _atualizarProgresso(modal, i, total, item){
+  const info = modal.querySelector('#_lote-info');
+  const barra = modal.querySelector('#_lote-barra');
+  const cont = modal.querySelector('#_lote-contador');
+  if(info) info.textContent = `Leito ${pad(item.leito)} – ${item.pac.pac || '(sem nome)'}`;
+  if(barra) barra.style.width = `${(i/total)*100}%`;
+  if(cont) cont.textContent = `${i} de ${total}`;
+}
+
+// Renderiza o preview em uma área arbitrária (extrai lógica de gerarPreview)
+function renderPreviewEm(area, d){
+  const previewOriginal = document.getElementById('preview-area');
+  if(!previewOriginal) return;
+  // Guarda HTML atual do preview real
+  const backup = previewOriginal.innerHTML;
+  const backupPrevSub = document.getElementById('prev-sub')?.textContent;
+  const backupBadgeClass = document.getElementById('badge-prev')?.className;
+  const backupBadgeText = document.getElementById('badge-prev')?.textContent;
+  try {
+    // Chama a função original, que monta o HTML e coloca no preview-area
+    renderPreview(d);
+    // Copia o HTML gerado para a área oculta
+    area.innerHTML = previewOriginal.innerHTML;
+  } finally {
+    // Restaura o preview real para não bagunçar a tela do usuário
+    previewOriginal.innerHTML = backup;
+    if(backupPrevSub !== undefined) document.getElementById('prev-sub').textContent = backupPrevSub;
+    if(backupBadgeClass !== undefined) {
+      document.getElementById('badge-prev').className = backupBadgeClass;
+      document.getElementById('badge-prev').textContent = backupBadgeText;
+    }
+  }
+}
+
+// Gera PDF a partir de uma área específica (usado no envio em lote)
+async function _gerarPDFdaArea(area, d){
+  const {jsPDF} = window.jspdf;
+  const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const margin = 8;
+  const contentW = pageW - margin*2;
+  const contentH = pageH - margin*2;
+  const LARGURA_FIXA = 780;
+
+  const canvas = await html2canvas(area, {
+    scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
+    width: LARGURA_FIXA, windowWidth: LARGURA_FIXA
+  });
+
+  const mmTotal = (canvas.height / canvas.width) * contentW;
+  const paginasNaturais = Math.ceil(mmTotal / contentH);
+  const PAGINAS_ALVO = 2;
+  let larguraUso = contentW;
+  if (paginasNaturais > PAGINAS_ALVO) {
+    const fator = (PAGINAS_ALVO * contentH) / mmTotal;
+    larguraUso = contentW * fator;
+  }
+  const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
+
+  // Localiza quebra preferencial (início de Antimicrobianos)
+  let breakPx = null;
+  const breakEl = area.querySelector('#pdf-break-point');
+  if (breakEl) {
+    const areaTop = area.getBoundingClientRect().top;
+    const breakTop = breakEl.getBoundingClientRect().top;
+    breakPx = Math.round((breakTop - areaTop) * 2);
+  }
+
+  const offsetX = margin + (contentW - larguraUso) / 2;
+
+  function addFatia(yStart, yEnd){
+    const h = yEnd - yStart;
+    const sc = document.createElement('canvas');
+    sc.width = canvas.width; sc.height = h;
+    const ctx = sc.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,sc.width,h);
+    ctx.drawImage(canvas, 0,yStart, canvas.width,h, 0,0, canvas.width,h);
+    const mmH = (h / canvas.width) * larguraUso;
+    pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', offsetX, margin, larguraUso, mmH);
+  }
+
+  if (canvas.height <= pxPorPagina) {
+    addFatia(0, canvas.height);
+  } else if (breakPx && breakPx > 0 && breakPx < canvas.height && breakPx <= pxPorPagina) {
+    addFatia(0, breakPx);
+    pdf.addPage();
+    const restoFim = Math.min(breakPx + pxPorPagina, canvas.height);
+    addFatia(breakPx, restoFim);
+  } else {
+    let yStart = 0, pag = 0;
+    while (yStart < canvas.height && pag < PAGINAS_ALVO) {
+      if (pag > 0) pdf.addPage();
+      const yEnd = Math.min(yStart + pxPorPagina, canvas.height);
+      addFatia(yStart, yEnd);
+      yStart = yEnd;
+      pag++;
+    }
+  }
+
+  // Nome e pasta
+  const [ano, mes, dia] = d.data.split('-');
+  const dataBR = dia + mes + ano;
+  const nomePaciente = (d.pac || '').trim();
+  const pastaNome = nomePaciente
+    ? `Leito ${pad(d.leito)} - ${nomePaciente}`
+    : `Leito ${pad(d.leito)} - Sem identificacao`;
+  const titulo = `Evolucao_L${pad(d.leito)}_${d.turno}_${dataBR}_${(nomePaciente||'Pac').split(' ')[0]}`;
+
+  const dataUri = pdf.output('datauristring');
+  const base64  = dataUri.split(',')[1];
+
+  await fetch(APPS_SCRIPT_URL, {
+    method:  'POST',
+    mode:    'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
+    body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: pastaNome })
+  });
+}
+
 // ── FUNÇÃO DE ALTA (modal com tipo de alta, data, hora) ──────────────────────
 // leitoParaAlta guarda qual leito vai receber alta — usado pelo modal
 let leitoParaAlta = 0;
