@@ -63,14 +63,59 @@ async function dbGet(key) {
   if (!modoOffline && db) {
     try {
       const doc = await db.collection('uti').doc(key).get();
-      if (doc.exists) return doc.data().value;
+      if (doc.exists) return doc.data().value ?? doc.data().v ?? null;
     } catch(e) { console.warn('Firestore get error, usando local:', e); }
   }
   try { return JSON.parse(localStorage.getItem(key)); } catch(e) { return null; }
 }
 
+// Cache em memória — válido enquanto a página estiver aberta.
+const memCache = {};
+function cacheInvalidate(key) { delete memCache[key]; }
+
+// Busca múltiplas chaves em paralelo (uma única round-trip ao Firestore).
+async function dbGetMany(keys) {
+  const result = {};
+  const toFetch = [];
+  for (const key of keys) {
+    if (key in memCache) { result[key] = memCache[key]; }
+    else { toFetch.push(key); }
+  }
+  if (toFetch.length === 0) return result;
+  if (!modoOffline && db) {
+    try {
+      const refs = toFetch.map(k => db.collection('uti').doc(k));
+      const snapshots = await db.getAll(...refs);
+      for (const snap of snapshots) {
+        const val = snap.exists ? (snap.data().value ?? snap.data().v ?? null) : null;
+        memCache[snap.id] = val;
+        result[snap.id]   = val;
+      }
+      return result;
+    } catch(e) {
+      console.warn('dbGetMany: getAll falhou, usando gets individuais:', e);
+      await Promise.all(toFetch.map(async key => {
+        try {
+          const doc = await db.collection('uti').doc(key).get();
+          const val = doc.exists ? (doc.data().value ?? doc.data().v ?? null) : null;
+          memCache[key] = val; result[key] = val;
+        } catch(e2) {
+          const val = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
+          memCache[key] = val; result[key] = val;
+        }
+      }));
+      return result;
+    }
+  }
+  await Promise.all(toFetch.map(async key => {
+    const val = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
+    memCache[key] = val; result[key] = val;
+  }));
+  return result;
+}
+
 async function dbSet(key, value) {
-  // Sempre salva local como cache
+  cacheInvalidate(key);
   localStorage.setItem(key, JSON.stringify(value));
   if (!modoOffline && db) {
     try {
@@ -82,6 +127,7 @@ async function dbSet(key, value) {
 }
 
 async function dbDelete(key){
+  cacheInvalidate(key);
   localStorage.removeItem(key);
   if(!modoOffline&&db) try{ await db.collection('uti').doc(key).delete(); }catch(e){}
 }
@@ -2112,22 +2158,28 @@ async function renderLeitos() {
   // Cria cards placeholder
   for (let i=1;i<=TOTAL;i++) {
     const card = document.createElement('div');
-    card.className = 'leito-card';
+    card.className = 'leito-card loading';
     card.id = 'leito-card-'+i;
     card.innerHTML = `<div class="leito-spinner"></div><div class="leito-num">LEITO ${pad(i)}</div><div class="leito-info"><div class="leito-vazio">carregando...</div></div><div class="leito-badge-row"></div>`;
-    card.classList.add('loading');
     grid.appendChild(card);
   }
   const d = await leitosData();
+  const outroTurno = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
+  const hj = hoje();
+  // Monta todas as chaves e busca em paralelo (uma única round-trip ao Firestore)
+  const keys = [];
+  for (let i=1;i<=TOTAL;i++) {
+    keys.push('uti_ev_'  + i + '_' + turno      + '_' + hj);
+    keys.push('uti_nas_' + i + '_' + turno      + '_' + hj);
+    keys.push('uti_nas_' + i + '_' + outroTurno + '_' + hj);
+  }
+  const data = await dbGetMany(keys);
   for (let i=1;i<=TOTAL;i++) {
     const l = d[i] || {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:''};
-    const evHoje = await dbGet('uti_ev_'+i+'_'+turno+'_'+hoje());
-    let nasHoje = l.ocupado ? await dbGet('uti_nas_'+i+'_'+turno+'_'+hoje()) : null;
+    const evHoje  = data['uti_ev_'  + i + '_' + turno      + '_' + hj];
+    let   nasHoje = l.ocupado ? data['uti_nas_' + i + '_' + turno + '_' + hj] : null;
     // Sem NAS no turno atual → tenta o outro turno do mesmo dia (NAS é 24h)
-    if (l.ocupado && !nasHoje) {
-      const outroTurno = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
-      nasHoje = await dbGet('uti_nas_'+i+'_'+outroTurno+'_'+hoje());
-    }
+    if (l.ocupado && !nasHoje) nasHoje = data['uti_nas_' + i + '_' + outroTurno + '_' + hj];
     const card = document.getElementById('leito-card-'+i);
     card.classList.remove('loading');
     if (l.ocupado) card.classList.add('ocupado');
