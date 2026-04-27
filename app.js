@@ -2432,11 +2432,255 @@ function outrasStr(arr){
   if(!arr||!arr.length) return '';
   return arr.map(o=>o.nome+(o.val?' '+o.val+'ml/h':'')).join(' | ');
 }
-function addAVP(local='',data=''){ const lista=document.getElementById('avp-lista'); const row=document.createElement('div'); row.className='dyn-row'; row.innerHTML=`<input type="text" placeholder="Local (ex: ant. cubital D)" value="${(local||'').toUpperCase()}"><input type="date" value="${data}" style="max-width:140px;flex:none;"><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); _ativarCaixaAlta(); }
-function getAVPs(){ return Array.from(document.getElementById('avp-lista').querySelectorAll('.dyn-row')).map(r=>{const ins=r.querySelectorAll('input');return{local:ins[0].value,data:ins[1].value};}); }
-function addATB(nome='',dtInicio=''){ const lista=document.getElementById('atb-lista'); const row=document.createElement('div'); row.className='atb-row'; row.innerHTML=`<input type="text" placeholder="Ex: Meropenem 1g 8/8h EV" value="${(nome||'').toUpperCase()}"><div class="atb-date-wrap"><span>Início</span><input type="date" value="${dtInicio}"></div><button class="btn-rem" onclick="this.parentElement.remove()">×</button>`; lista.appendChild(row); _ativarCaixaAlta(); }
-function getATBs(){ return Array.from(document.getElementById('atb-lista').querySelectorAll('.atb-row')).map(r=>{const ins=r.querySelectorAll('input');return{nome:ins[0].value,inicio:ins[1].value};}); }
+// ── DIAS DE INSTALAÇÃO (dispositivos fixos) ───────────────────────────────────
+function _atualizarDiasDisp(idData, idDias){
+  const dataInst = gf(idData);
+  const el = document.getElementById(idDias);
+  if(!el) return;
+  if(!dataInst){ el.value=''; el.title=''; el.style.background='#f0f4fa'; el.style.color='var(--azul)'; return; }
+  const [y,m,d] = dataInst.split('-').map(Number);
+  const inst = new Date(y, m-1, d);
+  const dias = Math.floor((new Date() - inst) / 86400000);
+  el.value = dias + (dias===1?' dia':' dias');
+  el.title = 'Instalado em '+dataInst.split('-').reverse().join('/');
+}
+
+function _diasDeInstalacao(dataStr){
+  if(!dataStr) return null;
+  const [y,m,d] = dataStr.split('-').map(Number);
+  return Math.floor((new Date() - new Date(y, m-1, d)) / 86400000);
+}
+
+// ── AVP – adicionar linha com dias + alerta se >3 dias ───────────────────────
+function addAVP(local='', data=''){
+  const lista = document.getElementById('avp-lista');
+  const row = document.createElement('div');
+  row.className = 'dyn-row';
+  row.style.cssText = 'flex-wrap:wrap;gap:4px;align-items:center;';
+  const diasStr = data ? (() => {
+    const d = _diasDeInstalacao(data);
+    return d !== null ? d+(d===1?' dia':' dias') : '';
+  })() : '';
+  const aviso = data && _diasDeInstalacao(data) > 3
+    ? `<span style="font-size:.7rem;background:#ffeeba;color:#856404;padding:2px 7px;border-radius:10px;font-weight:700;">⚠ Trocar hoje!</span>`
+    : '';
+  row.innerHTML = `
+    <input type="text" placeholder="Local (ex: ant. cubital D)" value="${(local||'').toUpperCase()}" style="flex:1;min-width:120px;">
+    <input type="date" value="${data}" style="max-width:140px;flex:none;" onchange="_atualizarDiasAVP(this)">
+    <input type="text" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" value="${diasStr}" placeholder="dias">
+    ${aviso}
+    <button class="btn-rem" onclick="this.closest('.dyn-row').remove()">×</button>`;
+  lista.appendChild(row);
+  _ativarCaixaAlta();
+}
+function _atualizarDiasAVP(inputDate){
+  const row = inputDate.closest('.dyn-row');
+  const diasEl = row.querySelectorAll('input')[2];
+  const data = inputDate.value;
+  if(!data){ diasEl.value=''; return; }
+  const dias = _diasDeInstalacao(data);
+  diasEl.value = dias + (dias===1?' dia':' dias');
+  // Aviso de troca
+  let aviso = row.querySelector('.avp-aviso');
+  if(dias > 3){
+    if(!aviso){
+      aviso = document.createElement('span');
+      aviso.className = 'avp-aviso';
+      aviso.style.cssText = 'font-size:.7rem;background:#ffeeba;color:#856404;padding:2px 7px;border-radius:10px;font-weight:700;';
+      row.insertBefore(aviso, row.lastElementChild);
+    }
+    aviso.textContent = '⚠ Trocar hoje!';
+  } else if(aviso) { aviso.remove(); }
+}
+function getAVPs(){
+  return Array.from(document.getElementById('avp-lista').querySelectorAll('.dyn-row')).map(r=>{
+    const ins = r.querySelectorAll('input');
+    return { local: ins[0].value, data: ins[1].value };
+  });
+}
+
+// ── ATB – dias de uso calculado ───────────────────────────────────────────────
+function addATB(nome='', dtInicio=''){
+  const lista = document.getElementById('atb-lista');
+  const row = document.createElement('div');
+  row.className = 'atb-row';
+  const diasStr = dtInicio ? (() => {
+    const d = _diasDeInstalacao(dtInicio);
+    return d !== null ? d+(d===1?' dia':' dias') : '';
+  })() : '';
+  row.innerHTML = `
+    <input type="text" placeholder="Ex: Meropenem 1g 8/8h EV" value="${(nome||'').toUpperCase()}" style="flex:1;min-width:160px;">
+    <div class="atb-date-wrap" style="display:flex;align-items:center;gap:4px;">
+      <span>Início</span>
+      <input type="date" value="${dtInicio}" onchange="_atualizarDiasATB(this)">
+      <input type="text" readonly style="max-width:72px;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" value="${diasStr}" placeholder="dias">
+    </div>
+    <button class="btn-rem" onclick="this.closest('.atb-row').remove()">×</button>`;
+  lista.appendChild(row);
+  _ativarCaixaAlta();
+}
+function _atualizarDiasATB(inputDate){
+  const row = inputDate.closest('.atb-row');
+  const diasEl = row.querySelectorAll('input[type=text]')[1] || row.querySelector('.atb-date-wrap input[readonly]');
+  if(!diasEl) return;
+  const data = inputDate.value;
+  if(!data){ diasEl.value=''; return; }
+  const dias = _diasDeInstalacao(data);
+  diasEl.value = dias + (dias===1?' dia':' dias');
+}
+function getATBs(){
+  return Array.from(document.getElementById('atb-lista').querySelectorAll('.atb-row')).map(r=>{
+    const ins = r.querySelectorAll('input');
+    return { nome: ins[0].value, inicio: ins[1].value };
+  });
+}
+
+// ── DISPOSITIVOS: RETIRAR (agora mostra campo data retirada) ─────────────────
+async function retirarDispositivo(tipo, idLocal, idData, idRet, idWrap){
+  if(!leitoAtual){ toast('Abra uma evolução primeiro',true); return; }
+  const locOuNum = gf(idLocal);
+  const dataInst = gf(idData);
+  if(!locOuNum && !dataInst){ toast('Sem '+tipo+' registrado pra retirar',true); return; }
+  if(!confirm(`Confirma a retirada do ${tipo} do Leito ${pad(leitoAtual)}?`)) return;
+
+  // Mostra campo de data retirada
+  if(idWrap){
+    const wrap = document.getElementById(idWrap);
+    if(wrap){ wrap.style.display='flex'; wrap.style.alignItems='center'; wrap.style.gap='8px'; }
+    if(idRet) setF(idRet, hoje());
+  }
+
+  const hojeStr = hoje();
+  const pac = gf('f-pac') || '';
+  try {
+    const key = 'uti_disp_log';
+    const log = (await dbGet(key)) || [];
+    log.push({
+      leito: leitoAtual, paciente: pac, tipo, local_ou_numero: locOuNum,
+      data_instalacao: dataInst, data_retirada: hojeStr,
+      turno, autor: usuarioEmail, registradoEm: new Date().toISOString()
+    });
+    await dbSet(key, log);
+  } catch(e){ console.warn('Log retirada:', e); }
+
+  setF(idLocal, ''); setF(idData, '');
+  if(tipo==='TOT'){ setF('f-tot-n',''); }
+  if(tipo==='TQT'){ setF('f-tqt-n',''); }
+  toast('✓ '+tipo+' retirado em '+hojeStr.split('-').reverse().join('/'));
+}
+
+// ── DISPOSITIVOS: TROCAR ──────────────────────────────────────────────────────
+function trocarDispositivo(tipo, idLocal, idData){
+  const novoLocal = prompt(`Trocar ${tipo} – informe a nova localização/numeração:`);
+  if(novoLocal === null) return; // cancelou
+  if(novoLocal.trim()){
+    setF(idLocal, novoLocal.trim().toUpperCase());
+  }
+  setF(idData, hoje()); // zera a data de instalação para hoje
+  _atualizarDiasDisp(idData, 'dias-' + idLocal.replace('f-','').replace('-l','').replace('-n','').replace('-n2',''));
+  toast('✓ '+tipo+' trocado – data de instalação atualizada para hoje');
+}
+
+// ── HIDRATAÇÃO VENOSA – outras infusões ──────────────────────────────────────
+function addHVOutra(nome='', vol=''){
+  const lista = document.getElementById('hv-outras-lista');
+  const row = document.createElement('div');
+  row.className = 'dyn-row';
+  row.innerHTML = `
+    <input type="text" placeholder="Ex: KCl 10%, MgSO4..." value="${(nome||'').toUpperCase()}" style="flex:1;min-width:140px;">
+    <input type="number" placeholder="ml/h" value="${vol}" style="width:70px;flex:none;">
+    <span style="font-size:.74rem;color:var(--muted);">ml/h</span>
+    <button class="btn-rem" onclick="this.closest('.dyn-row').remove()">×</button>`;
+  lista.appendChild(row);
+  _ativarCaixaAlta();
+}
+function getHVOutras(){
+  return Array.from(document.getElementById('hv-outras-lista').querySelectorAll('.dyn-row')).map(r=>{
+    const ins = r.querySelectorAll('input');
+    return { nome: ins[0].value, vol: ins[1].value };
+  }).filter(x=>x.nome.trim());
+}
 function toggleVMI(){ const v=document.querySelector('input[name="vent"]:checked'); const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI'); document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':''); document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex'; }
+
+// FC – limpa valor numérico ao desselecionar a opção de ritmo
+(function _initFCListeners(){
+  function _bindFC(cbVal, fcId){
+    const cb = document.querySelector(`.f-car[value="${cbVal}"]`);
+    const fc = document.getElementById(fcId);
+    if(cb && fc) cb.addEventListener('change', ()=>{ if(!cb.checked) fc.value=''; });
+  }
+  // Aguarda DOM pronto
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ()=>{
+      _bindFC('Normocárdico','f-fc-norm');
+      _bindFC('Taquicárdico','f-fc-taqui');
+      _bindFC('Bradicárdico','f-fc-bradi');
+    });
+  } else {
+    _bindFC('Normocárdico','f-fc-norm');
+    _bindFC('Taquicárdico','f-fc-taqui');
+    _bindFC('Bradicárdico','f-fc-bradi');
+  }
+})();
+
+// ── ELIMINAÇÕES INTESTINAIS – rastreamento de dias sem evacuar ────────────────
+async function _atualizarDiasSemEvacoar(leito){
+  const elWrap = document.getElementById('dias-sem-evacuar');
+  if(!elWrap) return;
+  // Busca evoluções anteriores do leito para achar a última com "Presente"
+  const hj = hoje();
+  let diasSem = null;
+  try {
+    // Coleta chaves de evoluções do leito (ambos os turnos, dias anteriores)
+    const todas = new Set();
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k&&k.startsWith('uti_ev_'+leito+'_')) todas.add(k);
+    }
+    if(!modoOffline&&db){
+      try{
+        const snap=await db.collection('uti').where(firebase.firestore.FieldPath.documentId(),'>=','uti_ev_'+leito+'_')
+                                              .where(firebase.firestore.FieldPath.documentId(),'<','uti_ev_'+leito+'_\uf8ff').get();
+        snap.forEach(d=>todas.add(d.id));
+      }catch(e){}
+    }
+    // Filtra só dias anteriores ao hoje e ordena desc
+    const candidatos = Array.from(todas)
+      .map(k=>{ const p=k.split('_'); return { chave:k, data:p.slice(4).join('_')||p[4], turno:p[3] }; })
+      .filter(c=>c.data && c.data < hj)
+      .sort((a,b)=>b.data!==a.data?b.data.localeCompare(a.data):b.turno.localeCompare(a.turno));
+
+    if(!candidatos.length){ elWrap.style.display='none'; return; }
+    const dataMap = await dbGetMany(candidatos.map(c=>c.chave));
+    let ultimaPresente = null;
+    for(const c of candidatos){
+      const ev = dataMap[c.chave];
+      if(!ev) continue;
+      const eli = Array.isArray(ev.eli) ? ev.eli : (ev.eli ? [ev.eli] : []);
+      if(eli.includes('Presente')){ ultimaPresente = c.data; break; }
+    }
+    if(ultimaPresente){
+      const [y,m,d] = ultimaPresente.split('-').map(Number);
+      diasSem = Math.floor((new Date() - new Date(y,m-1,d)) / 86400000);
+    } else {
+      diasSem = candidatos.length; // nunca registrado como Presente no histórico
+    }
+  } catch(e){ console.warn('_atualizarDiasSemEvacoar:', e); }
+
+  if(diasSem !== null && diasSem > 0){
+    elWrap.style.display = 'flex';
+    const cor = diasSem >= 3 ? '#dc3545' : diasSem >= 2 ? '#fd7e14' : '#856404';
+    elWrap.innerHTML = `<span style="font-size:.74rem;background:#fff3cd;color:${cor};padding:3px 10px;border-radius:10px;font-weight:700;border:1px solid ${cor}22;">⚠ ${diasSem} dia${diasSem>1?'s':''} sem evacuar</span>`;
+  } else {
+    elWrap.style.display = 'none';
+  }
+}
+
+// ── BOTÃO EDITAR ADMISSÃO (no formulário de evolução) ────────────────────────
+function abrirModalAdmissao(){
+  if(!leitoAtual){ toast('Nenhum leito aberto',true); return; }
+  abrirModal(leitoAtual);
+}
 function calcB(){ let t=0; document.querySelectorAll('.bs').forEach(s=>{if(s.value)t+=parseInt(s.value);}); const sc=document.getElementById('b-sc'),r=document.getElementById('b-r'); if(t>0){sc.textContent=t;if(t>=15){r.textContent='Risco Baixo';r.className='rb rb-b';}else if(t>=12){r.textContent='Risco Moderado';r.className='rb rb-m';}else{r.textContent='Risco Alto';r.className='rb rb-a';}}else{sc.textContent='–';r.textContent='';} }
 function calcM(){ let t=0; ['m1','m2','m3','m4','m5','m6'].forEach(n=>{const el=document.querySelector('input[name="'+n+'"]:checked');if(el)t+=parseInt(el.value);}); const sc=document.getElementById('m-sc'),r=document.getElementById('m-r'); sc.textContent=t; if(t<=24){r.textContent='Risco Baixo';r.className='rb rb-b';}else if(t<=44){r.textContent='Risco Moderado';r.className='rb rb-m';}else{r.textContent='Risco Alto';r.className='rb rb-a';} }
 
@@ -2480,6 +2724,7 @@ async function abrirForm(n) {
   // admHosp e alergia: usa leito primeiro, cai pro evolução anterior se o leito não tem
   setF('f-adm-hosp', pac.admHosp || (anterior && anterior.admHosp) || (evHoje && evHoje.admHosp) || '');
   setF('f-alergia',  pac.alergia || (anterior && anterior.alergia) || (evHoje && evHoje.alergia) || '');
+  setF('f-sexo', pac.sexo || (anterior && anterior.sexo) || (evHoje && evHoje.sexo) || '');
   setF('f-leito','Leito '+pad(n)+' – UTI Geral'); setF('f-data',hoje());
 
   const fonte = evHoje || anterior;
@@ -2513,12 +2758,29 @@ async function abrirForm(n) {
     setF('f-spo2',fonte.spo2);         setF('f-spo2-av',fonte.spo2av);
     setChecks('f-car',fonte.car);      setF('f-fc-norm',fonte.fcNorm);  setF('f-fc-taqui',fonte.fcTaqui);  setF('f-fc-bradi',fonte.fcBradi);
     setChecks('f-abd',fonte.abd);
-    setRadio('dieta',fonte.dieta);     setF('f-vdieta',fonte.vdieta);
-    setRadio('diu',fonte.diu);         setChecks('f-uri',fonte.uri);  setF('f-ddiu',fonte.ddiu);
-    setChecks('f-eli',fonte.eli);      setChecks('f-prev',fonte.prev);
+    // dieta e diu: suporta novo formato (array de checkboxes) e legado (string de radio)
+    if(Array.isArray(fonte.dieta)) setChecks('f-dieta', fonte.dieta);
+    else if(fonte.dieta) { const cb = document.querySelector(`.f-dieta[value="${fonte.dieta}"]`); if(cb) cb.checked=true; }
+    setF('f-vdieta',fonte.vdieta);
+    if(Array.isArray(fonte.diu)) setChecks('f-diu', fonte.diu);
+    else if(fonte.diu) { const cb = document.querySelector(`.f-diu[value="${fonte.diu}"]`); if(cb) cb.checked=true; }
+    setChecks('f-uri',fonte.uri);  setF('f-ddiu',fonte.ddiu);
+    setChecks('f-eli',fonte.eli);
+    // Rastreia dias sem evacuar
+    _atualizarDiasSemEvacoar(n);
+    setChecks('f-prev',fonte.prev);
     setF('f-exames-real',  fonte.examesReal||'');
     setF('f-exames-solic', fonte.examesSolic||'');
     setF('f-obs', fonte.obs||'');
+    // HV outras infusões
+    if(fonte.hvOutras&&fonte.hvOutras.length) fonte.hvOutras.forEach(o=>addHVOutra(o.nome,o.vol));
+    // Atualiza dias dos dispositivos fixos
+    if(fonte.avc_d)  { _atualizarDiasDisp('f-avc-d',  'dias-avc');  }
+    if(fonte.dial_d) { _atualizarDiasDisp('f-dial-d', 'dias-dial'); }
+    if(fonte.svd_d)  { _atualizarDiasDisp('f-svd-d',  'dias-svd');  }
+    if(fonte.sne_d)  { _atualizarDiasDisp('f-sne-d',  'dias-sne');  }
+    if(fonte.tot_d)  { _atualizarDiasDisp('f-tot-d',  'dias-tot');  }
+    if(fonte.tqt_d)  { _atualizarDiasDisp('f-tqt-d',  'dias-tqt');  }
   } else { addAVP(); addATB(); }
 
   document.getElementById('form-titulo').textContent = 'Evolução – Leito '+pad(n);
@@ -2539,6 +2801,7 @@ function coletarDados() {
   return {
     leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), diag:gf('f-diag'), comor:gf('f-comor'),admHosp:    gf('f-adm-hosp'),
 alergia:    gf('f-alergia'),
+sexo:       gf('f-sexo'),
 pulseira:   gRadio('pulseira'),
 isolamento: gRadio('isolamento'),
 microorg:   gf('f-microorg'),
@@ -2551,17 +2814,19 @@ examesSolic:gf('f-exames-solic'),
     vmi_modo:gf('vmi-modo'), vmi_fio2:gf('vmi-fio2'), vmi_peep:gf('vmi-peep'), vmi_fr:gf('vmi-fr'), vmi_sens:gf('vmi-sens'), vmi_vt:gf('vmi-vt'),
     spo2:isVMI?gf('f-spo2'):'', spo2av:isVMI?'':gf('f-spo2-av'),
     car:gChecked('f-car'), fcNorm:gf('f-fc-norm'), fcTaqui:gf('f-fc-taqui'), fcBradi:gf('f-fc-bradi'),
-    abd:gChecked('f-abd'), dieta:gRadio('dieta'), vdieta:gf('f-vdieta'),
-    diu:gRadio('diu'), uri:gChecked('f-uri'), ddiu:gf('f-ddiu'), eli:gChecked('f-eli'),
-    hvTipo:gf('f-hv-tipo'), hvMl:gf('f-hv-ml'),
+    abd:gChecked('f-abd'),
+    dieta:gChecked('f-dieta'), vdieta:gf('f-vdieta'),
+    diu:gChecked('f-diu'), uri:gChecked('f-uri'), ddiu:gf('f-ddiu'), eli:gChecked('f-eli'),
+    hvTipo:gf('f-hv-tipo'), hvMl:gf('f-hv-ml'), hvOutras:getHVOutras(),
     dva:getDVAData('dva-l'), dvaOutros:getOutrasInfusoes('dva-outros'),
     sedo:getDVAData('sedo-l'), sedoOutros:getOutrasInfusoes('sedo-outros'),
     prev:gChecked('f-prev'),
-    avps:getAVPs(), avc_l:gf('f-avc-l'), avc_d:gf('f-avc-d'),
-    dial_l:gf('f-dial-l'), dial_d:gf('f-dial-d'),
-    svd_n:gf('f-svd-n'), svd_d:gf('f-svd-d'), sne_n:gf('f-sne-n'), sne_d:gf('f-sne-d'),
-    tot_n:gf('f-tot-n')||gf('f-tot-n2'), tot_d:gf('f-tot-d'),
-    tqt_n:gf('f-tqt-n')||gf('f-tqt-n2'), tqt_d:gf('f-tqt-d'),
+    avps:getAVPs(), avc_l:gf('f-avc-l'), avc_d:gf('f-avc-d'), avc_ret:gf('f-avc-ret'),
+    dial_l:gf('f-dial-l'), dial_d:gf('f-dial-d'), dial_ret:gf('f-dial-ret'),
+    svd_n:gf('f-svd-n'), svd_d:gf('f-svd-d'), svd_ret:gf('f-svd-ret'),
+    sne_n:gf('f-sne-n'), sne_d:gf('f-sne-d'), sne_ret:gf('f-sne-ret'),
+    tot_n:gf('f-tot-n')||gf('f-tot-n2'), tot_d:gf('f-tot-d'), tot_ret:gf('f-tot-ret'),
+    tqt_n:gf('f-tqt-n')||gf('f-tqt-n2'), tqt_d:gf('f-tqt-d'), tqt_ret:gf('f-tqt-ret'),
     disp_o:gf('f-disp-o'),
     atbs:getATBs(),
     braden:getBraden(), bradScore:document.getElementById('b-sc').textContent, bradRisco:document.getElementById('b-r').textContent,
