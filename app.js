@@ -3656,3 +3656,289 @@ window.addEventListener('load', () => {
     }
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// IMPRIMIR TURNO COMPLETO – abre todas as evoluções do turno em uma janela única
+// ════════════════════════════════════════════════════════════════════════════
+async function imprimirTurnoCompleto(){
+  const leitos = await leitosData();
+  const ocupados = Object.entries(leitos).filter(([,v])=>v.ocupado).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
+  if(!ocupados.length){ toast('Nenhum leito ocupado.'); return; }
+
+  const hj = hoje();
+  const comEvolucao = [];
+  for(const [k,pac] of ocupados){
+    const leito = parseInt(k);
+    const ev = await dbGet(evKey(leito, turno, hj));
+    if(ev) comEvolucao.push({leito, pac, ev});
+  }
+
+  if(!comEvolucao.length){ toast('Nenhuma evolução salva neste turno.', true); return; }
+
+  const total = comEvolucao.length;
+  if(!confirm(`Imprimir ${total} evolução${total>1?'ões':''} do turno ${turno}?\n\nUma janela única será aberta com todas em sequência. Use a opção "Imprimir" do navegador (Ctrl+P) ou aguarde o diálogo de impressão automático.`)) return;
+
+  showLoading('Renderizando evoluções...');
+
+  // Renderiza todos os previews em sequência usando renderPreviewEm
+  const areaTemp = document.createElement('div');
+  areaTemp.style.cssText = 'position:fixed;top:0;left:-9999px;width:780px;background:white;z-index:-1;';
+  document.body.appendChild(areaTemp);
+
+  const blocos = [];
+  for(const item of comEvolucao){
+    try {
+      renderPreviewEm(areaTemp, item.ev);
+      await new Promise(r => setTimeout(r, 50));
+      blocos.push(areaTemp.innerHTML);
+    } catch(e){
+      console.warn('Erro renderizando leito '+item.leito+':', e);
+    }
+  }
+  document.body.removeChild(areaTemp);
+
+  // Coleta CSS atual da página
+  let cssFull = '';
+  for(const ss of document.styleSheets){
+    try {
+      cssFull += Array.from(ss.cssRules).map(r=>r.cssText).join('\n');
+    } catch(e){ /* CORS pode bloquear */ }
+  }
+
+  // Abre janela nova com todos os previews
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if(!w){ hideLoading(); toast('Bloqueador de pop-up impediu abrir janela. Permita pop-ups e tente novamente.', true); return; }
+
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Evoluções ${turno} – ${hj.split('-').reverse().join('/')}</title>
+    <style>${cssFull}
+      body { background:white; padding:0; margin:0; }
+      .pg { page-break-after: always; padding:20px; }
+      .pg:last-child { page-break-after: auto; }
+      @media print { .no-print { display:none !important; } }
+      .no-print { background:#1a6b3a; color:white; padding:10px; text-align:center; position:sticky; top:0; z-index:99; }
+      .no-print button { background:white; color:#1a6b3a; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-weight:600; margin-left:10px; }
+    </style>
+  </head><body>
+    <div class="no-print">
+      ${total} evolução${total>1?'ões':''} do turno ${turno} – ${hj.split('-').reverse().join('/')}
+      <button onclick="window.print()">🖨 Imprimir tudo</button>
+      <button onclick="window.close()">Fechar</button>
+    </div>
+    ${blocos.map(b => `<div class="pg">${b}</div>`).join('')}
+    <script>setTimeout(()=>window.print(), 800);<\/script>
+  </body></html>`);
+  w.document.close();
+
+  hideLoading();
+  toast(`✓ ${total} evoluções abertas em nova janela`);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SAE / NANDA – Sistematização da Assistência de Enfermagem
+// ════════════════════════════════════════════════════════════════════════════
+
+// Constrói o resumo clínico a partir dos dados já coletados pelo formulário
+function _resumoClinicoParaSAE(d){
+  const arr = (x) => Array.isArray(x) && x.length ? x.join(', ') : '';
+  const linhas = [];
+  linhas.push(`PACIENTE: ${d.pac || '—'}  |  LEITO: ${d.leito}  |  TURNO: ${d.turno}`);
+  if(d.sexo) linhas.push(`Sexo: ${d.sexo}`);
+  if(d.dn) linhas.push(`DN: ${d.dn}`);
+  if(d.diag) linhas.push(`Diagnóstico: ${d.diag}`);
+  if(d.comor) linhas.push(`Comorbidades: ${d.comor}`);
+  if(d.alergia) linhas.push(`Alergias: ${d.alergia}`);
+
+  linhas.push('\n== NEUROLÓGICO ==');
+  if(arr(d.neuro)) linhas.push('Estado: '+arr(d.neuro));
+  if(d.glas) linhas.push('Glasgow: '+d.glas);
+  if(d.rass) linhas.push('RASS: '+d.rass);
+  if(arr(d.pup)) linhas.push('Pupilas: '+arr(d.pup));
+
+  linhas.push('\n== PELE / MUCOSAS ==');
+  if(arr(d.pele)) linhas.push(arr(d.pele));
+  if(d.les) linhas.push('Lesões: '+d.les);
+
+  linhas.push('\n== RESPIRATÓRIO ==');
+  if(d.vent) linhas.push('Ventilação: '+d.vent);
+  if(d.vmi_modo) linhas.push(`VMI: modo=${d.vmi_modo} FiO2=${d.vmi_fio2||'?'}% PEEP=${d.vmi_peep||'?'} FR=${d.vmi_fr||'?'} VT=${d.vmi_vt||'?'}`);
+  if(d.cnLmin) linhas.push('CN: '+d.cnLmin+' L/min');
+  if(d.mnrLmin) linhas.push('Máscara NR: '+d.mnrLmin+' L/min');
+  if(d.spo2 || d.spo2av) linhas.push('SpO2: '+(d.spo2||d.spo2av)+'%');
+  if(arr(d.resp)) linhas.push('Tórax: '+arr(d.resp));
+  if(arr(d.ausc)) linhas.push('Ausculta: '+arr(d.ausc));
+
+  linhas.push('\n== CARDIOVASCULAR ==');
+  if(arr(d.car)) linhas.push('Estado: '+arr(d.car));
+  const ritmoFC = [];
+  if(d.fcNorm) ritmoFC.push('Normocárdico ('+d.fcNorm+'bpm)');
+  if(d.fcTaqui) ritmoFC.push('Taquicárdico ('+d.fcTaqui+'bpm)');
+  if(d.fcBradi) ritmoFC.push('Bradicárdico ('+d.fcBradi+'bpm)');
+  if(ritmoFC.length) linhas.push('Ritmo/FC: '+ritmoFC.join(', '));
+  // DVA
+  const dvas = [];
+  if(d.dva){ for(const k in d.dva){ if(d.dva[k] && d.dva[k].checked){ dvas.push(k+(d.dva[k].val?' '+d.dva[k].val+'ml/h':'')); } } }
+  if(d.dvaOutros) d.dvaOutros.forEach(o=>dvas.push(o.nome+(o.val?' '+o.val+'ml/h':'')));
+  if(dvas.length) linhas.push('DVA: '+dvas.join(', '));
+  // Sedo
+  const sedos = [];
+  if(d.sedo){ for(const k in d.sedo){ if(d.sedo[k] && d.sedo[k].checked){ sedos.push(k+(d.sedo[k].val?' '+d.sedo[k].val+'ml/h':'')); } } }
+  if(d.sedoOutros) d.sedoOutros.forEach(o=>sedos.push(o.nome+(o.val?' '+o.val+'ml/h':'')));
+  if(sedos.length) linhas.push('Sedoanalgesia: '+sedos.join(', '));
+
+  linhas.push('\n== ABDOME ==');
+  if(arr(d.abd)) linhas.push(arr(d.abd));
+
+  linhas.push('\n== DIETA / DIURESE / ELIMINAÇÕES ==');
+  if(arr(d.dieta)) linhas.push('Dieta: '+arr(d.dieta)+(d.vdieta?' '+d.vdieta+'ml/h':''));
+  if(arr(d.diu)) linhas.push('Diurese: '+arr(d.diu)+(d.ddiu?' débito '+d.ddiu+'ml':''));
+  if(arr(d.uri)) linhas.push('Urina: '+arr(d.uri));
+  if(arr(d.eli)) linhas.push('Intestinal: '+arr(d.eli));
+
+  linhas.push('\n== HIDRATAÇÃO/INFUSÕES ==');
+  if(d.hvTipo) linhas.push('HV: '+d.hvTipo+(d.hvMl?' '+d.hvMl+'ml/h':''));
+  if(d.hvOutras && d.hvOutras.length) linhas.push('Outras: '+d.hvOutras.map(o=>o.nome+(o.vol?' '+o.vol+'ml/h':'')).join(', '));
+
+  linhas.push('\n== DISPOSITIVOS ==');
+  if(d.avps && d.avps.length) linhas.push('AVPs: '+d.avps.filter(a=>a.local).map(a=>a.local+(a.data?' ('+a.data+')':'')).join(', '));
+  if(d.avc_l) linhas.push('AVC: '+d.avc_l+(d.avc_d?' instalado em '+d.avc_d:''));
+  if(d.dial_l) linhas.push('CDL: '+d.dial_l+(d.dial_d?' instalado em '+d.dial_d:''));
+  if(d.svd_n||d.svd_d) linhas.push('SVD: nº'+(d.svd_n||'?')+(d.svd_d?' instalado em '+d.svd_d:''));
+  if(d.sne_n||d.sne_d) linhas.push('SNE: nº'+(d.sne_n||'?')+(d.sne_d?' instalado em '+d.sne_d:''));
+  if(d.tot_n||d.tot_d) linhas.push('TOT: nº'+(d.tot_n||'?')+(d.tot_d?' instalado em '+d.tot_d:''));
+  if(d.tqt_n||d.tqt_d) linhas.push('TQT: nº'+(d.tqt_n||'?')+(d.tqt_d?' instalado em '+d.tqt_d:''));
+  if(d.disp_o) linhas.push('Outros: '+d.disp_o);
+
+  if(d.atbs && d.atbs.length){
+    linhas.push('\n== ANTIMICROBIANOS ==');
+    d.atbs.filter(a=>a.nome).forEach(a=>linhas.push(a.nome+(a.inicio?' (início '+a.inicio+')':'')));
+  }
+
+  linhas.push('\n== ESCALAS ==');
+  if(d.bradScore && d.bradScore!=='–') linhas.push('Braden: '+d.bradScore+' ('+d.bradRisco+')');
+  if(d.morseScore) linhas.push('Morse: '+d.morseScore+' ('+d.morseRisco+')');
+
+  if(arr(d.prev)) linhas.push('\n== MEDIDAS PREVENTIVAS ==\n'+arr(d.prev));
+  if(d.examesReal) linhas.push('\n== PROCEDIMENTOS HOJE ==\n'+d.examesReal);
+  if(d.obs) linhas.push('\n== OBSERVAÇÕES ==\n'+d.obs);
+
+  return linhas.join('\n');
+}
+
+async function gerarSAE(){
+  if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
+  const d = coletarDados();
+  if(!d.pac){ toast('Preencha pelo menos o paciente.', true); return; }
+
+  const modal = document.getElementById('modal-sae');
+  const conteudo = document.getElementById('sae-conteudo');
+  const info = document.getElementById('sae-paciente-info');
+
+  info.textContent = `Leito ${pad(d.leito)} · ${d.pac} · gerando…`;
+  conteudo.innerHTML = `
+    <div class="sae-loading">
+      <div class="sae-spinner"></div>
+      <p>Analisando dados clínicos e gerando diagnósticos NANDA + NOC + NIC…<br><small>Pode levar até 30 segundos.</small></p>
+    </div>`;
+  modal.classList.add('show');
+
+  const resumo = _resumoClinicoParaSAE(d);
+
+  try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'sae',
+        resumo: resumo,
+        paciente: d.pac,
+        leito: d.leito,
+        turno: d.turno
+      })
+    });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const data = await resp.json();
+    if(data.error) throw new Error(data.error);
+
+    const diagnosticos = data.diagnosticos || [];
+    info.textContent = `Leito ${pad(d.leito)} · ${d.pac} · ${diagnosticos.length} diagnósticos`;
+    conteudo.innerHTML = _renderizarSAE(d, diagnosticos);
+    // Salva a SAE junto com a evolução
+    try {
+      const evKeyAtual = 'uti_ev_'+d.leito+'_'+d.turno+'_'+d.data;
+      const evSalva = await dbGet(evKeyAtual);
+      if(evSalva){
+        evSalva.sae = { diagnosticos, geradoEm: new Date().toISOString() };
+        await dbSet(evKeyAtual, evSalva);
+      }
+    } catch(e){ console.warn('Salvar SAE:', e); }
+  } catch(err){
+    console.error('[SAE]', err);
+    conteudo.innerHTML = `
+      <div class="sae-erro">
+        ❌ <strong>Não foi possível gerar a SAE.</strong><br><br>
+        <small>${err.message || 'Erro de comunicação. Verifique se o Apps Script está atualizado e tente novamente.'}</small>
+        <br><br>
+        <small style="color:#666;">Esta funcionalidade requer atualização do Apps Script para incluir a integração com a IA. Veja a documentação.</small>
+      </div>`;
+  }
+}
+
+function _renderizarSAE(dados, diagnosticos){
+  if(!diagnosticos || !diagnosticos.length){
+    return `<div class="sae-erro">⚠️ Nenhum diagnóstico foi retornado. Tente novamente.</div>`;
+  }
+  return `
+    <div class="sae-aviso">
+      ⚠️ Esta SAE é gerada por inteligência artificial com base nos dados registrados na evolução.
+      Deve ser <strong>revisada e validada pelo enfermeiro responsável</strong> antes de ser considerada
+      documento clínico oficial.
+    </div>
+    ${diagnosticos.map(dx => `
+      <div class="sae-dx-card">
+        <div class="sae-dx-titulo">
+          <span class="sae-dx-numero">${dx.numero||'?'}</span>
+          <span style="flex:1;">${dx.titulo_nanda||'—'}</span>
+          ${dx.codigo_nanda||dx.tipo ? `<span class="sae-chip chip-tipo">${dx.codigo_nanda||''}${dx.codigo_nanda&&dx.tipo?' · ':''}${dx.tipo||''}</span>` : ''}
+        </div>
+        <div class="sae-dx-body">
+          ${dx.dominio || dx.classe ? `
+          <div class="sae-secao">
+            <div class="sae-secao-titulo">📂 Domínio / Classe NANDA</div>
+            <div class="sae-secao-corpo">${dx.dominio||'—'} ${dx.classe?' › '+dx.classe:''}</div>
+          </div>` : ''}
+          ${dx.caracteristicas_definidoras && dx.caracteristicas_definidoras.length ? `
+          <div class="sae-secao">
+            <div class="sae-secao-titulo">🔍 Características Definidoras</div>
+            <div class="sae-chips">${dx.caracteristicas_definidoras.map(c=>`<span class="sae-chip chip-cd">${c}</span>`).join('')}</div>
+          </div>` : ''}
+          ${dx.fatores_relacionados && dx.fatores_relacionados.length ? `
+          <div class="sae-secao">
+            <div class="sae-secao-titulo">⚡ Fatores Relacionados / De Risco</div>
+            <div class="sae-chips">${dx.fatores_relacionados.map(f=>`<span class="sae-chip chip-fr">${f}</span>`).join('')}</div>
+          </div>` : ''}
+          ${dx.noc ? `
+          <div class="sae-secao">
+            <div class="sae-secao-titulo">🎯 Resultado Esperado — NOC: ${dx.noc.titulo||''} ${dx.noc.codigo?'('+dx.noc.codigo+')':''}</div>
+            <div class="sae-chips">${(dx.noc.indicadores||[]).map(i=>`<span class="sae-chip chip-noc">${i}</span>`).join('')}</div>
+          </div>` : ''}
+          ${dx.nic ? `
+          <div class="sae-secao">
+            <div class="sae-secao-titulo">🛠️ Intervenções — NIC: ${dx.nic.titulo||''} ${dx.nic.codigo?'('+dx.nic.codigo+')':''}</div>
+            <ul class="sae-intervencoes">${(dx.nic.atividades||[]).map(a=>`<li>${a}</li>`).join('')}</ul>
+          </div>` : ''}
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function fecharSAE(){
+  document.getElementById('modal-sae').classList.remove('show');
+  document.body.classList.remove('printing-sae');
+}
+
+function imprimirSAE(){
+  document.body.classList.add('printing-sae');
+  window.print();
+  setTimeout(()=>document.body.classList.remove('printing-sae'), 500);
+}
