@@ -226,29 +226,72 @@ async function renderNAS(){
     return;
   }
 
+  const outroTurno = turno==='DIURNO' ? 'NOTURNO' : 'DIURNO';
+  const hj = hoje();
+
+  // Monta todas as chaves do dia de uma vez e busca em paralelo
+  const keysDia = [];
+  for(const [k] of ocupados){
+    const leito=parseInt(k);
+    keysDia.push('uti_nas_'+leito+'_'+turno+'_'+hj);
+    keysDia.push('uti_nas_'+leito+'_'+outroTurno+'_'+hj);
+  }
+  const dataDia = await dbGetMany(keysDia);
+
+  // Para leitos sem NAS no dia, descobre chaves históricas e busca em paralelo
+  const keysHist = new Set();
+  if(!modoOffline && db){
+    try{
+      // Uma única varredura da coleção para pegar todas as chaves uti_nas_*
+      const snap = await db.collection('uti').get();
+      snap.forEach(doc=>{ if(doc.id.startsWith('uti_nas_')) keysHist.add(doc.id); });
+    }catch(e){ console.warn('renderNAS: lista hist:', e); }
+  }
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith('uti_nas_')) keysHist.add(k);
+  }
+  // Remove chaves do dia (já buscadas) e chaves de leitos não ocupados
+  const ocupadosSet = new Set(ocupados.map(([k])=>k));
+  const keysHistFiltradas = Array.from(keysHist).filter(k=>{
+    if(keysDia.includes(k)) return false;
+    const partes=k.split('_'); // uti_nas_<leito>_<TURNO>_<DATA>
+    if(partes.length<5) return false;
+    return ocupadosSet.has(partes[2]);
+  });
+  const dataHist = keysHistFiltradas.length ? await dbGetMany(keysHistFiltradas) : {};
+
   lista.innerHTML='';
   for(const [k,pac] of ocupados){
     const leito=parseInt(k);
-    // Busca NAS salvo no turno atual
-    let saved=await dbGet('uti_nas_'+leito+'_'+turno+'_'+hoje());
+    let saved = dataDia['uti_nas_'+leito+'_'+turno+'_'+hj] || null;
     let herdado=false;
-    // 1ª tentativa: outro turno do MESMO DIA
+
+    // 1ª tentativa: outro turno do mesmo dia
     if(!saved){
-      const outroTurno = turno==='DIURNO' ? 'NOTURNO' : 'DIURNO';
-      const savedOutro = await dbGet('uti_nas_'+leito+'_'+outroTurno+'_'+hoje());
-      if(savedOutro && savedOutro.respostas){
-        saved = { respostas: savedOutro.respostas, total: savedOutro.total, herdadoDe: outroTurno.toLowerCase() };
+      const outro = dataDia['uti_nas_'+leito+'_'+outroTurno+'_'+hj];
+      if(outro && outro.respostas){
+        saved = { respostas: outro.respostas, total: outro.total, herdadoDe: outroTurno.toLowerCase() };
         herdado = true;
       }
     }
-    // 2ª tentativa: último NAS do MESMO paciente/leito em dias anteriores
+    // 2ª tentativa: último NAS histórico do leito (dados já em memória)
     if(!saved){
-      const ultimo = await _ultimoNASDoLeito(leito, pac.pac);
-      if(ultimo && ultimo.respostas){
-        saved = { respostas: ultimo.respostas, total: ultimo.total, herdadoDe: `${fmtD(ultimo.data)} (${ultimo.turno.toLowerCase()})` };
-        herdado = true;
+      const prefixo='uti_nas_'+leito+'_';
+      const candidatos=keysHistFiltradas
+        .filter(k2=>k2.startsWith(prefixo))
+        .map(k2=>{ const p=k2.split('_'); return { chave:k2, data:p.slice(4).join('_'), turno:p[3] }; })
+        .filter(c=>c.data<hj)
+        .sort((a,b)=>b.data!==a.data?b.data.localeCompare(a.data):b.turno.localeCompare(a.turno));
+      for(const c of candidatos){
+        const r=dataHist[c.chave];
+        if(r&&r.respostas&&(!pac.pac||!r.paciente||r.paciente===pac.pac)){
+          saved={ respostas:r.respostas, total:r.total, herdadoDe:`${fmtD(c.data)} (${c.turno.toLowerCase()})` };
+          herdado=true; break;
+        }
       }
     }
+
     const t=saved&&saved.total?parseFloat(saved.total):0;
     const badgeCls=t<=0?'lb-ok':t<50?'lb-ok':t<100?'lb-warn':'lb-high';
     const badgeTxt=t>0?`NAS ${t.toFixed(1)}%`:'Não avaliado';
@@ -378,41 +421,45 @@ async function salvarNAS(leito){
 // Busca o NAS mais recente para um leito (usado pra herdar quando paciente
 // ainda não tem NAS do dia). Varre localStorage e Firestore, ordena por data
 // desc, e retorna o primeiro que bater com o mesmo paciente do leito.
+// Mantida para compatibilidade com chamadas externas (ex: salvarNAS).
+// A renderNAS já não a chama — usa dados em memória diretamente.
 async function _ultimoNASDoLeito(leito, pacienteAtual){
   const chaves = new Set();
   const prefixo = 'uti_nas_' + leito + '_';
   const hj = hoje();
-  // localStorage
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (k && k.startsWith(prefixo)) chaves.add(k);
   }
-  // Firestore
   if (!modoOffline && db) {
     try {
-      const snap = await db.collection('uti').get();
-      snap.forEach(doc => { if (doc.id.startsWith(prefixo)) chaves.add(doc.id); });
-    } catch(e) { console.warn('Busca NAS anterior:', e); }
+      const snap = await db.collection('uti').where(firebase.firestore.FieldPath.documentId(), '>=', prefixo)
+                                             .where(firebase.firestore.FieldPath.documentId(), '<',  prefixo + '\uf8ff').get();
+      snap.forEach(doc => chaves.add(doc.id));
+    } catch(e) {
+      // fallback: varredura completa (comportamento original)
+      try {
+        const snap2 = await db.collection('uti').get();
+        snap2.forEach(doc => { if (doc.id.startsWith(prefixo)) chaves.add(doc.id); });
+      } catch(e2) { console.warn('Busca NAS anterior:', e2); }
+    }
   }
-  // Cada chave: uti_nas_<leito>_<TURNO>_<YYYY-MM-DD>
   const candidatos = [];
   for (const chave of chaves) {
     const partes = chave.split('_');
-    // ['uti','nas',<leito>,<TURNO>,<DATA>]
     if (partes.length < 5) continue;
-    const dataChave = partes.slice(4).join('_'); // caso a data tenha hífens
-    if (dataChave >= hj) continue; // ignora o próprio dia
+    const dataChave = partes.slice(4).join('_');
+    if (dataChave >= hj) continue;
     const turnoChave = partes[3];
     candidatos.push({ chave, data: dataChave, turno: turnoChave });
   }
-  // Ordena por data desc, turno desc (NOTURNO antes de DIURNO do mesmo dia)
   candidatos.sort((a, b) => {
     if (a.data !== b.data) return b.data.localeCompare(a.data);
     return b.turno.localeCompare(a.turno);
   });
-  // Percorre até achar um que seja do mesmo paciente atual
+  const dataMap = candidatos.length ? await dbGetMany(candidatos.map(c=>c.chave)) : {};
   for (const c of candidatos) {
-    const r = await dbGet(c.chave);
+    const r = dataMap[c.chave];
     if (r && r.respostas && (!pacienteAtual || !r.paciente || r.paciente === pacienteAtual)) {
       return { ...r, data: c.data, turno: c.turno };
     }
@@ -498,26 +545,44 @@ function _indPeriodo(){
   return { inicio, fim: hoje, rotulo: `Últimos ${dias} dias` };
 }
 
-// Carrega todos os dados brutos necessários (uma vez por Atualizar)
+// Carrega todos os dados brutos necessários (uma vez por Atualizar).
+// Faz UMA única varredura da coleção para descobrir chaves,
+// depois busca todos os valores em paralelo via dbGetMany.
 async function _carregarDadosInd(){
   showLoading('Carregando indicadores...');
   try {
-    const admissoes = (await dbGet('uti_admissao_log')) || [];
-    const altas     = (await dbGet('uti_alta_log')) || [];
-    const dispLog   = (await dbGet('uti_disp_log')) || [];
-    // Evoluções: varremos todas as chaves uti_ev_*
-    const evolucoes = [];
-    const keysEv = await _listarChaves('uti_ev_');
-    for (const k of keysEv) {
-      const ev = await dbGet(k);
-      if (ev) evolucoes.push(ev);
+    // Chaves fixas (logs) + varredura única para chaves dinâmicas
+    const fixas = ['uti_admissao_log','uti_alta_log','uti_disp_log'];
+    const dinamicas = new Set();
+
+    // localStorage — percorre uma vez
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('uti_ev_') || k.startsWith('uti_nas_'))) dinamicas.add(k);
     }
-    // NAS: todas as chaves uti_nas_*
-    const nasList = [];
-    const keysNas = await _listarChaves('uti_nas_');
-    for (const k of keysNas) {
-      const n = await dbGet(k);
-      if (n) nasList.push(n);
+    // Firestore — UMA única varredura da coleção
+    if (!modoOffline && db) {
+      try {
+        const snap = await db.collection('uti').get();
+        snap.forEach(doc => {
+          if (doc.id.startsWith('uti_ev_') || doc.id.startsWith('uti_nas_')) dinamicas.add(doc.id);
+        });
+      } catch(e) { console.warn('_carregarDadosInd: varredura:', e); }
+    }
+
+    // Busca tudo em paralelo: fixas + dinâmicas
+    const todasChaves = [...fixas, ...Array.from(dinamicas)];
+    const dataMap = await dbGetMany(todasChaves);
+
+    const admissoes = dataMap['uti_admissao_log'] || [];
+    const altas     = dataMap['uti_alta_log']     || [];
+    const dispLog   = dataMap['uti_disp_log']     || [];
+    const evolucoes = [], nasList = [];
+    for (const k of dinamicas) {
+      const v = dataMap[k];
+      if (!v) continue;
+      if (k.startsWith('uti_ev_'))  evolucoes.push(v);
+      if (k.startsWith('uti_nas_')) nasList.push(v);
     }
     _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList };
   } finally {
@@ -526,15 +591,14 @@ async function _carregarDadosInd(){
   return _indCache;
 }
 
-// Lista todas as chaves com um prefixo (Firestore + localStorage fallback)
+// Lista todas as chaves com um prefixo (Firestore + localStorage fallback).
+// Ainda usada em outros contextos; internamente evita dupla varredura se possível.
 async function _listarChaves(prefixo){
   const chaves = new Set();
-  // Do localStorage
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (k && k.startsWith(prefixo)) chaves.add(k);
   }
-  // Do Firestore
   if (!modoOffline && db) {
     try {
       const snap = await db.collection('uti').get();
