@@ -265,3 +265,69 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
   #preview-wrap{display:block!important;}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 }
+
+/* ── SAE / NANDA ─────────────────────────────────────────────────────────── */
+.sae-dx-card {
+  background:#fff; border:1px solid #d4eadc; border-left:5px solid #1a6b3a;
+  border-radius:10px; margin-bottom:14px; overflow:hidden;
+}
+.sae-dx-titulo {
+  background:#eaf5ee; padding:10px 14px; font-weight:700; font-size:.92rem;
+  color:#145030; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+}
+.sae-dx-numero {
+  background:#1a6b3a; color:#fff; border-radius:50%;
+  width:24px; height:24px;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:.78rem; font-weight:700; flex-shrink:0;
+}
+.sae-dx-body { padding:12px 14px; }
+.sae-secao { margin-bottom:10px; }
+.sae-secao-titulo {
+  font-size:.66rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.6px; color:#888; margin-bottom:4px;
+}
+.sae-secao-corpo { font-size:.84rem; color:#333; line-height:1.5; }
+.sae-chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:3px; }
+.sae-chip {
+  display:inline-block; padding:2px 9px; border-radius:18px;
+  font-size:.74rem; font-weight:500;
+}
+.chip-cd { background:#ede9fe; color:#5b21b6; }
+.chip-fr { background:#fee2e2; color:#991b1b; }
+.chip-noc { background:#fef3c7; color:#92400e; }
+.chip-tipo { background:#dbeafe; color:#1e40af; margin-left:auto; font-size:.68rem; }
+.sae-intervencoes { list-style:none; margin:0; padding:0; }
+.sae-intervencoes li {
+  padding:4px 0 4px 20px; position:relative; font-size:.82rem; color:#333;
+  border-bottom:1px dashed #eee;
+}
+.sae-intervencoes li:last-child { border-bottom:none; }
+.sae-intervencoes li::before {
+  content:"✔"; position:absolute; left:0; color:#1a6b3a; font-size:.76rem;
+}
+.sae-loading {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; padding:40px 20px; color:#1a6b3a;
+}
+.sae-spinner {
+  width:42px; height:42px; border:4px solid #c8e6d5;
+  border-top-color:#1a6b3a; border-radius:50%; animation:saespin .9s linear infinite;
+}
+@keyframes saespin { to { transform:rotate(360deg); } }
+.sae-aviso {
+  background:#fffbeb; border:1px solid #fcd34d; border-radius:8px;
+  padding:10px 14px; color:#92400e; font-size:.8rem; margin-bottom:12px;
+}
+.sae-erro {
+  background:#fef2f2; border:1px solid #fca5a5; border-radius:8px;
+  padding:14px 18px; color:#991b1b; font-size:.86rem; text-align:center;
+}
+
+@media print {
+  body.printing-sae > *:not(#modal-sae) { display:none !important; }
+  body.printing-sae #modal-sae { display:flex !important; position:static; background:none; padding:0; }
+  body.printing-sae #modal-sae .overlay { display:block !important; }
+  body.printing-sae .modal { box-shadow:none !important; max-width:100% !important; max-height:none !important; }
+  body.printing-sae .modal-footer, body.printing-sae .modal-close { display:none !important; }
+}
