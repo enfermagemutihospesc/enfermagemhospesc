@@ -94,6 +94,7 @@
       <button class="btn btn-sec btn-sm" onclick="irTurno()">← Trocar turno</button>
       <button class="btn btn-sec btn-sm" onclick="irNAS()">📊 NAS do Turno</button>
       <button class="btn btn-sec btn-sm" onclick="irIndicadores()">📈 Indicadores</button>
+      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirTurnoCompleto()">🖨 Imprimir turno</button>
       <button class="btn btn-sm" style="background:#6c3483;color:white;" onclick="enviarTodasEvolucoesTurno()">☁ Enviar tudo ao Drive</button>
     </div>
   </div>
@@ -687,6 +688,7 @@
 
     <div class="btn-row">
       <button class="btn btn-sec" onclick="irLeitos()">← Leitos</button>
+      <button class="btn" style="background:#1a6b3a;color:white;" id="btn-sae" onclick="gerarSAE()">🩺 Gerar SAE / NANDA</button>
       <button class="btn btn-pri" id="btn-gerar" onclick="gerarPreview()">Gerar Impressão →</button>
     </div>
   </div>
@@ -828,6 +830,24 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- MODAL SAE / NANDA -->
+<div class="overlay" id="modal-sae">
+  <div class="modal" style="max-width:880px;max-height:88vh;display:flex;flex-direction:column;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#1a6b3a,#2d9e5f);color:white;flex-shrink:0;">
+      <div>
+        <h3 style="color:white;margin:0;">🩺 Sistematização da Assistência de Enfermagem</h3>
+        <small id="sae-paciente-info" style="opacity:.9;">—</small>
+      </div>
+      <button class="modal-close" style="color:white;" onclick="fecharSAE()">×</button>
+    </div>
+    <div class="modal-body" id="sae-conteudo" style="overflow-y:auto;flex:1;"></div>
+    <div class="modal-footer" style="background:#eaf5ee;border-top:1px solid #c8e6d5;display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;flex-shrink:0;">
+      <button class="btn btn-sec btn-sm" onclick="fecharSAE()">Fechar</button>
+      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirSAE()">🖨 Imprimir SAE</button>
+    </div>
+  </div>
+</div>
 
 <!-- ════════════════════════════════════════════
      JAVASCRIPT
