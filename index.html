@@ -180,6 +180,7 @@
   <div class="app-header">
     <div><h2 id="form-titulo">Evolução – Leito 01</h2><small id="form-sub">Hospital dos Pescadores · UTI</small></div>
     <div class="header-right">
+      <button class="btn" style="font-size:.72rem;padding:4px 10px;" onclick="abrirModalAdmissao()">✏ Editar Admissão</button>
       <span class="badge" id="badge-form"></span>
     </div>
   </div>
@@ -200,7 +201,7 @@
         </div>
         <div class="fl"><label>Diagnóstico</label><input type="text" id="f-diag" placeholder="Diagnóstico principal"></div>
         <div class="fl"><label>Comorbidades</label><input type="text" id="f-comor" placeholder="Ex: DM, HAS, tabagista..."></div>
-        <div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp"></div>
+        <div class="dc"><div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp"></div><div class="fl"><label>Sexo</label><select id="f-sexo"><option value="">–</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div></div>
 <div class="fl"><label>Alergias</label><input type="text" id="f-alergia" placeholder="Ex: Dipirona... ou NKDA"></div>
       </div>
     </div>
@@ -406,21 +407,21 @@
       <div class="secao-c">
         <p class="sub-t">Dieta</p>
         <div class="rg">
-          <label class="ri"><input type="radio" name="dieta" value="Oral"> Oral</label>
-          <label class="ri"><input type="radio" name="dieta" value="SNE"> SNE</label>
-          <label class="ri"><input type="radio" name="dieta" value="SOE"> SOE</label>
-          <label class="ri"><input type="radio" name="dieta" value="SNG"> SNG</label>
-          <label class="ri"><input type="radio" name="dieta" value="NPT"> NPT</label>
-          <label class="ri"><input type="radio" name="dieta" value="Jejum/Zero"> Jejum/Zero</label>
+          <label class="ci"><input type="checkbox" class="f-dieta" value="Oral"> Oral</label>
+          <label class="ci"><input type="checkbox" class="f-dieta" value="SNE"> SNE</label>
+          <label class="ci"><input type="checkbox" class="f-dieta" value="SOE"> SOE</label>
+          <label class="ci"><input type="checkbox" class="f-dieta" value="SNG"> SNG</label>
+          <label class="ci"><input type="checkbox" class="f-dieta" value="NPT"> NPT</label>
+          <label class="ci"><input type="checkbox" class="f-dieta" value="Jejum/Zero"> Jejum/Zero</label>
         </div>
         <div class="fl"><label>Vazão dieta</label><input type="number" id="f-vdieta" placeholder="ml/h"></div>
         <p class="sub-t">Diurese</p>
         <div class="rg">
-          <label class="ri"><input type="radio" name="diu" value="SVD"> SVD</label>
-          <label class="ri"><input type="radio" name="diu" value="Fralda"> Fralda</label>
-          <label class="ri"><input type="radio" name="diu" value="Disp. não invasivo"> Disp. não invasivo</label>
-          <label class="ri"><input type="radio" name="diu" value="Cistostomia"> Cistostomia</label>
-          <label class="ri"><input type="radio" name="diu" value="Ausente"> Ausente</label>
+          <label class="ci"><input type="checkbox" class="f-diu" value="SVD"> SVD</label>
+          <label class="ci"><input type="checkbox" class="f-diu" value="Fralda"> Fralda</label>
+          <label class="ci"><input type="checkbox" class="f-diu" value="Disp. não invasivo"> Disp. não invasivo</label>
+          <label class="ci"><input type="checkbox" class="f-diu" value="Cistostomia"> Cistostomia</label>
+          <label class="ci"><input type="checkbox" class="f-diu" value="Ausente"> Ausente</label>
         </div>
         <div class="cg">
           <label class="ci"><input type="checkbox" class="f-uri" value="Clara"> Clara</label>
@@ -443,6 +444,7 @@
           <label class="ci"><input type="checkbox" class="f-eli" value="Hematoquezia"> Hematoquezia</label>
           <label class="ci"><input type="checkbox" class="f-eli" value="Acolia"> Acolia</label>
         </div>
+        <div id="dias-sem-evacuar" style="display:none;margin-top:6px;"></div>
       </div>
     </div>
 
@@ -462,6 +464,12 @@
           <input type="number" id="f-hv-ml" placeholder="ml/h" style="width:90px;flex:none;">
           <span style="font-size:.74rem;color:var(--muted);">ml/h</span>
         </div>
+        <div style="margin-top:6px;">
+          <p class="sub-t">Outras infusões venosas</p>
+          <div id="hv-outras-lista"></div>
+          <button class="btn-add" onclick="addHVOutra()">+ Adicionar infusão</button>
+        </div>
+        <p class="sub-t">DVA em uso</p>
         <p class="sub-t">DVA em uso</p>
         <div id="dva-l">
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Noradrenalina"><label>Noradrenalina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
@@ -513,37 +521,61 @@
 
         <div class="disp-wrap" id="disp-avc" data-tipo="AVC">
           <p class="sub-t" style="margin-top:4px;">Acesso Venoso Central (AVC)</p>
-          <div class="dyn-row">
+          <div class="dyn-row" style="flex-wrap:wrap;gap:4px;">
             <input type="text" id="f-avc-l" placeholder="Local (ex: subclávia D)">
-            <input type="date" id="f-avc-d" style="max-width:140px;flex:none;">
-            <button class="btn-rem" onclick="retirarDispositivo('AVC','f-avc-l','f-avc-d')">Retirar</button>
+            <input type="date" id="f-avc-d" style="max-width:140px;flex:none;" onchange="_atualizarDiasDisp('f-avc-d','dias-avc')">
+            <input type="text" id="dias-avc" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
+            <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('AVC','f-avc-l','f-avc-d')">Trocar</button>
+            <button class="btn-rem" onclick="retirarDispositivo('AVC','f-avc-l','f-avc-d','f-avc-ret','retirada-avc-wrap')">Retirar</button>
+          </div>
+          <div id="retirada-avc-wrap" style="display:none;margin-top:4px;display:none;">
+            <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
+            <input type="date" id="f-avc-ret" style="max-width:140px;">
           </div>
         </div>
 
         <div class="disp-wrap" id="disp-cdl" data-tipo="CDL">
           <p class="sub-t">Cateter de Diálise (CDL)</p>
-          <div class="dyn-row">
+          <div class="dyn-row" style="flex-wrap:wrap;gap:4px;">
             <input type="text" id="f-dial-l" placeholder="Local (ex: jugular D)">
-            <input type="date" id="f-dial-d" style="max-width:140px;flex:none;">
-            <button class="btn-rem" onclick="retirarDispositivo('CDL','f-dial-l','f-dial-d')">Retirar</button>
+            <input type="date" id="f-dial-d" style="max-width:140px;flex:none;" onchange="_atualizarDiasDisp('f-dial-d','dias-dial')">
+            <input type="text" id="dias-dial" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
+            <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('CDL','f-dial-l','f-dial-d')">Trocar</button>
+            <button class="btn-rem" onclick="retirarDispositivo('CDL','f-dial-l','f-dial-d','f-dial-ret','retirada-cdl-wrap')">Retirar</button>
+          </div>
+          <div id="retirada-cdl-wrap" style="display:none;">
+            <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
+            <input type="date" id="f-dial-ret" style="max-width:140px;">
           </div>
         </div>
 
         <div class="dc">
           <div class="disp-wrap" id="disp-svd" data-tipo="SVD">
             <p class="sub-t">SVD</p>
-            <div class="dyn-row" style="margin-top:4px;">
+            <div class="dyn-row" style="margin-top:4px;flex-wrap:wrap;gap:4px;">
               <input type="text" id="f-svd-n" placeholder="Nº" style="max-width:55px;flex:none;">
-              <input type="date" id="f-svd-d">
-              <button class="btn-rem" onclick="retirarDispositivo('SVD','f-svd-n','f-svd-d')">Retirar</button>
+              <input type="date" id="f-svd-d" onchange="_atualizarDiasDisp('f-svd-d','dias-svd')">
+              <input type="text" id="dias-svd" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
+              <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('SVD','f-svd-n','f-svd-d')">Trocar</button>
+              <button class="btn-rem" onclick="retirarDispositivo('SVD','f-svd-n','f-svd-d','f-svd-ret','retirada-svd-wrap')">Retirar</button>
+            </div>
+            <div id="retirada-svd-wrap" style="display:none;">
+              <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
+              <input type="date" id="f-svd-ret" style="max-width:140px;">
             </div>
           </div>
           <div class="disp-wrap" id="disp-sne" data-tipo="SNE">
             <p class="sub-t">SNE</p>
-            <div class="dyn-row" style="margin-top:4px;">
+            <div class="dyn-row" style="margin-top:4px;flex-wrap:wrap;gap:4px;">
               <input type="text" id="f-sne-n" placeholder="Nº" style="max-width:55px;flex:none;">
-              <input type="date" id="f-sne-d">
-              <button class="btn-rem" onclick="retirarDispositivo('SNE','f-sne-n','f-sne-d')">Retirar</button>
+              <input type="date" id="f-sne-d" onchange="_atualizarDiasDisp('f-sne-d','dias-sne')">
+              <input type="text" id="dias-sne" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
+              <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('SNE','f-sne-n','f-sne-d')">Trocar</button>
+              <button class="btn-rem" onclick="retirarDispositivo('SNE','f-sne-n','f-sne-d','f-sne-ret','retirada-sne-wrap')">Retirar</button>
+            </div>
+            <div id="retirada-sne-wrap" style="display:none;">
+              <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
+              <input type="date" id="f-sne-ret" style="max-width:140px;">
             </div>
           </div>
         </div>
@@ -551,18 +583,30 @@
         <div class="dc">
           <div class="disp-wrap" id="disp-tot" data-tipo="TOT">
             <p class="sub-t">TOT – Tubo Orotraqueal</p>
-            <div class="dyn-row" style="margin-top:4px;">
+            <div class="dyn-row" style="margin-top:4px;flex-wrap:wrap;gap:4px;">
               <input type="text" id="f-tot-n2" placeholder="Nº" style="max-width:55px;flex:none;">
-              <input type="date" id="f-tot-d">
-              <button class="btn-rem" onclick="retirarDispositivo('TOT','f-tot-n2','f-tot-d')">Retirar</button>
+              <input type="date" id="f-tot-d" onchange="_atualizarDiasDisp('f-tot-d','dias-tot')">
+              <input type="text" id="dias-tot" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
+              <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('TOT','f-tot-n2','f-tot-d')">Trocar</button>
+              <button class="btn-rem" onclick="retirarDispositivo('TOT','f-tot-n2','f-tot-d','f-tot-ret','retirada-tot-wrap')">Retirar</button>
+            </div>
+            <div id="retirada-tot-wrap" style="display:none;">
+              <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
+              <input type="date" id="f-tot-ret" style="max-width:140px;">
             </div>
           </div>
           <div class="disp-wrap" id="disp-tqt" data-tipo="TQT">
             <p class="sub-t">TQT – Traqueostomia</p>
-            <div class="dyn-row" style="margin-top:4px;">
+            <div class="dyn-row" style="margin-top:4px;flex-wrap:wrap;gap:4px;">
               <input type="text" id="f-tqt-n2" placeholder="Nº" style="max-width:55px;flex:none;">
-              <input type="date" id="f-tqt-d">
-              <button class="btn-rem" onclick="retirarDispositivo('TQT','f-tqt-n2','f-tqt-d')">Retirar</button>
+              <input type="date" id="f-tqt-d" onchange="_atualizarDiasDisp('f-tqt-d','dias-tqt')">
+              <input type="text" id="dias-tqt" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
+              <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('TQT','f-tqt-n2','f-tqt-d')">Trocar</button>
+              <button class="btn-rem" onclick="retirarDispositivo('TQT','f-tqt-n2','f-tqt-d','f-tqt-ret','retirada-tqt-wrap')">Retirar</button>
+            </div>
+            <div id="retirada-tqt-wrap" style="display:none;">
+              <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
+              <input type="date" id="f-tqt-ret" style="max-width:140px;">
             </div>
           </div>
         </div>
