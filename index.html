@@ -833,16 +833,16 @@
 
 <!-- MODAL SAE / NANDA -->
 <div class="overlay" id="modal-sae">
-  <div class="modal" style="max-width:880px;max-height:88vh;display:flex;flex-direction:column;">
-    <div class="modal-header" style="background:linear-gradient(135deg,#1a6b3a,#2d9e5f);color:white;flex-shrink:0;">
+  <div class="modal" style="max-width:880px;">
+    <div class="modal-header">
       <div>
-        <h3 style="color:white;margin:0;">🩺 Sistematização da Assistência de Enfermagem</h3>
-        <small id="sae-paciente-info" style="opacity:.9;">—</small>
+        <h3>🩺 Sistematização da Assistência de Enfermagem</h3>
+        <small id="sae-paciente-info">—</small>
       </div>
-      <button class="modal-close" style="color:white;" onclick="fecharSAE()">×</button>
+      <button class="modal-close" onclick="fecharSAE()">×</button>
     </div>
-    <div class="modal-body" id="sae-conteudo" style="overflow-y:auto;flex:1;"></div>
-    <div class="modal-footer" style="background:#eaf5ee;border-top:1px solid #c8e6d5;display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;flex-shrink:0;">
+    <div class="modal-body" id="sae-conteudo"></div>
+    <div class="modal-footer" style="background:#eaf5ee;border-top:1px solid #c8e6d5;display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;">
       <button class="btn btn-sec btn-sm" onclick="fecharSAE()">Fechar</button>
       <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirSAE()">🖨 Imprimir SAE</button>
     </div>
