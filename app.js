@@ -3738,12 +3738,31 @@ async function imprimirTurnoCompleto(){
 // ════════════════════════════════════════════════════════════════════════════
 
 // Constrói o resumo clínico a partir dos dados já coletados pelo formulário
+// IMPORTANTE: anonimiza dados identificáveis (nome, DN exata, alergias com nomes)
+// antes de enviar para a IA. O nome real é mantido apenas no navegador.
 function _resumoClinicoParaSAE(d){
   const arr = (x) => Array.isArray(x) && x.length ? x.join(', ') : '';
   const linhas = [];
-  linhas.push(`PACIENTE: ${d.pac || '—'}  |  LEITO: ${d.leito}  |  TURNO: ${d.turno}`);
+
+  // ── ANONIMIZAÇÃO: substitui nome por "Paciente" e calcula faixa etária ────
+  const idade = d.dn ? (() => {
+    const [y,m,dia] = d.dn.split('-').map(Number);
+    const hj = new Date();
+    let i = hj.getFullYear() - y;
+    if (hj.getMonth()+1 < m || (hj.getMonth()+1===m && hj.getDate() < dia)) i--;
+    return i;
+  })() : null;
+  const faixaEtaria = idade !== null ? (
+    idade < 18 ? 'pediátrico' :
+    idade < 30 ? 'jovem adulto (18-29 anos)' :
+    idade < 60 ? 'adulto (30-59 anos)' :
+    idade < 75 ? 'idoso (60-74 anos)' :
+                 'idoso ≥75 anos'
+  ) : null;
+
+  linhas.push(`PACIENTE: [anonimizado]  |  LEITO: ${d.leito}  |  TURNO: ${d.turno}`);
   if(d.sexo) linhas.push(`Sexo: ${d.sexo}`);
-  if(d.dn) linhas.push(`DN: ${d.dn}`);
+  if(faixaEtaria) linhas.push(`Faixa etária: ${faixaEtaria}`);
   if(d.diag) linhas.push(`Diagnóstico: ${d.diag}`);
   if(d.comor) linhas.push(`Comorbidades: ${d.comor}`);
   if(d.alergia) linhas.push(`Alergias: ${d.alergia}`);
@@ -3774,12 +3793,10 @@ function _resumoClinicoParaSAE(d){
   if(d.fcTaqui) ritmoFC.push('Taquicárdico ('+d.fcTaqui+'bpm)');
   if(d.fcBradi) ritmoFC.push('Bradicárdico ('+d.fcBradi+'bpm)');
   if(ritmoFC.length) linhas.push('Ritmo/FC: '+ritmoFC.join(', '));
-  // DVA
   const dvas = [];
   if(d.dva){ for(const k in d.dva){ if(d.dva[k] && d.dva[k].checked){ dvas.push(k+(d.dva[k].val?' '+d.dva[k].val+'ml/h':'')); } } }
   if(d.dvaOutros) d.dvaOutros.forEach(o=>dvas.push(o.nome+(o.val?' '+o.val+'ml/h':'')));
   if(dvas.length) linhas.push('DVA: '+dvas.join(', '));
-  // Sedo
   const sedos = [];
   if(d.sedo){ for(const k in d.sedo){ if(d.sedo[k] && d.sedo[k].checked){ sedos.push(k+(d.sedo[k].val?' '+d.sedo[k].val+'ml/h':'')); } } }
   if(d.sedoOutros) d.sedoOutros.forEach(o=>sedos.push(o.nome+(o.val?' '+o.val+'ml/h':'')));
@@ -3798,19 +3815,36 @@ function _resumoClinicoParaSAE(d){
   if(d.hvTipo) linhas.push('HV: '+d.hvTipo+(d.hvMl?' '+d.hvMl+'ml/h':''));
   if(d.hvOutras && d.hvOutras.length) linhas.push('Outras: '+d.hvOutras.map(o=>o.nome+(o.vol?' '+o.vol+'ml/h':'')).join(', '));
 
+  // ── ANONIMIZAÇÃO: dispositivos sem datas exatas, apenas tempo de uso ──────
   linhas.push('\n== DISPOSITIVOS ==');
-  if(d.avps && d.avps.length) linhas.push('AVPs: '+d.avps.filter(a=>a.local).map(a=>a.local+(a.data?' ('+a.data+')':'')).join(', '));
-  if(d.avc_l) linhas.push('AVC: '+d.avc_l+(d.avc_d?' instalado em '+d.avc_d:''));
-  if(d.dial_l) linhas.push('CDL: '+d.dial_l+(d.dial_d?' instalado em '+d.dial_d:''));
-  if(d.svd_n||d.svd_d) linhas.push('SVD: nº'+(d.svd_n||'?')+(d.svd_d?' instalado em '+d.svd_d:''));
-  if(d.sne_n||d.sne_d) linhas.push('SNE: nº'+(d.sne_n||'?')+(d.sne_d?' instalado em '+d.sne_d:''));
-  if(d.tot_n||d.tot_d) linhas.push('TOT: nº'+(d.tot_n||'?')+(d.tot_d?' instalado em '+d.tot_d:''));
-  if(d.tqt_n||d.tqt_d) linhas.push('TQT: nº'+(d.tqt_n||'?')+(d.tqt_d?' instalado em '+d.tqt_d:''));
+  if(d.avps && d.avps.length){
+    const avpsAnon = d.avps.filter(a=>a.local).map(a=>{
+      const dias = a.data ? _diasDeInstalacao(a.data) : null;
+      return a.local + (dias!==null ? ' ('+dias+' dia'+(dias===1?'':'s')+')' : '');
+    });
+    if(avpsAnon.length) linhas.push('AVPs: '+avpsAnon.join(', '));
+  }
+  const dispDias = (loc, data) => {
+    if(!loc && !data) return null;
+    const dias = data ? _diasDeInstalacao(data) : null;
+    return (loc||'') + (dias!==null ? ' ('+dias+' dia'+(dias===1?'':'s')+')' : '');
+  };
+  let s;
+  if((s=dispDias(d.avc_l, d.avc_d))) linhas.push('AVC: '+s);
+  if((s=dispDias(d.dial_l, d.dial_d))) linhas.push('CDL: '+s);
+  if(d.svd_n||d.svd_d) linhas.push('SVD'+(d.svd_d?' ('+_diasDeInstalacao(d.svd_d)+' dias)':''));
+  if(d.sne_n||d.sne_d) linhas.push('SNE'+(d.sne_d?' ('+_diasDeInstalacao(d.sne_d)+' dias)':''));
+  if(d.tot_n||d.tot_d) linhas.push('TOT'+(d.tot_d?' ('+_diasDeInstalacao(d.tot_d)+' dias)':''));
+  if(d.tqt_n||d.tqt_d) linhas.push('TQT'+(d.tqt_d?' ('+_diasDeInstalacao(d.tqt_d)+' dias)':''));
   if(d.disp_o) linhas.push('Outros: '+d.disp_o);
 
+  // ── ANONIMIZAÇÃO: ATBs com tempo de uso, sem data exata ───────────────────
   if(d.atbs && d.atbs.length){
     linhas.push('\n== ANTIMICROBIANOS ==');
-    d.atbs.filter(a=>a.nome).forEach(a=>linhas.push(a.nome+(a.inicio?' (início '+a.inicio+')':'')));
+    d.atbs.filter(a=>a.nome).forEach(a=>{
+      const dias = a.inicio ? _diasDeInstalacao(a.inicio) : null;
+      linhas.push(a.nome + (dias!==null ? ' ('+dias+' dia'+(dias===1?'':'s')+' de uso)' : ''));
+    });
   }
 
   linhas.push('\n== ESCALAS ==');
@@ -3850,7 +3884,9 @@ async function gerarSAE(){
       body: JSON.stringify({
         action: 'sae',
         resumo: resumo,
-        paciente: d.pac,
+        // ⚠ ANONIMIZAÇÃO: nome do paciente NÃO é enviado à IA.
+        // O nome real fica apenas localmente para exibição no modal.
+        paciente: '[anonimizado]',
         leito: d.leito,
         turno: d.turno
       })
