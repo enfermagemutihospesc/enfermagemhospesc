@@ -267,7 +267,30 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 }
 
 /* ── SAE / NANDA ─────────────────────────────────────────────────────────── */
-.sae-dx-card {
+/* Override do modal padrão para o SAE (que usa flex column) */
+#modal-sae .modal {
+  overflow: visible !important;
+  overflow-y: visible !important;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+#modal-sae .modal-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0; /* essencial para flex + overflow funcionar */
+  padding: 16px 18px;
+}
+#modal-sae .modal-header {
+  flex-shrink: 0;
+  background: linear-gradient(135deg,#1a6b3a,#2d9e5f);
+  color: white;
+  padding: 14px 18px;
+}
+#modal-sae .modal-header h3 { color: white; margin: 0; font-size: 1rem; }
+#modal-sae .modal-header small { opacity: .9; font-size: .78rem; }
+#modal-sae .modal-header .modal-close { color: white; }
+#modal-sae .modal-footer { flex-shrink: 0; }
   background:#fff; border:1px solid #d4eadc; border-left:5px solid #1a6b3a;
   border-radius:10px; margin-bottom:14px; overflow:hidden;
 }
