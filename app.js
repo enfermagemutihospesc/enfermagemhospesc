@@ -2451,45 +2451,10 @@ function dvaStr(data){ if(!data) return '–'; const res=Object.entries(data).fi
 // ── RETIRADA DE DISPOSITIVO ────────────────────────────────────────────────────
 // Registra a data de retirada no banco (uti_disp_retirados) e limpa os campos.
 // Esse log servirá depois para calcular taxas de utilização diária.
-async function retirarDispositivo(tipo, idLocal, idData){
-  if(!leitoAtual){ toast('Abra uma evolução primeiro',true); return; }
-  const locOuNum = gf(idLocal);
-  const dataInst = gf(idData);
-  if(!locOuNum && !dataInst){
-    toast('Sem '+tipo+' registrado pra retirar',true);
-    return;
-  }
-  if(!confirm(`Confirma a retirada do ${tipo} do Leito ${pad(leitoAtual)}?`)) return;
-
-  const hojeStr = hoje();
-  const pac = gf('f-pac') || '';
-
-  // Salva o registro de retirada (lista por leito+data)
-  try {
-    const key = 'uti_disp_log';
-    const log = (await dbGet(key)) || [];
-    log.push({
-      leito: leitoAtual,
-      paciente: pac,
-      tipo: tipo,
-      local_ou_numero: locOuNum,
-      data_instalacao: dataInst,
-      data_retirada: hojeStr,
-      turno: turno,
-      autor: usuarioEmail,
-      registradoEm: new Date().toISOString()
-    });
-    await dbSet(key, log);
-  } catch(e){ console.warn('Log retirada:', e); }
-
-  // Limpa os campos do dispositivo no formulário atual
-  setF(idLocal, '');
-  setF(idData, '');
-  // Espelha nos campos TOT/TQT da ventilação se aplicável
-  if(tipo==='TOT'){ setF('f-tot-n',''); }
-  if(tipo==='TQT'){ setF('f-tqt-n',''); }
-
-  toast('✓ '+tipo+' retirado em '+hojeStr.split('-').reverse().join('/'));
+async function retirarDispositivo_REMOVIDA_DUPLICADA__nao_usar(tipo, idLocal, idData){
+  // Esta era uma versão antiga, sobrescrita pela versão nova com 5 parâmetros
+  // Mantida apenas para histórico, não é mais chamada de lugar nenhum.
+  return null;
 }
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -2849,6 +2814,7 @@ async function getAnterior(n) {
 async function abrirForm(n) {
   leitoAtual = n;
   showLoading('Carregando evolução...');
+  try {
   const d = await leitosData();
   const pac = d[n];
   limparForm();
@@ -2932,6 +2898,17 @@ async function abrirForm(n) {
 
   document.getElementById('form-titulo').textContent = 'Evolução – Leito '+pad(n);
   document.getElementById('form-sub').textContent = 'Hospital dos Pescadores · UTI · '+pac.pac;
+  // Atualiza o botão SAE conforme a evolução tenha ou não SAE salva
+  const btnSAE = document.getElementById('btn-sae');
+  if(btnSAE){
+    if(evHoje && evHoje.sae && evHoje.sae.diagnosticos && evHoje.sae.diagnosticos.length){
+      btnSAE.textContent = '🩺 Ver SAE / NANDA salva';
+      btnSAE.style.background = '#0f5132';
+    } else {
+      btnSAE.textContent = '🩺 Gerar SAE / NANDA';
+      btnSAE.style.background = '#1a6b3a';
+    }
+  }
   const b = document.getElementById('badge-form');
   b.textContent = turno==='DIURNO'?'☀ DIURNO':'☽ NOTURNO';
   b.className = 'badge '+(turno==='DIURNO'?'badge-d':'badge-n');
@@ -2940,6 +2917,11 @@ async function abrirForm(n) {
   mostrarTela('t-form');
   _ativarCaixaAlta();
   window.scrollTo(0,0);
+  } catch(e) {
+    console.error('abrirForm:', e);
+    hideLoading();
+    toast('Erro ao abrir evolução: '+(e.message||'tente novamente'), true);
+  }
 }
 
 // ── COLETA DE DADOS ────────────────────────────────────────────────────────────
@@ -4005,11 +3987,33 @@ function _resumoClinicoParaSAE(d){
   return linhas.join('\n');
 }
 
+// Roteador: decide se mostra a SAE salva ou abre o modal para gerar uma nova.
+async function abrirSAE(){
+  if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
+  const evKey = 'uti_ev_'+leitoAtual+'_'+turno+'_'+hoje();
+  const ev = await dbGet(evKey);
+  if(ev && ev.sae && ev.sae.diagnosticos && ev.sae.diagnosticos.length){
+    _mostrarSAESalva(ev);
+  } else {
+    gerarSAE();
+  }
+}
+
+function _mostrarSAESalva(ev){
+  const modal = document.getElementById('modal-sae');
+  const conteudo = document.getElementById('sae-conteudo');
+  const info = document.getElementById('sae-paciente-info');
+  const dxs = ev.sae.diagnosticos || [];
+  const geradoEm = ev.sae.geradoEm ? new Date(ev.sae.geradoEm).toLocaleString('pt-BR') : '';
+  info.textContent = `Leito ${pad(ev.leito)} · ${ev.pac||'—'} · ${dxs.length} diagnósticos${geradoEm?' · gerada em '+geradoEm:''}`;
+  conteudo.innerHTML = _renderizarSAE(ev, dxs);
+  modal.classList.add('show');
+}
+
 async function gerarSAE(){
   if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
   const d = coletarDados();
   if(!d.pac){ toast('Preencha pelo menos o paciente.', true); return; }
-
   const modal = document.getElementById('modal-sae');
   const conteudo = document.getElementById('sae-conteudo');
   const info = document.getElementById('sae-paciente-info');
@@ -4062,6 +4066,12 @@ async function gerarSAE(){
         await dbSet(evKeyAtual, evSalva);
       }
     } catch(e){ console.warn('Salvar SAE:', e); }
+    // Atualiza o botão SAE no formulário para refletir que agora há SAE salva
+    const btnSAE = document.getElementById('btn-sae');
+    if(btnSAE){
+      btnSAE.textContent = '🩺 Ver SAE / NANDA salva';
+      btnSAE.style.background = '#0f5132';
+    }
   } catch(err){
     console.error('[SAE]', err);
     conteudo.innerHTML = `
