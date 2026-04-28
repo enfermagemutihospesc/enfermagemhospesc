@@ -3970,7 +3970,38 @@ function fecharSAE(){
 }
 
 function imprimirSAE(){
-  document.body.classList.add('printing-sae');
-  window.print();
-  setTimeout(()=>document.body.classList.remove('printing-sae'), 500);
+  const conteudo = document.getElementById('sae-conteudo');
+  const info     = document.getElementById('sae-paciente-info').textContent;
+  if(!conteudo) return;
+
+  // Coleta CSS atual
+  let css = '';
+  for(const ss of document.styleSheets){
+    try { css += Array.from(ss.cssRules).map(r=>r.cssText).join('\n'); } catch(e){}
+  }
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if(!w){ toast('Bloqueador de pop-up ativo. Permita pop-ups e tente novamente.', true); return; }
+
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>SAE – ${info}</title>
+    <style>
+      ${css}
+      body { background:white; padding:20px; font-family:'IBM Plex Sans',sans-serif; }
+      .no-print { background:#1a6b3a;color:white;padding:10px;text-align:center;margin-bottom:16px;border-radius:8px; }
+      .no-print button { background:white;color:#1a6b3a;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;margin-left:8px; }
+      @media print { .no-print { display:none !important; } .sae-dx-card { page-break-inside:avoid; } }
+    </style>
+  </head><body>
+    <div class="no-print">
+      SAE – ${info}
+      <button onclick="window.print()">🖨 Imprimir</button>
+      <button onclick="window.close()">Fechar</button>
+    </div>
+    <div style="max-width:860px;margin:0 auto;">
+      ${conteudo.innerHTML}
+    </div>
+    <script>setTimeout(()=>window.print(),600);<\/script>
+  </body></html>`);
+  w.document.close();
 }
