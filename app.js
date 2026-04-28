@@ -2330,7 +2330,7 @@ async function renderLeitos() {
     card.innerHTML = `
       <div class="leito-num">LEITO ${pad(i)}</div>
       <div class="leito-info">${l.ocupado
-        ? `<div class="leito-pac">${l.pac||'–'}</div><div class="leito-diag">${l.diag||''}</div>`
+        ? `<div class="leito-pac">${l.pac||'–'}</div><div class="leito-diag">${l.diag||''}${_calcIdade(l.dn)!==null?' · '+_calcIdade(l.dn)+' anos':''}</div>`
         : `<div class="leito-vazio">Vago</div>`}
       </div>
       <div class="leito-badge-row">
@@ -2356,6 +2356,7 @@ async function abrirModal(n) {
   document.getElementById('m-diag').value  = (l.diag||'').toUpperCase();
   document.getElementById('m-cid').value   = (l.cid||'').toUpperCase();
   document.getElementById('m-dn').value    = l.dn||'';
+  _calcIdadeDisplay('m-dn','m-idade');
   document.getElementById('m-adm').value   = l.adm||hoje();
   document.getElementById('m-comor').value = (l.comor||'').toUpperCase();
   document.getElementById('m-adm-hosp').value = l.admHosp||'';
@@ -2682,6 +2683,23 @@ function getHVOutras(){
     return { nome: ins[0].value, vol: ins[1].value };
   }).filter(x=>x.nome.trim());
 }
+// ── CÁLCULO DE IDADE ──────────────────────────────────────────────────────────
+function _calcIdade(dn){
+  if(!dn) return null;
+  const [y,m,d] = dn.split('-').map(Number);
+  const hj = new Date();
+  let i = hj.getFullYear()-y;
+  if(hj.getMonth()+1 < m || (hj.getMonth()+1===m && hj.getDate()<d)) i--;
+  return i>=0 ? i : null;
+}
+function _calcIdadeDisplay(idDN, idSpan){
+  const dn = document.getElementById(idDN)?.value;
+  const el = document.getElementById(idSpan);
+  if(!el) return;
+  const i = _calcIdade(dn);
+  el.textContent = i !== null ? i+' anos' : '';
+}
+
 function toggleVMI(){ const v=document.querySelector('input[name="vent"]:checked'); const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI'); document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':''); document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex'; }
 
 // ── SUGESTÃO AUTOMÁTICA DE CID-10 VIA GROQ ───────────────────────────────────
@@ -2841,6 +2859,7 @@ async function abrirForm(n) {
   document.getElementById('cloud-tag').style.display = (!modoOffline && (anterior||evHoje)) ? 'inline' : 'none';
 
   setF('f-pac',pac.pac); setF('f-dn',pac.dn); setF('f-adm',pac.adm);
+  _calcIdadeDisplay('f-dn','f-idade');
   setF('f-diag',pac.diag); setF('f-cid',(pac.cid||(anterior&&anterior.cid)||(evHoje&&evHoje.cid)||'').toUpperCase()); setF('f-comor',pac.comor);
   // admHosp e alergia: usa leito primeiro, cai pro evolução anterior se o leito não tem
   setF('f-adm-hosp', pac.admHosp || (anterior && anterior.admHosp) || (evHoje && evHoje.admHosp) || '');
@@ -2851,11 +2870,17 @@ async function abrirForm(n) {
   const fonte = evHoje || anterior;
   if (fonte) {
     setF('f-avc-l',fonte.avc_l); setF('f-avc-d',fonte.avc_d);
+    if(fonte.avc_ret){ setF('f-avc-ret',fonte.avc_ret); document.getElementById('retirada-avc-wrap').style.display='flex'; }
     setF('f-dial-l',fonte.dial_l); setF('f-dial-d',fonte.dial_d);
+    if(fonte.dial_ret){ setF('f-dial-ret',fonte.dial_ret); document.getElementById('retirada-cdl-wrap').style.display='flex'; }
     setF('f-svd-n',fonte.svd_n); setF('f-svd-d',fonte.svd_d);
+    if(fonte.svd_ret){ setF('f-svd-ret',fonte.svd_ret); document.getElementById('retirada-svd-wrap').style.display='flex'; }
     setF('f-sne-n',fonte.sne_n); setF('f-sne-d',fonte.sne_d);
+    if(fonte.sne_ret){ setF('f-sne-ret',fonte.sne_ret); document.getElementById('retirada-sne-wrap').style.display='flex'; }
     setF('f-tot-n',fonte.tot_n||''); setF('f-tot-n2',fonte.tot_n||''); setF('f-tot-d',fonte.tot_d||'');
+    if(fonte.tot_ret){ setF('f-tot-ret',fonte.tot_ret); document.getElementById('retirada-tot-wrap').style.display='flex'; }
     setF('f-tqt-n',fonte.tqt_n||''); setF('f-tqt-n2',fonte.tqt_n||''); setF('f-tqt-d',fonte.tqt_d||'');
+    if(fonte.tqt_ret){ setF('f-tqt-ret',fonte.tqt_ret); document.getElementById('retirada-tqt-wrap').style.display='flex'; }
     setF('f-disp-o',fonte.disp_o);
     if(fonte.avps&&fonte.avps.length) fonte.avps.forEach(a=>addAVP(a.local,a.data)); else addAVP();
     if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
@@ -2892,6 +2917,7 @@ async function abrirForm(n) {
     setChecks('f-prev',fonte.prev);
     setF('f-exames-real',  fonte.examesReal||'');
     setF('f-exames-solic', fonte.examesSolic||'');
+    setF('f-les', fonte.les||'');
     setF('f-obs', fonte.obs||'');
     // HV outras infusões
     if(fonte.hvOutras&&fonte.hvOutras.length) fonte.hvOutras.forEach(o=>addHVOutra(o.nome,o.vol));
@@ -2998,8 +3024,8 @@ function renderPreview(d) {
   let h='';
   h+=`<div class="ph"><h2>PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</h2><h3>SETOR – UNIDADE DE TERAPIA INTENSIVA (UTI)</h3><p>EVOLUÇÃO DO ENFERMEIRO</p></div><div class="pb">`;
   h+=`<div class="pr"><span class="pl">PACIENTE</span><span class="pv">${d.pac||'–'}</span><span class="pl" style="margin-left:1rem;">DATA</span><span class="pv">${fmtD(d.data)}</span><span class="pl" style="margin-left:1rem;">LEITO</span><span class="pv">${pad(d.leito)} – UTI Geral</span><span class="pl" style="margin-left:1rem;">TURNO</span><span class="pv">${d.turno}</span></div>`;
-  h+=`<div class="pr"><span class="pl">DN</span><span class="pv">${fmtD(d.dn)}</span><span class="pl" style="margin-left:1rem;">ADMISSÃO UTI</span><span class="pv">${fmtD(d.adm)}</span></div>`;
-  h+=br('DIAGNÓSTICO',d.diag); h+=br('COMORBIDADES',d.comor);
+  h+=`<div class="pr"><span class="pl">DN</span><span class="pv">${fmtD(d.dn)}${_calcIdade(d.dn)!==null?' ('+_calcIdade(d.dn)+' anos)':''}</span><span class="pl" style="margin-left:1rem;">ADMISSÃO UTI</span><span class="pv">${fmtD(d.adm)}</span>${d.sexo?`<span class="pl" style="margin-left:1rem;">SEXO</span><span class="pv">${d.sexo==='M'?'Masculino':'Feminino'}</span>`:''}</div>`;
+  h+=br('DIAGNÓSTICO', d.diag + (d.cid ? '  –  CID: '+d.cid : '')); h+=br('COMORBIDADES',d.comor);
   h+=br('ALERGIAS', d.alergia||'NKDA');
 h+=st('Segurança do Paciente');
 h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseira||'–'}</span>
