@@ -198,7 +198,7 @@
           <div class="fl"><label>Leito</label><input type="text" id="f-leito" readonly style="background:#eee;"></div>
         </div>
         <div class="dc">
-          <div class="fl"><label>DN</label><input type="date" id="f-dn"></div>
+          <div class="fl"><label>DN</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="f-dn" onchange="_calcIdadeDisplay('f-dn','f-idade')"><span id="f-idade" style="font-size:.78rem;font-weight:700;color:var(--azul);white-space:nowrap;min-width:48px;"></span></div></div>
           <div class="fl"><label>Adm. UTI</label><input type="date" id="f-adm"></div>
         </div>
         <div class="fl"><label>Diagnóstico</label>
@@ -740,7 +740,7 @@
         </div>
       </div>
       <div style="display:flex;gap:8px;">
-        <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Data de nascimento</label><input type="date" id="m-dn" style="width:100%;"></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Data de nascimento</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="m-dn" style="flex:1;" onchange="_calcIdadeDisplay('m-dn','m-idade')"><span id="m-idade" style="font-size:.78rem;font-weight:700;color:var(--azul);white-space:nowrap;min-width:48px;"></span></div></div>
         <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Admissão UTI</label><input type="date" id="m-adm" style="width:100%;"></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;">
