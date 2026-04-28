@@ -83,29 +83,17 @@ async function dbGetMany(keys) {
   }
   if (toFetch.length === 0) return result;
   if (!modoOffline && db) {
-    try {
-      const refs = toFetch.map(k => db.collection('uti').doc(k));
-      const snapshots = await db.getAll(...refs);
-      for (const snap of snapshots) {
-        const val = snap.exists ? (snap.data().value ?? snap.data().v ?? null) : null;
-        memCache[snap.id] = val;
-        result[snap.id]   = val;
+    await Promise.all(toFetch.map(async key => {
+      try {
+        const doc = await db.collection('uti').doc(key).get();
+        const val = doc.exists ? (doc.data().value ?? doc.data().v ?? null) : null;
+        memCache[key] = val; result[key] = val;
+      } catch(e) {
+        const val = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
+        memCache[key] = val; result[key] = val;
       }
-      return result;
-    } catch(e) {
-      console.warn('dbGetMany: getAll falhou, usando gets individuais:', e);
-      await Promise.all(toFetch.map(async key => {
-        try {
-          const doc = await db.collection('uti').doc(key).get();
-          const val = doc.exists ? (doc.data().value ?? doc.data().v ?? null) : null;
-          memCache[key] = val; result[key] = val;
-        } catch(e2) {
-          const val = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
-          memCache[key] = val; result[key] = val;
-        }
-      }));
-      return result;
-    }
+    }));
+    return result;
   }
   await Promise.all(toFetch.map(async key => {
     const val = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
@@ -3891,9 +3879,17 @@ async function gerarSAE(){
         turno: d.turno
       })
     });
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
-    const data = await resp.json();
+
+    // Apps Script retorna sempre 200 mesmo com erro interno; lê como texto e parseia
+    const rawText = await resp.text();
+    console.log('[SAE] resposta bruta do Apps Script:', rawText.substring(0, 500));
+
+    let data;
+    try { data = JSON.parse(rawText); }
+    catch(e) { throw new Error('Resposta do servidor não é JSON válido: ' + rawText.substring(0, 200)); }
+
     if(data.error) throw new Error(data.error);
+    if(data.status === 'erro') throw new Error(data.msg || 'Erro no servidor');
 
     const diagnosticos = data.diagnosticos || [];
     info.textContent = `Leito ${pad(d.leito)} · ${d.pac} · ${diagnosticos.length} diagnósticos`;
