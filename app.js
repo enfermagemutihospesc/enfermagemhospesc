@@ -1478,7 +1478,8 @@ async function renderIndicadores(){
     nutricao:      _indNutricao,
     neuro:         _indNeuro,
     operacionais:  _indOperacionais,
-    cruzamentos:   _indCruzamentos
+    cruzamentos:   _indCruzamentos,
+    sae_nanda:     _indSAENanda
   };
   const fn = renderers[_indCategoriaAtiva] || _indOcupacao;
   container.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px;">Período: <strong>${periodo.rotulo}</strong></div>` + fn(periodo);
@@ -2100,6 +2101,97 @@ function _indCruzamentos(periodo){
   return h;
 }
 
+// ── 15. SAE / DIAGNÓSTICOS DE ENFERMAGEM ─────────────────────────────────────
+function _indSAENanda(periodo){
+  const { evolucoes } = _indCache;
+
+  // Filtra evoluções do período que têm SAE gerada
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const comSAE = evPer.filter(e => e.sae && e.sae.diagnosticos && e.sae.diagnosticos.length);
+  const totalEv = evPer.length;
+
+  // Contagem de diagnósticos NANDA
+  const freqDx = {};
+  const freqDominio = {};
+  const freqTipo = {};
+  comSAE.forEach(e => {
+    e.sae.diagnosticos.forEach(dx => {
+      if (!dx.titulo_nanda) return;
+      // Normaliza título
+      const titulo = dx.titulo_nanda.trim();
+      const chave = titulo.toLowerCase();
+      if (!freqDx[chave]) freqDx[chave] = { titulo, codigo: dx.codigo_nanda||'', count: 0 };
+      freqDx[chave].count++;
+      // Domínio
+      if (dx.dominio) {
+        const dom = dx.dominio.trim();
+        freqDominio[dom] = (freqDominio[dom]||0) + 1;
+      }
+      // Tipo
+      if (dx.tipo) {
+        const tp = dx.tipo.trim();
+        freqTipo[tp] = (freqTipo[tp]||0) + 1;
+      }
+    });
+  });
+
+  const rankDx = Object.values(freqDx).sort((a,b)=>b.count-a.count);
+  const rankDom = Object.entries(freqDominio).sort((a,b)=>b[1]-a[1]);
+  const totalDx = Object.values(freqDx).reduce((s,v)=>s+v.count,0);
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Evoluções no período', totalEv, '', '', 'sae_total_ev');
+  h += _cardInd('Com SAE gerada', comSAE.length, _pct(comSAE.length, totalEv), comSAE.length===0?'vermelho':'', 'sae_com_sae');
+  h += _cardInd('Total de diagnósticos NANDA', totalDx, `${rankDx.length} distintos`, '', 'sae_total_dx');
+  h += _cardInd('Média por evolução', comSAE.length ? (totalDx/comSAE.length).toFixed(1) : '–', 'dx por evolução', '', 'sae_media_dx');
+  h += '</div>';
+
+  if (!comSAE.length) {
+    h += '<div class="ind-hint">⚠️ Nenhuma SAE encontrada no período. Gere SAEs nas evoluções para popular este indicador.</div>';
+    return h;
+  }
+
+  // Ranking dos diagnósticos mais frequentes
+  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">🔝 Diagnósticos de Enfermagem Mais Frequentes</div>';
+  h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.82rem;">';
+  h += '<thead><tr style="background:#eaf5ee;"><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #c8e6d5;">#</th><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #c8e6d5;">Diagnóstico NANDA</th><th style="padding:7px 10px;text-align:center;border-bottom:2px solid #c8e6d5;">Código</th><th style="padding:7px 10px;text-align:center;border-bottom:2px solid #c8e6d5;">Freq.</th><th style="padding:7px 10px;text-align:center;border-bottom:2px solid #c8e6d5;">%</th></tr></thead><tbody>';
+  rankDx.slice(0, 15).forEach((dx, i) => {
+    const pct = _pct(dx.count, totalDx);
+    const bar = Math.round(dx.count/rankDx[0].count*100);
+    h += `<tr style="border-bottom:1px solid #f0f0f0;${i%2===0?'':'background:#fafafa'}">
+      <td style="padding:6px 10px;font-weight:700;color:var(--azul);">${i+1}</td>
+      <td style="padding:6px 10px;">
+        <div>${dx.titulo}</div>
+        <div style="margin-top:3px;background:#e8f5e9;border-radius:4px;height:4px;width:100%;"><div style="background:#1a6b3a;height:4px;border-radius:4px;width:${bar}%;"></div></div>
+      </td>
+      <td style="padding:6px 10px;text-align:center;font-family:monospace;font-size:.78rem;color:#555;">${dx.codigo||'—'}</td>
+      <td style="padding:6px 10px;text-align:center;font-weight:700;">${dx.count}</td>
+      <td style="padding:6px 10px;text-align:center;color:var(--muted);">${pct}</td>
+    </tr>`;
+  });
+  h += '</tbody></table></div>';
+
+  // Distribuição por domínio
+  if (rankDom.length) {
+    h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">📂 Distribuição por Domínio NANDA</div>';
+    const domList = rankDom.map(([label, valor]) => ({ label, valor }));
+    h += _rankingBarras('', domList, null, 'sae_dominios');
+  }
+
+  // Distribuição por tipo
+  if (Object.keys(freqTipo).length) {
+    h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">🏷️ Tipo de Diagnóstico</div>';
+    h += '<div class="ind-grid">';
+    Object.entries(freqTipo).sort((a,b)=>b[1]-a[1]).forEach(([tipo, n]) => {
+      h += _cardInd(tipo, n, _pct(n, totalDx), '', 'sae_tipo_'+tipo.toLowerCase().replace(/\s/g,'_'));
+    });
+    h += '</div>';
+  }
+
+  h += '<div class="ind-hint">💡 Apenas evoluções com SAE gerada pelo botão "🩺 Gerar SAE" são contabilizadas aqui.</div>';
+  return h;
+}
+
 // Correlação de Pearson
 function _correlacao(xs, ys){
   const n = xs.length;
@@ -2262,6 +2354,7 @@ async function abrirModal(n) {
   document.getElementById('modal-titulo').textContent = `Leito ${pad(n)} – ${l.ocupado?'Editar dados':'Admissão'}`;
   document.getElementById('m-pac').value   = (l.pac||'').toUpperCase();
   document.getElementById('m-diag').value  = (l.diag||'').toUpperCase();
+  document.getElementById('m-cid').value   = (l.cid||'').toUpperCase();
   document.getElementById('m-dn').value    = l.dn||'';
   document.getElementById('m-adm').value   = l.adm||hoje();
   document.getElementById('m-comor').value = (l.comor||'').toUpperCase();
@@ -2291,7 +2384,7 @@ async function salvarAdmissao() {
   const novaAdmissao = !leitoExistente.ocupado;
   d[modalLeito] = {
     ocupado:true,
-    pac:gf('m-pac'), diag:gf('m-diag'), dn:gf('m-dn'),
+    pac:gf('m-pac'), diag:gf('m-diag'), cid:gf('m-cid').toUpperCase(), dn:gf('m-dn'),
     adm:gf('m-adm'), admHosp:gf('m-adm-hosp'),
     comor:gf('m-comor'), alergia:gf('m-alergia'),
     origem: origem,
@@ -2310,6 +2403,7 @@ async function salvarAdmissao() {
         leito: modalLeito,
         paciente: gf('m-pac'),
         diagnostico: gf('m-diag'),
+        cid: gf('m-cid').toUpperCase(),
         dn: gf('m-dn'),
         sexo: gf('m-sexo'),
         admUTI: gf('m-adm'),
@@ -2590,6 +2684,45 @@ function getHVOutras(){
 }
 function toggleVMI(){ const v=document.querySelector('input[name="vent"]:checked'); const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI'); document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':''); document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex'; }
 
+// ── SUGESTÃO AUTOMÁTICA DE CID-10 VIA GROQ ───────────────────────────────────
+const _cidDebounce = {};
+async function _sugerirCID(idDiag, idCID){
+  const diag = document.getElementById(idDiag)?.value?.trim();
+  const cidEl  = document.getElementById(idCID);
+  const statEl = document.getElementById(idCID + '-status');
+  if (!cidEl || !statEl) return;
+  if (!diag || diag.length < 5) { statEl.textContent = ''; return; }
+
+  // Se o usuário já digitou um CID manualmente, não sobrescreve
+  const cidAtual = cidEl.value.trim();
+  if (cidAtual && cidAtual !== cidEl.dataset.sugerido) return;
+
+  clearTimeout(_cidDebounce[idCID]);
+  _cidDebounce[idCID] = setTimeout(async () => {
+    statEl.textContent = '⏳ buscando...';
+    try {
+      const resp = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'cid', diagnostico: diag })
+      });
+      const raw = await resp.text();
+      const data = JSON.parse(raw);
+      if (data.cid) {
+        cidEl.value = data.cid.toUpperCase();
+        cidEl.dataset.sugerido = data.cid.toUpperCase();
+        statEl.textContent = '✓ sugerido';
+        statEl.style.color = '#1a6b3a';
+        setTimeout(() => { statEl.textContent = ''; }, 3000);
+      } else {
+        statEl.textContent = '';
+      }
+    } catch(e) {
+      statEl.textContent = '';
+    }
+  }, 1200);
+}
+
 // FC – limpa valor numérico ao desselecionar a opção de ritmo
 (function _initFCListeners(){
   function _bindFC(cbVal, fcId){
@@ -2708,7 +2841,7 @@ async function abrirForm(n) {
   document.getElementById('cloud-tag').style.display = (!modoOffline && (anterior||evHoje)) ? 'inline' : 'none';
 
   setF('f-pac',pac.pac); setF('f-dn',pac.dn); setF('f-adm',pac.adm);
-  setF('f-diag',pac.diag); setF('f-comor',pac.comor);
+  setF('f-diag',pac.diag); setF('f-cid',(pac.cid||(anterior&&anterior.cid)||(evHoje&&evHoje.cid)||'').toUpperCase()); setF('f-comor',pac.comor);
   // admHosp e alergia: usa leito primeiro, cai pro evolução anterior se o leito não tem
   setF('f-adm-hosp', pac.admHosp || (anterior && anterior.admHosp) || (evHoje && evHoje.admHosp) || '');
   setF('f-alergia',  pac.alergia || (anterior && anterior.alergia) || (evHoje && evHoje.alergia) || '');
@@ -2787,7 +2920,7 @@ async function abrirForm(n) {
 function coletarDados() {
   const isVMI = document.getElementById('vmi-box').classList.contains('show');
   return {
-    leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), diag:gf('f-diag'), comor:gf('f-comor'),admHosp:    gf('f-adm-hosp'),
+    leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), diag:gf('f-diag'), cid:gf('f-cid').toUpperCase(), comor:gf('f-comor'),admHosp:    gf('f-adm-hosp'),
 alergia:    gf('f-alergia'),
 sexo:       gf('f-sexo'),
 pulseira:   gRadio('pulseira'),
