@@ -697,7 +697,7 @@
 
     <div class="btn-row">
       <button class="btn btn-sec" onclick="irLeitos()">← Leitos</button>
-      <button class="btn" style="background:#1a6b3a;color:white;" id="btn-sae" onclick="gerarSAE()">🩺 Gerar SAE / NANDA</button>
+      <button class="btn" style="background:#1a6b3a;color:white;" id="btn-sae" onclick="abrirSAE()">🩺 Gerar SAE / NANDA</button>
       <button class="btn btn-pri" id="btn-gerar" onclick="gerarPreview()">Gerar Impressão →</button>
     </div>
   </div>
@@ -861,6 +861,7 @@
     <div class="modal-body" id="sae-conteudo"></div>
     <div class="modal-footer" style="background:#eaf5ee;border-top:1px solid #c8e6d5;display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;">
       <button class="btn btn-sec btn-sm" onclick="fecharSAE()">Fechar</button>
+      <button class="btn btn-sm" style="background:#856404;color:white;" onclick="if(confirm('Gerar uma nova SAE? Isso substituirá a anterior.')) gerarSAE()">↻ Regenerar</button>
       <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirSAE()">🖨 Imprimir SAE</button>
     </div>
   </div>
