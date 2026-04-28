@@ -167,6 +167,7 @@
       <button class="ind-cat-btn" data-cat="neuro">🩺 Neurológicos</button>
       <button class="ind-cat-btn" data-cat="operacionais">⏱️ Operacionais</button>
       <button class="ind-cat-btn" data-cat="cruzamentos">🔗 Cruzamentos</button>
+      <button class="ind-cat-btn" data-cat="sae_nanda">🩺 SAE/NANDA</button>
     </div>
 
     <!-- Área dinâmica -->
@@ -200,7 +201,15 @@
           <div class="fl"><label>DN</label><input type="date" id="f-dn"></div>
           <div class="fl"><label>Adm. UTI</label><input type="date" id="f-adm"></div>
         </div>
-        <div class="fl"><label>Diagnóstico</label><input type="text" id="f-diag" placeholder="Diagnóstico principal"></div>
+        <div class="fl"><label>Diagnóstico</label>
+          <div style="display:flex;gap:6px;align-items:flex-start;">
+            <input type="text" id="f-diag" placeholder="Diagnóstico principal" style="flex:1;" oninput="_sugerirCID('f-diag','f-cid')">
+            <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;min-width:110px;">
+              <input type="text" id="f-cid" placeholder="CID-10" style="width:100%;font-family:monospace;font-weight:600;" maxlength="8">
+              <span id="f-cid-status" style="font-size:.6rem;color:var(--muted);text-align:center;min-height:12px;"></span>
+            </div>
+          </div>
+        </div>
         <div class="fl"><label>Comorbidades</label><input type="text" id="f-comor" placeholder="Ex: DM, HAS, tabagista..."></div>
         <div class="dc"><div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp"></div><div class="fl"><label>Sexo</label><select id="f-sexo"><option value="">–</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div></div>
 <div class="fl"><label>Alergias</label><input type="text" id="f-alergia" placeholder="Ex: Dipirona... ou NKDA"></div>
@@ -721,7 +730,15 @@
     <div class="modal-header"><h3 id="modal-titulo">Leito 01 – Admissão</h3><button class="modal-close" onclick="fecharModal()">×</button></div>
     <div class="modal-body">
       <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Nome do paciente</label><input type="text" id="m-pac" placeholder="Nome completo" style="width:100%;"></div>
-      <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Diagnóstico</label><input type="text" id="m-diag" placeholder="Diagnóstico principal" style="width:100%;"></div>
+      <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Diagnóstico</label>
+        <div style="display:flex;gap:6px;align-items:flex-start;">
+          <input type="text" id="m-diag" placeholder="Diagnóstico principal" style="flex:1;" oninput="_sugerirCID('m-diag','m-cid')">
+          <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;min-width:110px;">
+            <input type="text" id="m-cid" placeholder="CID-10" style="width:100%;font-family:monospace;font-weight:600;" maxlength="8">
+            <span id="m-cid-status" style="font-size:.6rem;color:var(--muted);text-align:center;min-height:12px;"></span>
+          </div>
+        </div>
+      </div>
       <div style="display:flex;gap:8px;">
         <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Data de nascimento</label><input type="date" id="m-dn" style="width:100%;"></div>
         <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Admissão UTI</label><input type="date" id="m-adm" style="width:100%;"></div>
