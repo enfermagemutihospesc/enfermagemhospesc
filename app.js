@@ -535,43 +535,281 @@ function _indPeriodo(){
 
 // Carrega todos os dados brutos necessários (uma vez por Atualizar).
 // Faz UMA única varredura da coleção para descobrir chaves,
+// ════════════════════════════════════════════════════════════════════════════
+// LIMPEZA AUTOMÁTICA – compacta evoluções > 4 meses em resumo agregado por dia
+// ════════════════════════════════════════════════════════════════════════════
+const RETENCAO_DIAS = 120; // 4 meses
+
+// Extrai apenas os campos necessários para indicadores (~500 bytes vs ~10 KB)
+function _resumirEvolucao(ev){
+  if(!ev) return null;
+  const arr = (x) => Array.isArray(x) ? x : (x ? [x] : []);
+  const dvas = ev.dva ? Object.keys(ev.dva).filter(k => ev.dva[k] && ev.dva[k].checked) : [];
+  if(ev.dvaOutros) ev.dvaOutros.forEach(o => o.nome && dvas.push(o.nome));
+  const sedos = ev.sedo ? Object.keys(ev.sedo).filter(k => ev.sedo[k] && ev.sedo[k].checked) : [];
+  if(ev.sedoOutros) ev.sedoOutros.forEach(o => o.nome && sedos.push(o.nome));
+  return {
+    leito: ev.leito, turno: ev.turno, data: ev.data,
+    pac: ev.pac, dn: ev.dn, sexo: ev.sexo, diag: ev.diag, cid: ev.cid,
+    vent: ev.vent,
+    isVMI: ev.vent && (ev.vent.indexOf('VMI') >= 0),
+    vmi_modo: ev.vmi_modo, vmi_fio2: ev.vmi_fio2, vmi_peep: ev.vmi_peep,
+    spo2: ev.spo2 || ev.spo2av,
+    glas: ev.glas, rass: ev.rass,
+    isolamento: ev.isolamento, microorg: ev.microorg,
+    pulseira: ev.pulseira,
+    dieta: arr(ev.dieta), diu: arr(ev.diu),
+    dvas: dvas, sedos: sedos,
+    temAVC: !!(ev.avc_l || ev.avc_d),
+    temCDL: !!(ev.dial_l || ev.dial_d),
+    temSVD: !!(ev.svd_n || ev.svd_d),
+    temSNE: !!(ev.sne_n || ev.sne_d),
+    temTOT: !!(ev.tot_n || ev.tot_d),
+    temTQT: !!(ev.tqt_n || ev.tqt_d),
+    qtdAVPs: (ev.avps||[]).filter(a => a.local).length,
+    atbs: (ev.atbs||[]).filter(a => a.nome).map(a => a.nome),
+    bradScore: ev.bradScore, bradRisco: ev.bradRisco,
+    morseScore: ev.morseScore, morseRisco: ev.morseRisco,
+    prev: arr(ev.prev),
+    eli: arr(ev.eli),
+    teveSAE: !!(ev.sae && ev.sae.diagnosticos && ev.sae.diagnosticos.length),
+    qtdDxSAE: ev.sae && ev.sae.diagnosticos ? ev.sae.diagnosticos.length : 0,
+    autor: ev.autor, _resumido: true
+  };
+}
+
+function _resumirNAS(nas){
+  if(!nas) return null;
+  return {
+    leito: nas.leito, turno: nas.turno, data: nas.data,
+    paciente: nas.paciente, total: nas.total,
+    autor: nas.autor, _resumido: true
+  };
+}
+
+// Calcula data limite (hoje - RETENCAO_DIAS) em formato YYYY-MM-DD
+function _dataLimiteRetencao(){
+  const d = new Date();
+  d.setDate(d.getDate() - RETENCAO_DIAS);
+  return d.toISOString().slice(0,10);
+}
+
+// Roteador da limpeza: chamado no primeiro login do dia
+async function executarLimpezaSeNecessario(){
+  if(modoOffline || !db) return; // só funciona online
+  const flag = 'uti_limpeza_ultima';
+  const ultima = await dbGet(flag);
+  const hj = hoje();
+  if(ultima && ultima === hj) return; // já rodou hoje
+
+  // Marca já como rodada antes de executar (evita re-entrada se demorar)
+  await dbSet(flag, hj);
+
+  // Executa em background (não bloqueia o login)
+  setTimeout(() => _executarLimpezaCore().catch(e => console.warn('Limpeza:', e)), 5000);
+}
+
+async function _executarLimpezaCore(){
+  const limite = _dataLimiteRetencao(); // YYYY-MM-DD
+  console.log('[Limpeza] Buscando evoluções/NAS com data <', limite);
+
+  // 1. Busca todas as chaves uti_ev_* e uti_nas_* via varredura única
+  const candidatos = [];
+  try {
+    const snap = await db.collection('uti').get();
+    snap.forEach(doc => {
+      const id = doc.id;
+      // Aceita: uti_ev_<leito>_<turno>_<YYYY-MM-DD>  ou  uti_nas_<leito>_<turno>_<YYYY-MM-DD>
+      const m = id.match(/^uti_(ev|nas)_(\d+)_(DIURNO|NOTURNO)_(\d{4}-\d{2}-\d{2})$/);
+      if (m) {
+        const data = m[4];
+        if (data < limite) candidatos.push({ id, tipo: m[1], leito: parseInt(m[2]), turno: m[3], data, doc: doc.data() });
+      }
+    });
+  } catch(e){
+    console.warn('[Limpeza] Varredura falhou:', e);
+    return;
+  }
+
+  if(!candidatos.length){ console.log('[Limpeza] Nada a compactar.'); return; }
+
+  console.log(`[Limpeza] ${candidatos.length} registros candidatos para compactação`);
+
+  // 2. Agrupa por dia e tipo: { '2025-12-15': { ev: [...], nas: [...] }, ... }
+  const porDia = {};
+  for(const c of candidatos){
+    if(!porDia[c.data]) porDia[c.data] = { ev: [], nas: [] };
+    const valor = c.doc.value ?? c.doc.v ?? null;
+    if(!valor) continue;
+    if(c.tipo === 'ev') porDia[c.data].ev.push({ chave: c.id, ev: valor });
+    else                porDia[c.data].nas.push({ chave: c.id, nas: valor });
+  }
+
+  // 3. Backup JSON antes de qualquer alteração
+  const dadosBackup = {
+    geradoEm: new Date().toISOString(),
+    limite: limite,
+    totalRegistros: candidatos.length,
+    dias: Object.keys(porDia).length,
+    raw: candidatos.map(c => ({ id: c.id, value: c.doc.value ?? c.doc.v ?? null }))
+  };
+  const backupOk = await _backupJsonNoDrive(dadosBackup);
+  if(!backupOk){
+    console.warn('[Limpeza] Backup falhou — abortando compactação para segurança.');
+    toast('⚠ Backup do Drive falhou. Limpeza adiada para amanhã.', true);
+    return;
+  }
+  console.log('[Limpeza] Backup salvo no Drive com sucesso');
+
+  // 4. Cria documentos resumo e remove originais
+  let compactados = 0, falhas = 0;
+  for(const [dia, grupo] of Object.entries(porDia)){
+    try {
+      // Resumo de evoluções: uti_ev_resumo_<YYYY-MM-DD>
+      if(grupo.ev.length){
+        const resumo = grupo.ev.map(x => _resumirEvolucao(x.ev)).filter(Boolean);
+        await dbSet('uti_ev_resumo_'+dia, { dia, evolucoes: resumo, _resumido: true });
+      }
+      // Resumo de NAS: uti_nas_resumo_<YYYY-MM-DD>
+      if(grupo.nas.length){
+        const resumo = grupo.nas.map(x => _resumirNAS(x.nas)).filter(Boolean);
+        await dbSet('uti_nas_resumo_'+dia, { dia, nas: resumo, _resumido: true });
+      }
+      // Remove originais SOMENTE depois de salvar o resumo
+      for(const x of grupo.ev)  { await dbDelete(x.chave); compactados++; }
+      for(const x of grupo.nas) { await dbDelete(x.chave); compactados++; }
+    } catch(e){
+      falhas++;
+      console.warn('[Limpeza] Falha no dia '+dia+':', e);
+    }
+  }
+  console.log(`[Limpeza] Compactados: ${compactados}, Falhas: ${falhas}`);
+  if(compactados > 0){
+    toast(`✓ Limpeza automática: ${compactados} registros antigos compactados (backup no Drive).`);
+  }
+}
+
+// Envia o JSON completo para o Drive via Apps Script
+async function _backupJsonNoDrive(dados){
+  try {
+    const titulo = 'backup_uti_' + dados.limite + '_' + Date.now();
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'backup_json',
+        titulo: titulo,
+        json: JSON.stringify(dados)
+      }),
+      mode: 'no-cors'
+    });
+    return true;
+  } catch(e){
+    console.warn('Backup falhou:', e);
+    return false;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+
 // depois busca todos os valores em paralelo via dbGetMany.
+// Converte um resumo compactado para o formato que os renderers de indicadores
+// esperam (que foi pensado para evoluções completas). Mantém o flag _resumido
+// para que renderers possam saber a procedência se necessário.
+function _resumoParaIndicador(r){
+  if(!r || !r._resumido) return r;
+  // Reconstrói campos para compatibilidade
+  const dvaObj = {};
+  (r.dvas || []).forEach(nome => { dvaObj[nome] = { checked: true, val: '' }; });
+  const sedoObj = {};
+  (r.sedos || []).forEach(nome => { sedoObj[nome] = { checked: true, val: '' }; });
+  return {
+    leito: r.leito, turno: r.turno, data: r.data,
+    pac: r.pac, dn: r.dn, sexo: r.sexo, diag: r.diag, cid: r.cid,
+    vent: r.vent,
+    vmi_modo: r.vmi_modo, vmi_fio2: r.vmi_fio2, vmi_peep: r.vmi_peep,
+    spo2: r.spo2,
+    glas: r.glas, rass: r.rass,
+    isolamento: r.isolamento, microorg: r.microorg,
+    pulseira: r.pulseira,
+    dieta: r.dieta || [], diu: r.diu || [],
+    dva: dvaObj, dvaOutros: [],
+    sedo: sedoObj, sedoOutros: [],
+    avc_l: r.temAVC ? '·' : '', avc_d: r.temAVC ? r.data : '',
+    dial_l: r.temCDL ? '·' : '', dial_d: r.temCDL ? r.data : '',
+    svd_n: r.temSVD ? '·' : '', svd_d: r.temSVD ? r.data : '',
+    sne_n: r.temSNE ? '·' : '', sne_d: r.temSNE ? r.data : '',
+    tot_n: r.temTOT ? '·' : '', tot_d: r.temTOT ? r.data : '',
+    tqt_n: r.temTQT ? '·' : '', tqt_d: r.temTQT ? r.data : '',
+    avps: Array(r.qtdAVPs || 0).fill({ local: '·', data: r.data }),
+    atbs: (r.atbs || []).map(nome => ({ nome, inicio: r.data })),
+    bradScore: r.bradScore, bradRisco: r.bradRisco,
+    morseScore: r.morseScore, morseRisco: r.morseRisco,
+    prev: r.prev || [],
+    eli: r.eli || [],
+    sae: r.teveSAE ? { diagnosticos: Array(r.qtdDxSAE || 0).fill({ titulo_nanda: 'Diagnóstico arquivado' }) } : null,
+    autor: r.autor,
+    _resumido: true
+  };
+}
+
 async function _carregarDadosInd(){
   showLoading('Carregando indicadores...');
   try {
     // Chaves fixas (logs) + varredura única para chaves dinâmicas
     const fixas = ['uti_admissao_log','uti_alta_log','uti_disp_log'];
     const dinamicas = new Set();
+    const resumosEv = new Set();   // uti_ev_resumo_<dia>
+    const resumosNas = new Set();  // uti_nas_resumo_<dia>
 
     // localStorage — percorre uma vez
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && (k.startsWith('uti_ev_') || k.startsWith('uti_nas_'))) dinamicas.add(k);
+      if (!k) continue;
+      if (k.startsWith('uti_ev_resumo_'))  resumosEv.add(k);
+      else if (k.startsWith('uti_nas_resumo_')) resumosNas.add(k);
+      else if (k.startsWith('uti_ev_') || k.startsWith('uti_nas_')) dinamicas.add(k);
     }
     // Firestore — UMA única varredura da coleção
     if (!modoOffline && db) {
       try {
         const snap = await db.collection('uti').get();
         snap.forEach(doc => {
-          if (doc.id.startsWith('uti_ev_') || doc.id.startsWith('uti_nas_')) dinamicas.add(doc.id);
+          const id = doc.id;
+          if (id.startsWith('uti_ev_resumo_'))  resumosEv.add(id);
+          else if (id.startsWith('uti_nas_resumo_')) resumosNas.add(id);
+          else if (id.startsWith('uti_ev_') || id.startsWith('uti_nas_')) dinamicas.add(id);
         });
       } catch(e) { console.warn('_carregarDadosInd: varredura:', e); }
     }
 
-    // Busca tudo em paralelo: fixas + dinâmicas
-    const todasChaves = [...fixas, ...Array.from(dinamicas)];
+    // Busca tudo em paralelo: fixas + dinâmicas + resumos
+    const todasChaves = [...fixas, ...Array.from(dinamicas), ...Array.from(resumosEv), ...Array.from(resumosNas)];
     const dataMap = await dbGetMany(todasChaves);
 
     const admissoes = dataMap['uti_admissao_log'] || [];
     const altas     = dataMap['uti_alta_log']     || [];
     const dispLog   = dataMap['uti_disp_log']     || [];
     const evolucoes = [], nasList = [];
+
+    // Evoluções/NAS recentes (completas)
     for (const k of dinamicas) {
       const v = dataMap[k];
       if (!v) continue;
       if (k.startsWith('uti_ev_'))  evolucoes.push(v);
       if (k.startsWith('uti_nas_')) nasList.push(v);
     }
+    // Evoluções/NAS antigas (resumidas) — espalha o array de cada dia
+    // Adapta o formato do resumo para o que os indicadores esperam.
+    for (const k of resumosEv) {
+      const v = dataMap[k];
+      if (v && Array.isArray(v.evolucoes)) v.evolucoes.forEach(e => evolucoes.push(_resumoParaIndicador(e)));
+    }
+    for (const k of resumosNas) {
+      const v = dataMap[k];
+      if (v && Array.isArray(v.nas)) v.nas.forEach(n => nasList.push(n));
+    }
+
     _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList };
   } finally {
     hideLoading();
@@ -3780,6 +4018,8 @@ window.addEventListener('load', () => {
       usuarioEmail = user.email;
       irTelaTurno(true);
       mostrarTela('t-turno');
+      // Dispara limpeza automática (1x ao dia, em background)
+      executarLimpezaSeNecessario().catch(e => console.warn('Limpeza:', e));
     } else {
       mostrarTela('t-login');
     }
@@ -4173,4 +4413,99 @@ function imprimirSAE(){
     <script>setTimeout(()=>window.print(),600);<\/script>
   </body></html>`);
   w.document.close();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BUSCA DE CULTURAS – lê a planilha RST CULTURAS via Apps Script
+// ════════════════════════════════════════════════════════════════════════════
+const CULTURAS_SHEET_ID = '1yQHmd84BSlbAs7jb4ztN6fsy6eyZHY4wb6IcqOp0j7U';
+
+async function buscarCulturas(){
+  if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
+  const pac = gf('f-pac').trim();
+  if(!pac){ toast('Preencha o nome do paciente primeiro.', true); return; }
+
+  const modal = document.getElementById('modal-culturas');
+  const conteudo = document.getElementById('culturas-conteudo');
+  conteudo.innerHTML = `
+    <div class="sae-loading">
+      <div class="sae-spinner" style="border-color:#c8e6d5;border-top-color:#1a6b3a;"></div>
+      <p>Buscando culturas de <strong>${pac}</strong>…</p>
+    </div>`;
+  modal.classList.add('show');
+
+  try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'culturas',
+        paciente: pac,
+        leito: leitoAtual,
+        sheetId: CULTURAS_SHEET_ID
+      })
+    });
+    const raw = await resp.text();
+    const data = JSON.parse(raw);
+
+    if(data.error) throw new Error(data.error);
+    if(!data.resultados || !data.resultados.length){
+      conteudo.innerHTML = `<div class="sae-aviso" style="margin:16px;">⚠️ Nenhuma cultura encontrada para <strong>${pac}</strong> nos últimos meses.<br><small>Verifique se o nome está idêntico ao da planilha.</small></div>`;
+      return;
+    }
+
+    conteudo.innerHTML = _renderCulturas(data.resultados, data.pacienteEncontrado);
+  } catch(err){
+    console.error('[Culturas]', err);
+    conteudo.innerHTML = `<div class="sae-erro" style="margin:16px;">❌ ${err.message||'Erro ao buscar culturas. Verifique a conexão e tente novamente.'}</div>`;
+  }
+}
+
+function _renderCulturas(resultados, pacienteEncontrado){
+  let h = `<div style="padding:12px 16px 4px;font-size:.8rem;color:var(--muted);">
+    Paciente encontrado: <strong>${pacienteEncontrado||'—'}</strong> · ${resultados.length} resultado(s)
+  </div>`;
+
+  h += resultados.map(r => {
+    const isNeg = /negativ|contaminad/i.test(r.resultado||'');
+    const cor = isNeg ? '#888' : '#991b1b';
+    const bg  = isNeg ? '#f8f8f8' : '#fef2f2';
+    const borda = isNeg ? '#ddd' : '#fca5a5';
+    return `
+    <div style="margin:8px 16px;padding:12px 14px;background:${bg};border:1px solid ${borda};border-radius:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">
+        <div>
+          <span style="font-weight:700;font-size:.86rem;">${r.cultura||'—'}</span>
+          <span style="font-size:.74rem;color:var(--muted);margin-left:8px;">${r.dataResultado||r.dataRecebimento||''}</span>
+        </div>
+        ${!isNeg ? `<button onclick="_preencherMicroorg('${(r.microorg||'').replace(/'/g,"\\'")}','${(r.sensibilidade||'').replace(/'/g,"\\'")}');document.getElementById('modal-culturas').classList.remove('show')"
+          class="btn btn-sm" style="font-size:.7rem;padding:3px 10px;background:#991b1b;color:white;">
+          ✓ Usar este resultado
+        </button>` : ''}
+      </div>
+      <div style="margin-top:6px;font-size:.84rem;color:${cor};font-weight:600;">${r.resultado||'—'}</div>
+      ${r.sensibilidade ? `<div style="font-size:.76rem;color:#555;margin-top:3px;">Sensibilidade: ${r.sensibilidade}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  return h;
+}
+
+function _preencherMicroorg(microorg, sensibilidade){
+  if(microorg){
+    setF('f-microorg', microorg.toUpperCase());
+    // Marca o checkbox de isolamento correspondente se não estiver marcado
+    const cbs = document.querySelectorAll('input[name="isolamento"]');
+    cbs.forEach(cb => { if(cb.value && microorg.toUpperCase().includes(cb.value.toUpperCase())) cb.checked = true; });
+    // Também preenche o campo obs com a sensibilidade se existir
+    if(sensibilidade){
+      const obs = document.getElementById('f-obs');
+      if(obs){
+        const atual = obs.value.trim();
+        const linha = 'Perfil de sensibilidade: '+sensibilidade.trim();
+        if(!atual.includes(linha)) obs.value = (atual ? atual+'\n' : '') + linha;
+      }
+    }
+    toast('✓ Microrganismo preenchido');
+  }
 }
