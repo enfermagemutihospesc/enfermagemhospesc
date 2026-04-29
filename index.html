@@ -235,7 +235,7 @@
         <label class="ri"><input type="radio" name="isolamento" value="Aerossóis"> Aerossóis</label>
       </div>
     </div>
-    <div class="fl"><label>Microrganismo</label><input type="text" id="f-microorg" placeholder="Ex: MRSA, KPC..."></div>
+    <div class="fl"><label>Microrganismo</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="f-microorg" placeholder="Ex: MRSA, KPC..." style="flex:1;"><button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;" onclick="buscarCulturas()">🔬 Culturas</button></div></div>
   </div>
 </div>
     
@@ -863,6 +863,20 @@
       <button class="btn btn-sec btn-sm" onclick="fecharSAE()">Fechar</button>
       <button class="btn btn-sm" style="background:#856404;color:white;" onclick="if(confirm('Gerar uma nova SAE? Isso substituirá a anterior.')) gerarSAE()">↻ Regenerar</button>
       <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirSAE()">🖨 Imprimir SAE</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CULTURAS -->
+<div class="overlay" id="modal-culturas">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <h3>🔬 Resultados de Cultura</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-culturas').classList.remove('show')">×</button>
+    </div>
+    <div class="modal-body" id="culturas-conteudo" style="max-height:70vh;overflow-y:auto;"></div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;padding:10px 16px;">
+      <button class="btn btn-sec btn-sm" onclick="document.getElementById('modal-culturas').classList.remove('show')">Fechar</button>
     </div>
   </div>
 </div>
