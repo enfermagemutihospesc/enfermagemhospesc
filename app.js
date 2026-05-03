@@ -2969,11 +2969,13 @@ async function _sugerirCID(idDiag, idCID){
 async function _atualizarDiasSemEvacoar(leito){
   const elWrap = document.getElementById('dias-sem-evacuar');
   if(!elWrap) return;
-  // Busca evoluções anteriores do leito para achar a última com "Presente"
   const hj = hoje();
+  // Limites: paciente atual + data de admissão na UTI
+  const pacAtual = (gf('f-pac')||'').trim().toUpperCase();
+  const admAtual = gf('f-adm') || '';  // YYYY-MM-DD
   let diasSem = null;
   try {
-    // Coleta chaves de evoluções do leito (ambos os turnos, dias anteriores)
+    // Coleta chaves de evoluções deste leito (ambos os turnos, dias anteriores ou hoje)
     const todas = new Set();
     for(let i=0;i<localStorage.length;i++){
       const k=localStorage.key(i);
@@ -2986,26 +2988,37 @@ async function _atualizarDiasSemEvacoar(leito){
         snap.forEach(d=>todas.add(d.id));
       }catch(e){}
     }
-    // Filtra só dias anteriores ao hoje e ordena desc
+    // Filtra: só dias anteriores ao hoje E só os que não são do dia da admissão pra trás
     const candidatos = Array.from(todas)
       .map(k=>{ const p=k.split('_'); return { chave:k, data:p.slice(4).join('_')||p[4], turno:p[3] }; })
-      .filter(c=>c.data && c.data < hj)
+      .filter(c=>c.data && c.data < hj && (!admAtual || c.data >= admAtual))
       .sort((a,b)=>b.data!==a.data?b.data.localeCompare(a.data):b.turno.localeCompare(a.turno));
 
     if(!candidatos.length){ elWrap.style.display='none'; return; }
+
     const dataMap = await dbGetMany(candidatos.map(c=>c.chave));
     let ultimaPresente = null;
+    let evsDoPaciente = 0;
     for(const c of candidatos){
       const ev = dataMap[c.chave];
       if(!ev) continue;
+      // Verifica se é do paciente atual (proteção contra reuso de leito)
+      const pacEv = (ev.pac||'').trim().toUpperCase();
+      if(pacAtual && pacEv && pacEv !== pacAtual) continue;
+      evsDoPaciente++;
       const eli = Array.isArray(ev.eli) ? ev.eli : (ev.eli ? [ev.eli] : []);
       if(eli.includes('Presente')){ ultimaPresente = c.data; break; }
     }
+
+    // Se nunca registrou "Presente": calcula dias desde a admissão na UTI (não desde a 1ª evolução)
     if(ultimaPresente){
       const [y,m,d] = ultimaPresente.split('-').map(Number);
       diasSem = Math.floor((new Date() - new Date(y,m-1,d)) / 86400000);
+    } else if(evsDoPaciente > 0 && admAtual){
+      const [y,m,d] = admAtual.split('-').map(Number);
+      diasSem = Math.floor((new Date() - new Date(y,m-1,d)) / 86400000);
     } else {
-      diasSem = candidatos.length; // nunca registrado como Presente no histórico
+      diasSem = null; // sem dados suficientes para afirmar nada
     }
   } catch(e){ console.warn('_atualizarDiasSemEvacoar:', e); }
 
