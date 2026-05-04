@@ -1717,7 +1717,8 @@ async function renderIndicadores(){
     neuro:         _indNeuro,
     operacionais:  _indOperacionais,
     cruzamentos:   _indCruzamentos,
-    sae_nanda:     _indSAENanda
+    sae_nanda:     _indSAENanda,
+    diagnosticos:  _indDiagnosticos
   };
   const fn = renderers[_indCategoriaAtiva] || _indOcupacao;
   container.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px;">Período: <strong>${periodo.rotulo}</strong></div>` + fn(periodo);
@@ -2339,6 +2340,141 @@ function _indCruzamentos(periodo){
   return h;
 }
 
+// ── 16. DIAGNÓSTICOS / CID-10 ────────────────────────────────────────────────
+function _indDiagnosticos(periodo){
+  const { evolucoes, admissoes } = _indCache;
+
+  // 1) Filtra evoluções e admissões do período
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+
+  // 2) Pega CID + diagnóstico únicos POR PACIENTE/admissão (evita contar mesmo paciente várias vezes)
+  // Identifica paciente por: leito + dia da admissão (mais robusto)
+  const pacientesUnicos = new Map(); // chave: pac+admUTI -> {cid, diag, leito, admUTI}
+  admPer.forEach(a => {
+    if(!a.cid && !a.diagnostico) return;
+    const k = (a.paciente||'')+'_'+(a.admUTI||'');
+    pacientesUnicos.set(k, {
+      cid: (a.cid||'').toUpperCase().trim(),
+      diag: (a.diagnostico||'').trim(),
+      paciente: a.paciente,
+      admUTI: a.admUTI
+    });
+  });
+  // Complementa com evoluções (para casos sem registro no log de admissão)
+  evPer.forEach(e => {
+    if(!e.cid && !e.diag) return;
+    const k = (e.pac||'')+'_'+(e.adm||e.data||'');
+    if(!pacientesUnicos.has(k)){
+      pacientesUnicos.set(k, {
+        cid: (e.cid||'').toUpperCase().trim(),
+        diag: (e.diag||'').trim(),
+        paciente: e.pac,
+        admUTI: e.adm
+      });
+    }
+  });
+
+  const lista = Array.from(pacientesUnicos.values());
+  const total = lista.length;
+
+  // 3) Frequência por CID
+  const freqCID = {};
+  const freqCapitulo = {}; // primeiro caractere do CID = capítulo (A=Inf, I=Cardio, J=Resp, etc.)
+  const freqDiag = {};
+
+  lista.forEach(p => {
+    if(p.cid){
+      freqCID[p.cid] = (freqCID[p.cid]||0)+1;
+      const cap = p.cid[0].toUpperCase();
+      freqCapitulo[cap] = (freqCapitulo[cap]||0)+1;
+    }
+    if(p.diag){
+      const d = p.diag.toUpperCase();
+      freqDiag[d] = (freqDiag[d]||0)+1;
+    }
+  });
+
+  const rankCID = Object.entries(freqCID).sort((a,b)=>b[1]-a[1]);
+  const rankDiag = Object.entries(freqDiag).sort((a,b)=>b[1]-a[1]);
+  const totalComCID = rankCID.reduce((s,x)=>s+x[1],0);
+
+  // Capítulos CID-10 mais comuns na UTI
+  const NOMES_CAPITULO = {
+    'A':'A — Doenças infecciosas/parasitárias','B':'B — Doenças infecciosas/parasitárias',
+    'C':'C — Neoplasias','D':'D — Neoplasias e doenças do sangue',
+    'E':'E — Endócrinas/metabólicas','F':'F — Transtornos mentais',
+    'G':'G — Sistema nervoso','H':'H — Olho/ouvido',
+    'I':'I — Sistema circulatório','J':'J — Sistema respiratório',
+    'K':'K — Sistema digestivo','L':'L — Pele',
+    'M':'M — Osteomuscular','N':'N — Sistema geniturinário',
+    'O':'O — Gravidez/parto','P':'P — Período perinatal',
+    'Q':'Q — Malformações congênitas','R':'R — Sintomas/sinais/achados',
+    'S':'S — Lesões/traumatismos','T':'T — Lesões/intoxicações',
+    'V':'V — Causas externas','W':'W — Causas externas',
+    'X':'X — Causas externas','Y':'Y — Causas externas',
+    'Z':'Z — Fatores de saúde'
+  };
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Pacientes no período', total, '', '', 'diag_total');
+  h += _cardInd('Com CID registrado', totalComCID, _pct(totalComCID, total), totalComCID < total/2?'amarelo':'', 'diag_com_cid');
+  h += _cardInd('CIDs distintos', rankCID.length, '', '', 'diag_cids_distintos');
+  h += _cardInd('Diagnósticos distintos', rankDiag.length, '', '', 'diag_diags_distintos');
+  h += '</div>';
+
+  if(!total){
+    h += '<div class="ind-hint">⚠️ Nenhum paciente com diagnóstico no período.</div>';
+    return h;
+  }
+
+  // Top CIDs
+  if(rankCID.length){
+    h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">🔝 CIDs mais frequentes</div>';
+    h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.82rem;">';
+    h += '<thead><tr style="background:#eaf5ee;"><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #c8e6d5;">#</th><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #c8e6d5;">CID-10</th><th style="padding:7px 10px;text-align:center;border-bottom:2px solid #c8e6d5;">Casos</th><th style="padding:7px 10px;text-align:center;border-bottom:2px solid #c8e6d5;">%</th></tr></thead><tbody>';
+    rankCID.slice(0, 15).forEach(([cid, n], i) => {
+      const bar = Math.round(n/rankCID[0][1]*100);
+      h += `<tr style="border-bottom:1px solid #f0f0f0;${i%2===0?'':'background:#fafafa'}">
+        <td style="padding:6px 10px;font-weight:700;color:var(--azul);">${i+1}</td>
+        <td style="padding:6px 10px;">
+          <code style="font-weight:700;color:#1a6b3a;">${cid}</code>
+          <div style="margin-top:3px;background:#e8f5e9;border-radius:4px;height:4px;width:100%;"><div style="background:#1a6b3a;height:4px;border-radius:4px;width:${bar}%;"></div></div>
+        </td>
+        <td style="padding:6px 10px;text-align:center;font-weight:700;">${n}</td>
+        <td style="padding:6px 10px;text-align:center;color:var(--muted);">${_pct(n, totalComCID)}</td>
+      </tr>`;
+    });
+    h += '</tbody></table></div>';
+  }
+
+  // Capítulos CID
+  if(Object.keys(freqCapitulo).length){
+    h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">📚 Distribuição por Capítulo CID-10</div>';
+    const capList = Object.entries(freqCapitulo)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([cap, valor]) => ({ label: NOMES_CAPITULO[cap]||cap, valor }));
+    h += _rankingBarras('', capList, null, 'diag_capitulos');
+  }
+
+  // Top diagnósticos textuais
+  if(rankDiag.length){
+    h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">📝 Diagnósticos mais frequentes (texto)</div>';
+    h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.8rem;">';
+    h += '<thead><tr style="background:#eaf5ee;"><th style="padding:7px 10px;text-align:left;">Diagnóstico</th><th style="padding:7px 10px;text-align:center;">Casos</th></tr></thead><tbody>';
+    rankDiag.slice(0, 12).forEach(([diag, n], i) => {
+      h += `<tr style="border-bottom:1px solid #f0f0f0;${i%2===0?'':'background:#fafafa'}">
+        <td style="padding:6px 10px;">${diag}</td>
+        <td style="padding:6px 10px;text-align:center;font-weight:700;">${n}</td>
+      </tr>`;
+    });
+    h += '</tbody></table></div>';
+  }
+
+  h += '<div class="ind-hint">💡 Cada paciente é contabilizado uma única vez (por admissão), independente do número de evoluções.</div>';
+  return h;
+}
+
 // ── 15. SAE / DIAGNÓSTICOS DE ENFERMAGEM ─────────────────────────────────────
 function _indSAENanda(periodo){
   const { evolucoes } = _indCache;
@@ -2755,6 +2891,7 @@ function addAVP(local='', data=''){
     <input type="date" value="${data}" style="max-width:140px;flex:none;" onchange="_atualizarDiasAVP(this)">
     <input type="text" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" value="${diasStr}" placeholder="dias">
     ${aviso}
+    <button class="btn btn-sec btn-sm" style="font-size:.7rem;padding:3px 9px;background:#fff3cd;color:#856404;border:1px solid #ffeeba;" onclick="trocarAVP(this)">↻ Trocar</button>
     <button class="btn-rem" onclick="this.closest('.dyn-row').remove()">×</button>`;
   lista.appendChild(row);
   _ativarCaixaAlta();
@@ -2857,14 +2994,78 @@ async function retirarDispositivo(tipo, idLocal, idData, idRet, idWrap){
 
 // ── DISPOSITIVOS: TROCAR ──────────────────────────────────────────────────────
 function trocarDispositivo(tipo, idLocal, idData){
-  const novoLocal = prompt(`Trocar ${tipo} – informe a nova localização/numeração:`);
-  if(novoLocal === null) return; // cancelou
-  if(novoLocal.trim()){
-    setF(idLocal, novoLocal.trim().toUpperCase());
+  _abrirModalTroca(tipo, (novoLocal, novaData) => {
+    if(novoLocal && novoLocal.trim()) setF(idLocal, novoLocal.trim().toUpperCase());
+    setF(idData, novaData);
+    _atualizarDiasDisp(idData, 'dias-' + idLocal.replace('f-','').replace('-l','').replace('-n','').replace('-n2',''));
+    toast('✓ '+tipo+' trocado – instalação registrada em '+novaData.split('-').reverse().join('/'));
+  }, gf(idLocal));
+}
+
+// Troca de AVP: edita o row específico do AVP que foi clicado
+function trocarAVP(btn){
+  const row = btn.closest('.dyn-row');
+  const ins = row.querySelectorAll('input');
+  const localAtual = ins[0].value;
+  _abrirModalTroca('AVP', (novoLocal, novaData) => {
+    if(novoLocal && novoLocal.trim()) ins[0].value = novoLocal.trim().toUpperCase();
+    ins[1].value = novaData;
+    _atualizarDiasAVP(ins[1]);
+    toast('✓ AVP trocado – nova punção em '+novaData.split('-').reverse().join('/'));
+  }, localAtual);
+}
+
+// Modal genérico de troca (local + data)
+function _abrirModalTroca(tipo, callback, localAtual){
+  // Cria modal dinamicamente se não existir
+  let modal = document.getElementById('modal-troca-disp');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'modal-troca-disp';
+    modal.className = 'overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:380px;">
+        <div class="modal-header" style="background:linear-gradient(135deg,#856404,#d39e00);color:white;">
+          <h3 style="color:white;margin:0;" id="troca-titulo">Trocar dispositivo</h3>
+          <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-troca-disp').classList.remove('show')">×</button>
+        </div>
+        <div class="modal-body" style="padding:18px;">
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div>
+              <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Nova localização / numeração</label>
+              <input type="text" id="troca-local" placeholder="Ex: ant. cubital E" style="width:100%;text-transform:uppercase;">
+            </div>
+            <div>
+              <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Data da troca</label>
+              <input type="date" id="troca-data" style="width:100%;">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:10px 18px;border-top:1px solid #eee;">
+          <button class="btn btn-sec btn-sm" onclick="document.getElementById('modal-troca-disp').classList.remove('show')">Cancelar</button>
+          <button class="btn btn-pri btn-sm" id="troca-confirmar">Confirmar troca</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
   }
-  setF(idData, hoje()); // zera a data de instalação para hoje
-  _atualizarDiasDisp(idData, 'dias-' + idLocal.replace('f-','').replace('-l','').replace('-n','').replace('-n2',''));
-  toast('✓ '+tipo+' trocado – data de instalação atualizada para hoje');
+  document.getElementById('troca-titulo').textContent = 'Trocar '+tipo;
+  document.getElementById('troca-local').value = '';
+  document.getElementById('troca-local').placeholder = localAtual ? 'Atual: '+localAtual+' (deixe vazio para manter)' : 'Nova localização';
+  document.getElementById('troca-data').value = hoje();
+
+  const btnConfirmar = document.getElementById('troca-confirmar');
+  // Remove listener anterior clonando o botão
+  const novoBtn = btnConfirmar.cloneNode(true);
+  btnConfirmar.replaceWith(novoBtn);
+  novoBtn.onclick = () => {
+    const local = document.getElementById('troca-local').value.trim();
+    const data = document.getElementById('troca-data').value;
+    if(!data){ toast('Informe a data da troca', true); return; }
+    modal.classList.remove('show');
+    callback(local, data);
+  };
+  modal.classList.add('show');
+  setTimeout(() => document.getElementById('troca-local').focus(), 100);
 }
 
 // ── HIDRATAÇÃO VENOSA – outras infusões ──────────────────────────────────────
@@ -2906,7 +3107,6 @@ function _calcIdadeDisplay(idDN, idSpan){
 function toggleVMI(){ const v=document.querySelector('input[name="vent"]:checked'); const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI'); document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':''); document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex'; }
 
 // ── SUGESTÃO AUTOMÁTICA DE CID-10 VIA GROQ ───────────────────────────────────
-const _cidDebounce = {};
 async function _sugerirCID(idDiag, idCID){
   const diag = document.getElementById(idDiag)?.value?.trim();
   const cidEl  = document.getElementById(idCID);
@@ -2914,34 +3114,40 @@ async function _sugerirCID(idDiag, idCID){
   if (!cidEl || !statEl) return;
   if (!diag || diag.length < 5) { statEl.textContent = ''; return; }
 
-  // Se o usuário já digitou um CID manualmente, não sobrescreve
+  // Se o usuário já digitou um CID manualmente (diferente do que sugerimos antes), não sobrescreve
   const cidAtual = cidEl.value.trim();
   if (cidAtual && cidAtual !== cidEl.dataset.sugerido) return;
 
-  clearTimeout(_cidDebounce[idCID]);
-  _cidDebounce[idCID] = setTimeout(async () => {
-    statEl.textContent = '⏳ buscando...';
-    try {
-      const resp = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'cid', diagnostico: diag })
-      });
-      const raw = await resp.text();
-      const data = JSON.parse(raw);
-      if (data.cid) {
-        cidEl.value = data.cid.toUpperCase();
-        cidEl.dataset.sugerido = data.cid.toUpperCase();
-        statEl.textContent = '✓ sugerido';
-        statEl.style.color = '#1a6b3a';
-        setTimeout(() => { statEl.textContent = ''; }, 3000);
-      } else {
-        statEl.textContent = '';
-      }
-    } catch(e) {
-      statEl.textContent = '';
+  // Se o diagnóstico não mudou desde a última sugestão, não busca de novo
+  if (cidEl.dataset.ultimoDiag === diag) return;
+
+  statEl.textContent = '⏳ buscando...';
+  statEl.style.color = '#856404';
+  try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'cid', diagnostico: diag })
+    });
+    const raw = await resp.text();
+    const data = JSON.parse(raw);
+    if (data.cid) {
+      cidEl.value = data.cid.toUpperCase();
+      cidEl.dataset.sugerido = data.cid.toUpperCase();
+      cidEl.dataset.ultimoDiag = diag;
+      statEl.textContent = '✓ sugerido';
+      statEl.style.color = '#1a6b3a';
+      setTimeout(() => { statEl.textContent = ''; }, 3000);
+    } else {
+      statEl.textContent = '⚠ não encontrado';
+      statEl.style.color = '#dc3545';
+      setTimeout(() => { statEl.textContent = ''; }, 3000);
     }
-  }, 1200);
+  } catch(e) {
+    statEl.textContent = '⚠ erro';
+    statEl.style.color = '#dc3545';
+    setTimeout(() => { statEl.textContent = ''; }, 3000);
+  }
 }
 
 // FC – limpa valor numérico ao desselecionar a opção de ritmo
