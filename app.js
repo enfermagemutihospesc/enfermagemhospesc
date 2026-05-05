@@ -5291,22 +5291,70 @@ const IRAS_BUNDLES = [
 
 let _irasRespostas = {}; // { id: 'sim'|'nao'|'na' }
 
-function abrirIRAS(){
+async function abrirIRAS(){
   if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
   const d = coletarDados();
 
   document.getElementById('iras-pac-info').textContent =
     `Leito ${pad(d.leito)} · ${d.pac||'—'} · ${d.data?d.data.split('-').reverse().join('/'):''}  |  Turno ${d.turno}`;
 
-  // Carrega respostas salvas se existirem
-  const chave = `uti_iras_${d.leito}_${d.turno}_${d.data}`;
-  dbGet(chave).then(salvo => {
-    _irasRespostas = salvo || {};
+  const outroTurno  = d.turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
+  const chaveAtual  = `uti_iras_${d.leito}_${d.turno}_${d.data}`;
+  const chaveOutro  = `uti_iras_${d.leito}_${outroTurno}_${d.data}`;
+  const chaveOntemT = `uti_iras_${d.leito}_${d.turno}_${ontem()}`;
+  const chaveOntemO = `uti_iras_${d.leito}_${outroTurno}_${ontem()}`;
+
+  try {
+    // 1ª prioridade: checklist já salvo neste turno (não herda, é o próprio)
+    let salvo = await dbGet(chaveAtual);
+    let herdado = false;
+    let herdadoDe = '';
+
+    // 2ª prioridade: outro turno do mesmo dia
+    if(!salvo){
+      const outro = await dbGet(chaveOutro);
+      if(outro && Object.keys(outro).length){
+        salvo = { ...outro };
+        herdado = true;
+        herdadoDe = `${outroTurno === 'DIURNO' ? 'diurno' : 'noturno'} de hoje`;
+      }
+    }
+    // 3ª prioridade: mesmo turno de ontem
+    if(!salvo){
+      const ontemT = await dbGet(chaveOntemT);
+      if(ontemT && Object.keys(ontemT).length){
+        salvo = { ...ontemT };
+        herdado = true;
+        herdadoDe = `${d.turno === 'DIURNO' ? 'diurno' : 'noturno'} de ontem`;
+      }
+    }
+    // 4ª prioridade: outro turno de ontem
+    if(!salvo){
+      const ontemO = await dbGet(chaveOntemO);
+      if(ontemO && Object.keys(ontemO).length){
+        salvo = { ...ontemO };
+        herdado = true;
+        herdadoDe = `${outroTurno === 'DIURNO' ? 'diurno' : 'noturno'} de ontem`;
+      }
+    }
+
+    _irasRespostas = salvo ? { ...salvo } : {};
+
+    // Exibe tag de herança na barra de info do modal
+    if(herdado){
+      const infoEl = document.getElementById('iras-pac-info');
+      if(infoEl){
+        infoEl.innerHTML = infoEl.textContent +
+          ` <span style="font-size:.65rem;background:#fff3cd;color:#856404;
+             padding:2px 8px;border-radius:10px;font-weight:700;margin-left:6px;">
+             ↻ herdado do ${herdadoDe}</span>`;
+      }
+    }
     _renderIRAS(d);
-  }).catch(() => {
+  } catch(e){
     _irasRespostas = {};
     _renderIRAS(d);
-  });
+  }
 
   document.getElementById('modal-iras').classList.add('show');
 }
