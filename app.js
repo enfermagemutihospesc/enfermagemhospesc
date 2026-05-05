@@ -4728,3 +4728,331 @@ function _preencherMicroorg(microorg, sensibilidade){
     toast('✓ Microrganismo preenchido');
   }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// EXPORTAÇÃO DE RELATÓRIO – Google Slides + PDF local
+// ════════════════════════════════════════════════════════════════════════════
+
+function abrirModalExportarRelatorio(){
+  if(!_indCache){ toast('Carregue os indicadores primeiro.', true); return; }
+  const periodo = _indPeriodo();
+  if(!periodo){ toast('Selecione um período.', true); return; }
+
+  // Preenche o período e título sugerido
+  const mesAno = new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  document.getElementById('exp-titulo').value = `Relatório UTI – ${mesAno.charAt(0).toUpperCase()+mesAno.slice(1)}`;
+  document.getElementById('exp-periodo-info').textContent = periodo.rotulo;
+  document.getElementById('exp-status').style.display = 'none';
+  document.getElementById('btn-exportar-ok').disabled = false;
+  document.getElementById('btn-exportar-ok').textContent = '📊 Gerar Relatório';
+  document.getElementById('modal-exportar').classList.add('show');
+}
+
+// Coleta KPIs de todos os indicadores selecionados como objeto JSON puro
+function _coletarDadosRelatorio(periodo, secoes){
+  const { admissoes, altas, dispLog, evolucoes, nas } = _indCache;
+  const dados = { periodo: periodo.rotulo, secoes: {} };
+
+  // ── OCUPAÇÃO ──────────────────────────────────────────────────────────────
+  if(secoes.includes('ocupacao')){
+    const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+    const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+    const diasPeriodo = Math.round((periodo.fim - periodo.inicio)/86400000) + 1;
+    let pacientesDia = 0;
+    admissoes.forEach(adm => {
+      if(!adm.admUTI) return;
+      const inicio = _dataLocal(adm.admUTI); if(!inicio) return;
+      const alta = altas.find(a => a.leito===adm.leito && a.paciente===adm.paciente && _dataLocal(a.dataAlta)>=inicio);
+      const fimInt = alta ? _dataLocal(alta.dataAlta) : new Date();
+      const s = inicio > periodo.inicio ? inicio : periodo.inicio;
+      const e = fimInt < periodo.fim ? fimInt : periodo.fim;
+      if(e >= s) pacientesDia += Math.floor((e-s)/86400000) + 1;
+    });
+    dados.secoes.ocupacao = {
+      admissoes: admPer.length,
+      altas: altasPer.length,
+      taxaOcupacao: TOTAL*diasPeriodo > 0 ? +(pacientesDia*100/(TOTAL*diasPeriodo)).toFixed(1) : null,
+      giroLeito: TOTAL > 0 ? +(admPer.length/TOTAL).toFixed(1) : null,
+      diasPeriodo
+    };
+  }
+
+  // ── SAÍDA / MORTALIDADE ───────────────────────────────────────────────────
+  if(secoes.includes('saida')){
+    const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+    const freq = {};
+    altasPer.forEach(a => { const t = a.tipoAlta||'Não informado'; freq[t]=(freq[t]||0)+1; });
+    const obitos = (freq['Óbito']||0) + (freq['Óbito por causa básica']||0) + (freq['Óbito 24h']||0);
+    dados.secoes.saida = {
+      totalAltas: altasPer.length,
+      obitos,
+      taxaLetali: altasPer.length > 0 ? +(obitos*100/altasPer.length).toFixed(1) : null,
+      tiposAlta: freq
+    };
+  }
+
+  // ── DEMOGRÁFICOS ──────────────────────────────────────────────────────────
+  if(secoes.includes('demograficos')){
+    const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+    const idades = [];
+    admPer.forEach(a => {
+      if(!a.dn || !a.admUTI) return;
+      const dn = _dataLocal(a.dn); const adm = _dataLocal(a.admUTI);
+      if(dn && adm){ const i = Math.floor((adm-dn)/(365.25*86400000)); if(i>=0 && i<120) idades.push(i); }
+    });
+    const masc = admPer.filter(a => a.sexo==='M').length;
+    const fem  = admPer.filter(a => a.sexo==='F').length;
+    dados.secoes.demograficos = {
+      totalPacientes: admPer.length,
+      idadeMedia: idades.length ? +(idades.reduce((s,x)=>s+x,0)/idades.length).toFixed(1) : null,
+      idadeMin: idades.length ? Math.min(...idades) : null,
+      idadeMax: idades.length ? Math.max(...idades) : null,
+      masculino: masc, feminino: fem,
+      origens: (() => { const o={}; admPer.forEach(a=>{const k=a.origem||'Não informado'; o[k]=(o[k]||0)+1;}); return o; })()
+    };
+  }
+
+  // ── VENTILAÇÃO ────────────────────────────────────────────────────────────
+  if(secoes.includes('ventilacao')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const total = evPer.length;
+    const diasVMI = evPer.filter(e => e.vent&&(e.vent.includes('TOT')||e.vent.includes('TQT'))).length;
+    const fio2s = evPer.map(e=>parseFloat(e.vmi_fio2)).filter(n=>!isNaN(n)&&n>0&&n<=100);
+    const modos = {}; evPer.forEach(e=>{ if(e.vmi_modo){ modos[e.vmi_modo]=(modos[e.vmi_modo]||0)+1; } });
+    dados.secoes.ventilacao = {
+      totalEvolucoes: total,
+      diasVMI,
+      taxaVMI: total>0 ? +(diasVMI*100/total).toFixed(1) : null,
+      fio2Medio: fio2s.length ? +(fio2s.reduce((s,x)=>s+x,0)/fio2s.length).toFixed(1) : null,
+      modos
+    };
+  }
+
+  // ── DISPOSITIVOS ──────────────────────────────────────────────────────────
+  if(secoes.includes('dispositivos')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const total = evPer.length;
+    const prev = (campo) => total>0 ? +(evPer.filter(e=>e[campo]).length*100/total).toFixed(1) : null;
+    dados.secoes.dispositivos = {
+      totalEvolucoes: total,
+      prevAVC: prev('avc_l'), prevCDL: prev('dial_l'),
+      prevSVD: prev('svd_n'), prevSNE: prev('sne_n'),
+      prevTOT: prev('tot_n'), prevTQT: prev('tqt_n'),
+      totalRetiradas: dispLog.filter(d => _dentroPeriodo(d.data_retirada, periodo)).length
+    };
+  }
+
+  // ── ANTIMICROBIANOS ───────────────────────────────────────────────────────
+  if(secoes.includes('atbs')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const freq = {}; const total = evPer.length;
+    evPer.forEach(e => { (e.atbs||[]).forEach(a => { if(a.nome){ const k=a.nome.trim().toUpperCase(); freq[k]=(freq[k]||0)+1; } }); });
+    const comATB = evPer.filter(e => e.atbs && e.atbs.some(a=>a.nome)).length;
+    const top5 = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([nome,n])=>({nome,n}));
+    dados.secoes.atbs = { totalEvolucoes: total, comATB, taxaATB: total>0?+(comATB*100/total).toFixed(1):null, top5 };
+  }
+
+  // ── NAS ───────────────────────────────────────────────────────────────────
+  if(secoes.includes('nas')){
+    const nasPer = nas.filter(n => _dentroPeriodo(n.data, periodo));
+    const totais = nasPer.map(n=>parseFloat(n.total)).filter(n=>!isNaN(n)&&n>0);
+    dados.secoes.nas = {
+      registros: nasPer.length,
+      mediaNAS: totais.length ? +(totais.reduce((s,x)=>s+x,0)/totais.length).toFixed(1) : null,
+      maxNAS: totais.length ? Math.max(...totais) : null,
+      minNAS: totais.length ? Math.min(...totais) : null
+    };
+  }
+
+  // ── DIAGNÓSTICOS / CID ────────────────────────────────────────────────────
+  if(secoes.includes('diagnosticos')){
+    const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+    const freq = {};
+    admPer.forEach(a => { if(a.cid){ const k=(a.cid||'').toUpperCase().trim(); freq[k]=(freq[k]||0)+1; } });
+    evolucoes.filter(e=>_dentroPeriodo(e.data,periodo)&&e.cid).forEach(e=>{
+      const k=(e.cid||'').toUpperCase().trim();
+      if(!admPer.some(a=>a.paciente===e.pac)) freq[k]=(freq[k]||0)+1;
+    });
+    const top10 = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([cid,n])=>({cid,n}));
+    dados.secoes.diagnosticos = { totalComCID: Object.values(freq).reduce((s,x)=>s+x,0), top10 };
+  }
+
+  // ── SAE/NANDA ─────────────────────────────────────────────────────────────
+  if(secoes.includes('sae_nanda')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const comSAE = evPer.filter(e => e.sae && e.sae.diagnosticos && e.sae.diagnosticos.length);
+    const freqDx = {};
+    comSAE.forEach(e => { e.sae.diagnosticos.forEach(dx => { if(dx.titulo_nanda){ const k=dx.titulo_nanda.trim(); freqDx[k]=(freqDx[k]||0)+1; } }); });
+    const top5 = Object.entries(freqDx).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([dx,n])=>({dx,n}));
+    dados.secoes.sae_nanda = { totalEvolucoes: evPer.length, comSAE: comSAE.length, top5 };
+  }
+
+  return dados;
+}
+
+async function executarExportacao(){
+  if(!_indCache){ toast('Carregue os indicadores primeiro.', true); return; }
+  const periodo = _indPeriodo();
+  const titulo = gf('exp-titulo') || 'Relatório UTI';
+  const secoesSel = Array.from(document.querySelectorAll('#exp-secoes input:checked')).map(c=>c.value);
+  if(!secoesSel.length){ toast('Selecione pelo menos uma seção.', true); return; }
+
+  const btn = document.getElementById('btn-exportar-ok');
+  const status = document.getElementById('exp-status');
+  btn.disabled = true; btn.textContent = '⏳ Gerando...';
+  status.style.display = 'block'; status.textContent = '🤖 Analisando dados e gerando narrativa...';
+
+  try {
+    const dados = _coletarDadosRelatorio(periodo, secoesSel);
+
+    // 1. Envia para Apps Script: gera narrativa (Groq) + cria Slides
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'exportar_relatorio',
+        titulo,
+        dados,
+        hospital: 'Hospital dos Pescadores · UTI Adulto'
+      })
+    });
+    const raw = await resp.text();
+    console.log('[Exportar]', raw.substring(0, 300));
+    const result = JSON.parse(raw);
+
+    if(result.error) throw new Error(result.error);
+
+    status.textContent = '✅ Slides gerado! Gerando PDF local...';
+
+    // 2. Gera PDF local com jsPDF a partir da narrativa + dados
+    if(result.narrativa){
+      _gerarPDFRelatorio(titulo, dados, result.narrativa, periodo.rotulo);
+    }
+
+    status.innerHTML = `✅ Concluído!<br>
+      <a href="${result.url}" target="_blank" style="color:#1a6b3a;font-weight:700;">🔗 Abrir Google Slides</a>
+      <span style="color:#555;font-size:.75rem;margin-left:8px;">(PDF foi baixado automaticamente)</span>`;
+    btn.textContent = '✓ Gerado';
+
+  } catch(err){
+    console.error('[Exportar]', err);
+    status.style.color = '#dc3545';
+    status.textContent = '❌ Erro: '+(err.message||'tente novamente');
+    btn.disabled = false; btn.textContent = '📊 Gerar Relatório';
+    status.style.color = '#1a6b3a';
+  }
+}
+
+function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+    const W = 210, margem = 18, larg = W - 2*margem;
+    let y = margem;
+
+    // Cabeçalho
+    doc.setFillColor(26, 107, 58);
+    doc.rect(0, 0, W, 28, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFont('helvetica','bold'); doc.setFontSize(14);
+    doc.text(titulo, margem, 12);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.text('Hospital dos Pescadores · UTI Adulto · '+periodoRotulo, margem, 20);
+    doc.setTextColor(0,0,0);
+    y = 36;
+
+    // Aviso de IA
+    doc.setFillColor(255,243,205);
+    doc.rect(margem, y, larg, 8, 'F');
+    doc.setFontSize(7.5); doc.setTextColor(133,100,4);
+    doc.text('⚠ Narrativa gerada por inteligência artificial (Groq/Llama). Revisar antes de uso oficial.', margem+2, y+5);
+    doc.setTextColor(0,0,0);
+    y += 12;
+
+    // Narrativa
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Análise Narrativa', margem, y); y += 6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    const linhas = doc.splitTextToSize(narrativa, larg);
+    linhas.forEach(l => {
+      if(y > 270){ doc.addPage(); y = margem; }
+      doc.text(l, margem, y); y += 5;
+    });
+    y += 4;
+
+    // KPIs por seção
+    const secNomes = {
+      ocupacao:'Ocupação', saida:'Saída/Mortalidade', demograficos:'Perfil Demográfico',
+      ventilacao:'Ventilação Mecânica', dispositivos:'Dispositivos Invasivos',
+      atbs:'Antimicrobianos', nas:'NAS', diagnosticos:'Diagnósticos/CID', sae_nanda:'SAE/NANDA'
+    };
+    for(const [sec, secDados] of Object.entries(dados.secoes||{})){
+      if(y > 250){ doc.addPage(); y = margem; }
+      // Título da seção
+      doc.setFillColor(234,245,238);
+      doc.rect(margem, y, larg, 7, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      doc.text(secNomes[sec]||sec, margem+2, y+5);
+      y += 10;
+      // KPIs em grid 2 colunas
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+      const kpis = _kpisParaPDF(sec, secDados);
+      kpis.forEach((kpi, i) => {
+        const col = i%2 === 0 ? margem : margem + larg/2 + 2;
+        if(i%2 === 0 && i > 0) y += 7;
+        doc.setFont('helvetica','bold'); doc.text(kpi.v, col, y);
+        doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
+        doc.text(kpi.label, col + doc.getTextWidth(kpi.v) + 2, y);
+        doc.setTextColor(0,0,0);
+      });
+      if(kpis.length % 2 !== 0) y += 7;
+      y += 5;
+    }
+
+    // Rodapé
+    const totalPag = doc.internal.getNumberOfPages();
+    for(let p=1;p<=totalPag;p++){
+      doc.setPage(p);
+      doc.setFontSize(7); doc.setTextColor(150,150,150);
+      doc.text(`Pág ${p}/${totalPag} · Gerado em ${new Date().toLocaleDateString('pt-BR')} · Sistema UTI HOSPESC`, margem, 292);
+    }
+
+    doc.save(titulo.replace(/\s+/g,'_')+'.pdf');
+  } catch(e){ console.warn('PDF relatório:', e); toast('PDF não gerado: '+e.message, true); }
+}
+
+function _kpisParaPDF(sec, d){
+  const kpis = [];
+  if(sec==='ocupacao'){
+    if(d.taxaOcupacao!==null) kpis.push({v:d.taxaOcupacao+'%', label:'Taxa de ocupação'});
+    kpis.push({v:d.admissoes+'', label:'Admissões no período'});
+    if(d.giroLeito!==null) kpis.push({v:d.giroLeito+'', label:'Giro de leito'});
+  } else if(sec==='saida'){
+    if(d.taxaLetali!==null) kpis.push({v:d.taxaLetali+'%', label:'Taxa de letalidade'});
+    kpis.push({v:d.obitos+'', label:'Óbitos'});
+    kpis.push({v:d.totalAltas+'', label:'Total de altas'});
+  } else if(sec==='demograficos'){
+    if(d.idadeMedia!==null) kpis.push({v:d.idadeMedia+' anos', label:'Idade média'});
+    kpis.push({v:d.masculino+' / '+d.feminino, label:'Masc / Fem'});
+  } else if(sec==='ventilacao'){
+    if(d.taxaVMI!==null) kpis.push({v:d.taxaVMI+'%', label:'Taxa de VMI'});
+    if(d.fio2Medio!==null) kpis.push({v:d.fio2Medio+'%', label:'FiO₂ médio'});
+  } else if(sec==='dispositivos'){
+    if(d.prevSVD!==null) kpis.push({v:d.prevSVD+'%', label:'Prevalência SVD'});
+    if(d.prevAVC!==null) kpis.push({v:d.prevAVC+'%', label:'Prevalência AVC'});
+    if(d.prevCDL!==null) kpis.push({v:d.prevCDL+'%', label:'Prevalência CDL'});
+  } else if(sec==='atbs'){
+    if(d.taxaATB!==null) kpis.push({v:d.taxaATB+'%', label:'Evoluções com ATB'});
+    if(d.top5 && d.top5[0]) kpis.push({v:d.top5[0].nome, label:'ATB mais usado'});
+  } else if(sec==='nas'){
+    if(d.mediaNAS!==null) kpis.push({v:d.mediaNAS+'', label:'Média NAS'});
+    kpis.push({v:d.registros+'', label:'Registros'});
+  } else if(sec==='diagnosticos'){
+    kpis.push({v:d.totalComCID+'', label:'Pacientes com CID'});
+    if(d.top10 && d.top10[0]) kpis.push({v:d.top10[0].cid, label:'CID mais frequente'});
+  } else if(sec==='sae_nanda'){
+    kpis.push({v:d.comSAE+'', label:'Evoluções com SAE'});
+    if(d.top5 && d.top5[0]) kpis.push({v:'', label:d.top5[0].dx});
+  }
+  return kpis;
+}
