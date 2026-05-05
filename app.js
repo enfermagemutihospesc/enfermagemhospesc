@@ -3287,7 +3287,27 @@ async function abrirForm(n) {
   // admHosp e alergia: usa leito primeiro, cai pro evolução anterior se o leito não tem
   setF('f-adm-hosp', pac.admHosp || (anterior && anterior.admHosp) || (evHoje && evHoje.admHosp) || '');
   setF('f-alergia',  pac.alergia || (anterior && anterior.alergia) || (evHoje && evHoje.alergia) || '');
-  setF('f-sexo', pac.sexo || (anterior && anterior.sexo) || (evHoje && evHoje.sexo) || '');
+
+  // Sexo: tenta pac → evolução anterior → log de admissão (fallback para pacientes antigos)
+  let sexoFinal = pac.sexo || (anterior && anterior.sexo) || (evHoje && evHoje.sexo) || '';
+  if(!sexoFinal){
+    try {
+      const admLog = await dbGet('uti_admissao_log');
+      if(Array.isArray(admLog)){
+        const admPac = admLog.filter(a => a.leito == n && a.paciente === pac.pac && a.sexo);
+        if(admPac.length){
+          sexoFinal = admPac[admPac.length-1].sexo;
+          // Salva de volta no objeto do leito para não precisar consultar o log novamente
+          const leitos = await leitosData();
+          if(leitos[n] && !leitos[n].sexo){
+            leitos[n].sexo = sexoFinal;
+            await dbSet('uti_leitos', leitos);
+          }
+        }
+      }
+    } catch(e){ /* silencioso */ }
+  }
+  setF('f-sexo', sexoFinal);
   setF('f-leito','Leito '+pad(n)+' – UTI Geral'); setF('f-data',hoje());
 
   const fonte = evHoje || anterior;
