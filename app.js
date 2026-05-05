@@ -1727,39 +1727,34 @@ async function renderIndicadores(){
 
 // ── 1. OCUPAÇÃO E FLUXO ──────────────────────────────────────────────────────
 function _indOcupacao(periodo){
-  const { admissoes, altas } = _indCache;
+  const { admissoes, altas, evolucoes } = _indCache;
   const diasPeriodo = Math.round((periodo.fim - periodo.inicio)/86400000) + 1;
 
-  // Filtra admissões do período
+  // Filtra admissões/altas do período
   const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
   const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
 
-  // Calcula pacientes-dia e taxa de ocupação
-  // Para cada admissão concluída (com alta), conta dias de internação no período
-  let pacientesDia = 0;
-  admissoes.forEach(adm => {
-    if (!adm.admUTI) return;
-    const inicio = _dataLocal(adm.admUTI);
-    if (!inicio) return;
-    // Encontra a alta desse paciente (match pelo leito + ordem cronológica)
-    const alta = altas.find(a =>
-      a.leito === adm.leito &&
-      a.paciente === adm.paciente &&
-      _dataLocal(a.dataAlta) >= inicio
-    );
-    const fimInt = alta ? _dataLocal(alta.dataAlta) : new Date(); // em curso → hoje
-    // Sobreposição com período
-    const s = inicio > periodo.inicio ? inicio : periodo.inicio;
-    const e = fimInt < periodo.fim ? fimInt : periodo.fim;
-    if (e >= s) pacientesDia += Math.floor((e-s)/86400000) + 1;
+  // ── Cálculo de pacientes-dia a partir das EVOLUÇÕES ────────────────────────
+  // Cada evolução (turno) é prova de que o leito estava ocupado naquele dia.
+  // 1 evolução = 0,5 paciente-dia. 2 evoluções no mesmo dia/leito = 1 paciente-dia.
+  // Esse método é mais robusto que usar logs de admissão/alta porque:
+  //   - Funciona para pacientes admitidos antes do log existir
+  //   - Não depende de o usuário ter dado alta corretamente
+  //   - Reflete o estado real registrado pela equipe
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const turnosPorLeitoDia = new Set();
+  evPer.forEach(e => {
+    if(!e.leito || !e.data || !e.turno) return;
+    turnosPorLeitoDia.add(e.leito + '|' + e.data + '|' + e.turno);
   });
+  const pacientesDia = Math.round(turnosPorLeitoDia.size * 0.5 * 10) / 10; // 1 casa decimal
 
   const taxaOcup = TOTAL * diasPeriodo > 0 ? (pacientesDia*100/(TOTAL*diasPeriodo)).toFixed(1) + '%' : '–';
 
-  // Giro de leito (admissões/leito no período)
+  // Giro de leito
   const giro = TOTAL > 0 ? (admPer.length/TOTAL).toFixed(1) : '–';
 
-  // Tempo médio de permanência (admissões com alta no período)
+  // Permanência média (admissões com alta no período)
   const permanencias = altasPer
     .map(a => _diasEntre(a.admUTI, a.dataAlta))
     .filter(d => d !== null);
@@ -1783,7 +1778,7 @@ function _indOcupacao(periodo){
   }
   const intervMedio = intervalos.length ? (intervalos.reduce((s,x)=>s+x,0)/intervalos.length).toFixed(1) : '–';
 
-  // Origem: distribuição
+  // Origem
   const origens = {};
   admPer.forEach(a => {
     const o = a.origem || 'Não informado';
@@ -1791,7 +1786,7 @@ function _indOcupacao(periodo){
   });
   const origensList = Object.entries(origens).map(([label,valor]) => ({label,valor})).sort((a,b)=>b.valor-a.valor);
 
-  // Procedência de transferências externas
+  // Procedência
   const procedencias = admPer
     .filter(a => a.origem === 'Transferência de outro serviço' && a.origemOutro)
     .map(a => a.origemOutro);
@@ -1801,7 +1796,7 @@ function _indOcupacao(periodo){
   h += _cardInd('Admissões no período', admPer.length, `${TOTAL} leitos`, '', 'ocup_admissoes');
   h += _cardInd('Altas no período', altasPer.length, '', '', 'ocup_altas');
   h += _cardInd('Taxa de ocupação', taxaOcup, `${pacientesDia} pacientes-dia / ${TOTAL*diasPeriodo} possíveis`, '', 'ocup_taxa');
-  h += _cardInd('Pacientes-dia', pacientesDia, `em ${diasPeriodo} dias`, '', 'ocup_pacientesdia');
+  h += _cardInd('Pacientes-dia', pacientesDia, `em ${diasPeriodo} dias (via evoluções)`, '', 'ocup_pacientesdia');
   h += _cardInd('Giro de leito', giro, 'admissões por leito', '', 'ocup_giro');
   h += _cardInd('Permanência média', permMedia !== '–' ? permMedia + ' dias' : '–', `${permanencias.length} altas computadas`, '', 'ocup_permanencia');
   h += _cardInd('Intervalo entre ocupações', intervMedio !== '–' ? intervMedio + ' dias' : '–', 'tempo médio leito vago', '', 'ocup_intervalo');
@@ -4929,22 +4924,17 @@ function _coletarDadosRelatorio(periodo, secoes){
     const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
     const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
     const diasPeriodo = Math.round((periodo.fim - periodo.inicio)/86400000) + 1;
-    let pacientesDia = 0;
-    admissoes.forEach(adm => {
-      if(!adm.admUTI) return;
-      const inicio = _dataLocal(adm.admUTI); if(!inicio) return;
-      const alta = altas.find(a => a.leito===adm.leito && a.paciente===adm.paciente && _dataLocal(a.dataAlta)>=inicio);
-      const fimInt = alta ? _dataLocal(alta.dataAlta) : new Date();
-      const s = inicio > periodo.inicio ? inicio : periodo.inicio;
-      const e = fimInt < periodo.fim ? fimInt : periodo.fim;
-      if(e >= s) pacientesDia += Math.floor((e-s)/86400000) + 1;
-    });
+    // Pacientes-dia via evoluções (mesma lógica do indicador)
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const turnos = new Set();
+    evPer.forEach(e => { if(e.leito && e.data && e.turno) turnos.add(e.leito+'|'+e.data+'|'+e.turno); });
+    const pacientesDia = Math.round(turnos.size * 0.5 * 10) / 10;
     dados.secoes.ocupacao = {
       admissoes: admPer.length,
       altas: altasPer.length,
       taxaOcupacao: TOTAL*diasPeriodo > 0 ? +(pacientesDia*100/(TOTAL*diasPeriodo)).toFixed(1) : null,
       giroLeito: TOTAL > 0 ? +(admPer.length/TOTAL).toFixed(1) : null,
-      diasPeriodo
+      diasPeriodo, pacientesDia
     };
   }
 
@@ -5324,7 +5314,6 @@ function _renderIRAS(d){
     const respostas = itens.map(it => _irasRespostas[it.id]);
     const respondidos = respostas.filter(r => r).length;
     const pct = itens.length > 0 ? Math.round(respondidos*100/itens.length) : 0;
-    const simCount = respostas.filter(r=>r==='sim').length;
 
     html += `<div class="iras-bundle" id="bundle-${bundle.id}">
       <div class="iras-bundle-header">
@@ -5341,7 +5330,7 @@ function _renderIRAS(d){
     itens.forEach(item => {
       const resp = _irasRespostas[item.id] || '';
       const usaOpcoes = item.opcoes;
-      html += `<div class="iras-item">
+      html += `<div class="iras-item" data-item-id="${item.id}" data-bundle-id="${bundle.id}">
         <div class="iras-item-texto">${item.texto}</div>
         <div class="iras-radios">`;
 
@@ -5349,47 +5338,52 @@ function _renderIRAS(d){
         item.opcoes.forEach(op => {
           const opId = op.toLowerCase().replace(/\//g,'_');
           const ativo_cls = resp === opId ? ' ativo' : '';
-          html += `<div class="iras-radio-btn na${ativo_cls}"
-            onclick="_irasResponder('${item.id}','${opId}','${bundle.id}')">${op}</div>`;
+          html += `<button type="button" class="iras-radio-btn na${ativo_cls}"
+            data-resp="${opId}">${op}</button>`;
         });
       } else {
         html += `
-          <div class="iras-radio-btn sim${resp==='sim'?' ativo':''}"
-            onclick="_irasResponder('${item.id}','sim','${bundle.id}')">✓ SIM</div>
-          <div class="iras-radio-btn nao${resp==='nao'?' ativo':''}"
-            onclick="_irasResponder('${item.id}','nao','${bundle.id}')">✗ NÃO</div>
-          <div class="iras-radio-btn na${resp==='na'?' ativo':''}"
-            onclick="_irasResponder('${item.id}','na','${bundle.id}')">N/A</div>`;
+          <button type="button" class="iras-radio-btn sim${resp==='sim'?' ativo':''}" data-resp="sim">✓ SIM</button>
+          <button type="button" class="iras-radio-btn nao${resp==='nao'?' ativo':''}" data-resp="nao">✗ NÃO</button>
+          <button type="button" class="iras-radio-btn na${resp==='na'?' ativo':''}" data-resp="na">N/A</button>`;
       }
 
       html += `</div></div>`;
     });
 
-    // Barra de progresso
     html += `<div class="iras-score-bar">
       <div class="iras-score-bar-fill" id="bar-${bundle.id}" style="width:${pct}%"></div>
     </div></div>`;
   });
 
   conteudo.innerHTML = html;
+
+  // Listener delegado: pega clique em qualquer botão de resposta dentro do modal
+  // Usa addEventListener (mais confiável no mobile que onclick inline)
+  conteudo.querySelectorAll('.iras-radio-btn').forEach(btn => {
+    btn.addEventListener('click', _irasClickHandler);
+  });
+
   _atualizarScoreIRAS();
 }
 
-function _irasResponder(itemId, resposta, bundleId){
+function _irasClickHandler(ev){
+  ev.preventDefault();
+  ev.stopPropagation();
+  const btn = ev.currentTarget;
+  const item = btn.closest('.iras-item');
+  if(!item) return;
+  const itemId   = item.getAttribute('data-item-id');
+  const bundleId = item.getAttribute('data-bundle-id');
+  const resposta = btn.getAttribute('data-resp');
+  if(!itemId || !resposta) return;
+
+  // Salva resposta
   _irasRespostas[itemId] = resposta;
 
-  // Atualiza visual do item clicado
-  const bundle = IRAS_BUNDLES.find(b=>b.id===bundleId);
-  if(!bundle) return;
-
-  // Re-renderiza só os botões do item (mais leve que re-renderizar tudo)
-  document.querySelectorAll(`[onclick*="'${itemId}'"]`).forEach(btn => {
-    btn.classList.remove('ativo');
-    const opId = btn.getAttribute('onclick').match(/'([^']+)','[^']+'\)/)?.[1];
-    // Pega a resposta do onclick
-    const respNoBtn = btn.getAttribute('onclick').match(/_irasResponder\('[^']+','([^']+)'/)?.[1];
-    if(respNoBtn === resposta) btn.classList.add('ativo');
-  });
+  // Atualiza visual: remove ativo de todos os botões do mesmo item, adiciona no clicado
+  item.querySelectorAll('.iras-radio-btn').forEach(b => b.classList.remove('ativo'));
+  btn.classList.add('ativo');
 
   _atualizarBadgeBundle(bundleId);
   _atualizarScoreIRAS();
