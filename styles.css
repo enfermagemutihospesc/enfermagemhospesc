@@ -358,3 +358,52 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
   body.printing-sae .modal { box-shadow:none !important; max-width:100% !important; max-height:none !important; }
   body.printing-sae .modal-footer, body.printing-sae .modal-close { display:none !important; }
 }
+
+/* ── CHECKLIST IRAS ──────────────────────────────────────────────────────────── */
+.iras-bundle {
+  border:1px solid #bbdefb; border-radius:10px; margin-bottom:12px; overflow:hidden;
+}
+.iras-bundle-header {
+  background:linear-gradient(135deg,#0d47a1,#1565c0); color:white;
+  padding:9px 14px; font-weight:700; font-size:.84rem; display:flex;
+  justify-content:space-between; align-items:center;
+}
+.iras-bundle-badge {
+  background:rgba(255,255,255,.25); border-radius:12px;
+  padding:2px 10px; font-size:.74rem; font-weight:700;
+}
+.iras-item {
+  display:flex; align-items:flex-start; gap:10px; padding:8px 14px;
+  border-bottom:1px solid #e3f0ff; background:white;
+}
+.iras-item:last-child { border-bottom:none; }
+.iras-item:nth-child(even) { background:#f5f9ff; }
+.iras-item-texto {
+  flex:1; font-size:.81rem; color:#333; line-height:1.4; padding-top:2px;
+}
+.iras-radios {
+  display:flex; gap:6px; flex-shrink:0;
+}
+.iras-radio-btn {
+  display:flex; align-items:center; gap:3px; cursor:pointer;
+  font-size:.76rem; font-weight:600; padding:3px 9px; border-radius:14px;
+  border:1px solid #ccc; background:#f5f5f5; transition:all .15s; user-select:none;
+}
+.iras-radio-btn.sim.ativo { background:#d4edda; border-color:#28a745; color:#155724; }
+.iras-radio-btn.nao.ativo { background:#f8d7da; border-color:#dc3545; color:#721c24; }
+.iras-radio-btn.na.ativo  { background:#e2e3e5; border-color:#6c757d; color:#383d41; }
+.iras-score-bar {
+  height:5px; border-radius:3px; background:#e3f0ff; margin:4px 14px 0;
+  overflow:hidden;
+}
+.iras-score-bar-fill { height:100%; border-radius:3px; background:#0d47a1; transition:width .3s; }
+.iras-bundle-score {
+  font-size:.7rem; color:rgba(255,255,255,.85); font-weight:400;
+}
+@media print {
+  body.printing-iras > *:not(#modal-iras) { display:none !important; }
+  body.printing-iras #modal-iras { display:flex !important; position:static; background:none; padding:0; }
+  body.printing-iras .modal { box-shadow:none !important; max-width:100% !important; max-height:none !important; }
+  body.printing-iras .modal-footer, body.printing-iras .modal-close { display:none !important; }
+  body.printing-iras .iras-radio-btn { border-color:#999 !important; }
+}
