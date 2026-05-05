@@ -237,7 +237,13 @@
         <label class="ri"><input type="radio" name="isolamento" value="Aerossóis"> Aerossóis</label>
       </div>
     </div>
-    <div class="fl"><label>Microrganismo</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="f-microorg" placeholder="Ex: MRSA, KPC..." style="flex:1;"><button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;" onclick="buscarCulturas()">🔬 Culturas</button></div></div>
+    <div class="fl"><label>Microrganismo</label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="text" id="f-microorg" placeholder="Ex: MRSA, KPC..." style="flex:1;">
+        <button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;" onclick="buscarCulturas()">🔬 Culturas</button>
+      </div>
+      <div id="culturas-auto" style="display:none;margin-top:5px;"></div>
+    </div>
   </div>
 </div>
     
