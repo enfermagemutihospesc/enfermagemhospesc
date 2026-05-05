@@ -1718,7 +1718,8 @@ async function renderIndicadores(){
     operacionais:  _indOperacionais,
     cruzamentos:   _indCruzamentos,
     sae_nanda:     _indSAENanda,
-    diagnosticos:  _indDiagnosticos
+    diagnosticos:  _indDiagnosticos,
+    iras:          _indIRAS
   };
   const fn = renderers[_indCategoriaAtiva] || _indOcupacao;
   container.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px;">Período: <strong>${periodo.rotulo}</strong></div>` + fn(periodo);
@@ -2337,6 +2338,91 @@ function _indCruzamentos(periodo){
 
   h += _rankingBarras('Taxa de mortalidade por origem (%)', origemMortList, null, 'cruz_origem_mort');
   h += '<div class="ind-hint">💡 Mais cruzamentos (diagnóstico × VMI, diagnóstico × alta) exigem padronização por CID — implantação futura.</div>';
+  return h;
+}
+
+// ── 17. IRAS / BUNDLES ────────────────────────────────────────────────────────
+function _indIRAS(periodo){
+  const { evolucoes } = _indCache;
+
+  // Busca todos os checklists IRAS do período no Firestore/localStorage
+  // Os dados estão salvos como uti_iras_<leito>_<turno>_<data>
+  const checklists = [];
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(!k || !k.startsWith('uti_iras_')) continue;
+    try {
+      const v = JSON.parse(localStorage.getItem(k));
+      if(v && v.data && _dentroPeriodo(v.data, periodo)) checklists.push(v);
+    } catch(e){}
+  }
+
+  const totalCheck = checklists.length;
+
+  if(!totalCheck){
+    let h = '<div class="ind-grid">';
+    h += _cardInd('Checklists IRAS', '0', 'no período', 'vermelho', 'iras_total');
+    h += '</div>';
+    h += '<div class="ind-hint">⚠️ Nenhum checklist IRAS preenchido no período. Use o botão "📋 Checklist IRAS" nas evoluções.</div>';
+    return h;
+  }
+
+  // Agrega scores por bundle
+  const bundleStats = {};
+  IRAS_BUNDLES.forEach(b => {
+    bundleStats[b.id] = { titulo: b.titulo, icone: b.icone, totalItens: b.itens.length,
+      somaResp: 0, somaSim: 0, somaNao: 0, checklists: 0 };
+  });
+
+  let totalRespondidos = 0, totalItens = 0;
+  checklists.forEach(ck => {
+    if(!ck.scores) return;
+    IRAS_BUNDLES.forEach(b => {
+      const sc = ck.scores[b.id];
+      if(!sc) return;
+      bundleStats[b.id].somaResp  += sc.respondidos;
+      bundleStats[b.id].somaSim   += sc.sim;
+      bundleStats[b.id].somaNao   += (sc.respondidos - sc.sim);
+      bundleStats[b.id].checklists++;
+      totalRespondidos += sc.respondidos;
+      totalItens += sc.total;
+    });
+  });
+
+  const pctGeral = totalItens > 0 ? Math.round(totalRespondidos*100/totalItens) : 0;
+  const cor = pctGeral >= 80 ? '' : pctGeral >= 50 ? 'amarelo' : 'vermelho';
+
+  let h = '<div class="ind-grid">';
+  h += _cardInd('Checklists IRAS', totalCheck, 'no período', '', 'iras_total');
+  h += _cardInd('Preenchimento geral', pctGeral+'%', `${totalRespondidos}/${totalItens} itens`, cor, 'iras_pct');
+  h += '</div>';
+
+  // Score por bundle
+  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">📊 Aderência por Bundle</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:8px;">';
+
+  IRAS_BUNDLES.forEach(b => {
+    const st = bundleStats[b.id];
+    if(!st.checklists) return;
+    const pct = st.somaResp > 0 ? Math.round(st.somaSim*100/st.somaResp) : 0;
+    const barCor = pct >= 80 ? '#1a6b3a' : pct >= 60 ? '#856404' : '#dc3545';
+    h += `<div style="background:white;border:1px solid #e0e0e0;border-radius:8px;padding:10px 14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+        <span style="font-size:.84rem;font-weight:600;">${b.icone} ${b.titulo.replace(/Bundle de Prevenção de /,'')}</span>
+        <span style="font-size:.84rem;font-weight:700;color:${barCor};">${pct}% SIM</span>
+      </div>
+      <div style="background:#f0f0f0;border-radius:4px;height:8px;overflow:hidden;">
+        <div style="background:${barCor};height:100%;border-radius:4px;width:${pct}%;transition:width .3s;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:.72rem;color:var(--muted);">
+        <span>SIM: <strong style="color:#155724;">${st.somaSim}</strong> · NÃO: <strong style="color:#dc3545;">${st.somaNao}</strong></span>
+        <span>${st.checklists} checklist${st.checklists>1?'s':''} preenchido${st.checklists>1?'s':''}</span>
+      </div>
+    </div>`;
+  });
+
+  h += '</div>';
+  h += '<div class="ind-hint" style="margin-top:12px;">💡 Aderência = proporção de itens respondidos como SIM em relação ao total de itens respondidos (excluindo N/A).</div>';
   return h;
 }
 
@@ -5140,4 +5226,238 @@ function _kpisParaPDF(sec, d){
     if(d.top5 && d.top5[0]) kpis.push({v:'', label:d.top5[0].dx});
   }
   return kpis;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CHECKLIST IRAS – CCIH UTI
+// ════════════════════════════════════════════════════════════════════════════
+
+const IRAS_BUNDLES = [
+  {
+    id: 'cdl',
+    titulo: 'Bundle de Prevenção de IPCS – Cateter Central (CDL/AVC)',
+    icone: '🩸',
+    condicao: (d) => !!(d.dial_l || d.dial_d || d.avc_l || d.avc_d),
+    itens: [
+      { id:'cdl_curativo_tipo',   texto:'Qual curativo utilizado?', opcoes:['GAZE','FILME','N/A'] },
+      { id:'cdl_curativo_data',   texto:'Curativo com data da realização?' },
+      { id:'cdl_curativo_troca',  texto:'Curativo precisa ser trocado?' },
+      { id:'cdl_sem_sangue',      texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?' },
+      { id:'cdl_equipo_data',     texto:'Equipos e dispositivos com data da instalação?' },
+      { id:'cdl_equipo_troca',    texto:'Equipos e dispositivos precisam ser trocados?' },
+      { id:'cdl_alcool',          texto:'Realizada orientação sobre desinfecção das conexões com álcool 70% antes de equipos ou seringas?' },
+    ]
+  },
+  {
+    id: 'avp',
+    titulo: 'Bundle de Prevenção de IPCS – Cateter Periférico (AVP)',
+    icone: '💉',
+    condicao: (d) => !!(d.avps && d.avps.some(a=>a.local)),
+    itens: [
+      { id:'avp_curativo_limpo',  texto:'Curativo limpo e seco?' },
+      { id:'avp_dor_edema',       texto:'Paciente refere dor, ou apresenta edema, hiperemia?' },
+      { id:'avp_data_puncao',     texto:'Acesso com data que foi realizada a punção?' },
+      { id:'avp_sem_sangue',      texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?' },
+      { id:'avp_equipo_data',     texto:'Equipos com data da instalação?' },
+      { id:'avp_equipo_troca',    texto:'Equipos precisam ser trocados?' },
+    ]
+  },
+  {
+    id: 'svd',
+    titulo: 'Bundle de Prevenção de IUAC – Sonda Vesical (SVD)',
+    icone: '🫘',
+    condicao: (d) => !!(d.svd_n || d.svd_d),
+    itens: [
+      { id:'svd_data',            texto:'Possui identificação da data da instalação?' },
+      { id:'svd_fixacao',         texto:'Sonda fixada corretamente no paciente?' },
+      { id:'svd_higiene',         texto:'Realizada higiene do meato urinário?' },
+      { id:'svd_dobras',          texto:'Apresenta dobras no sistema?' },
+      { id:'svd_bolsa_nivel',     texto:'Bolsa coletora está abaixo do nível da bexiga e sem contato com o chão?' },
+      { id:'svd_bolsa_volume',    texto:'Bolsa coletora com volume até 2/3 da sua capacidade?' },
+    ]
+  },
+  {
+    id: 'pav',
+    titulo: 'Bundle de Prevenção de PAV – Ventilação Mecânica',
+    icone: '🫁',
+    condicao: (d) => !!(d.vent && (d.vent.includes('VMI') || d.vent.includes('TOT') || d.vent.includes('TQT'))),
+    itens: [
+      { id:'pav_higiene_oral',    texto:'Realizada HIGIENE ORAL?' },
+      { id:'pav_cabeceira',       texto:'Cabeceira elevada (30-45°)?' },
+      { id:'pav_fixacao',         texto:'TOT ou TQT com fixação adequada?' },
+      { id:'pav_sne',             texto:'Sonda Nasoenteral com fixação adequada?' },
+      { id:'pav_aspiracao',       texto:'Sistema de aspiração fechado dentro do prazo de validade?' },
+      { id:'pav_latex',           texto:'Realizada troca do látex e vacuômetro conforme rotina?' },
+    ]
+  }
+];
+
+let _irasRespostas = {}; // { id: 'sim'|'nao'|'na' }
+
+function abrirIRAS(){
+  if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
+  const d = coletarDados();
+
+  document.getElementById('iras-pac-info').textContent =
+    `Leito ${pad(d.leito)} · ${d.pac||'—'} · ${d.data?d.data.split('-').reverse().join('/'):''}  |  Turno ${d.turno}`;
+
+  // Carrega respostas salvas se existirem
+  const chave = `uti_iras_${d.leito}_${d.turno}_${d.data}`;
+  dbGet(chave).then(salvo => {
+    _irasRespostas = salvo || {};
+    _renderIRAS(d);
+  }).catch(() => {
+    _irasRespostas = {};
+    _renderIRAS(d);
+  });
+
+  document.getElementById('modal-iras').classList.add('show');
+}
+
+function _renderIRAS(d){
+  const conteudo = document.getElementById('iras-conteudo');
+  let html = '';
+
+  IRAS_BUNDLES.forEach(bundle => {
+    const ativo = bundle.condicao(d);
+    const itens = bundle.itens;
+    const respostas = itens.map(it => _irasRespostas[it.id]);
+    const respondidos = respostas.filter(r => r).length;
+    const pct = itens.length > 0 ? Math.round(respondidos*100/itens.length) : 0;
+    const simCount = respostas.filter(r=>r==='sim').length;
+
+    html += `<div class="iras-bundle" id="bundle-${bundle.id}">
+      <div class="iras-bundle-header">
+        <span>${bundle.icone} ${bundle.titulo}</span>
+        <span class="iras-bundle-badge" id="badge-${bundle.id}">${respondidos}/${itens.length} · ${pct}%</span>
+      </div>`;
+
+    if(!ativo){
+      html += `<div style="padding:10px 14px;font-size:.8rem;color:var(--muted);background:#f8f9fa;font-style:italic;">
+        ⚠ Dispositivo não registrado na evolução atual — preencha mesmo assim se aplicável.
+      </div>`;
+    }
+
+    itens.forEach(item => {
+      const resp = _irasRespostas[item.id] || '';
+      const usaOpcoes = item.opcoes;
+      html += `<div class="iras-item">
+        <div class="iras-item-texto">${item.texto}</div>
+        <div class="iras-radios">`;
+
+      if(usaOpcoes){
+        item.opcoes.forEach(op => {
+          const opId = op.toLowerCase().replace(/\//g,'_');
+          const ativo_cls = resp === opId ? ' ativo' : '';
+          html += `<div class="iras-radio-btn na${ativo_cls}"
+            onclick="_irasResponder('${item.id}','${opId}','${bundle.id}')">${op}</div>`;
+        });
+      } else {
+        html += `
+          <div class="iras-radio-btn sim${resp==='sim'?' ativo':''}"
+            onclick="_irasResponder('${item.id}','sim','${bundle.id}')">✓ SIM</div>
+          <div class="iras-radio-btn nao${resp==='nao'?' ativo':''}"
+            onclick="_irasResponder('${item.id}','nao','${bundle.id}')">✗ NÃO</div>
+          <div class="iras-radio-btn na${resp==='na'?' ativo':''}"
+            onclick="_irasResponder('${item.id}','na','${bundle.id}')">N/A</div>`;
+      }
+
+      html += `</div></div>`;
+    });
+
+    // Barra de progresso
+    html += `<div class="iras-score-bar">
+      <div class="iras-score-bar-fill" id="bar-${bundle.id}" style="width:${pct}%"></div>
+    </div></div>`;
+  });
+
+  conteudo.innerHTML = html;
+  _atualizarScoreIRAS();
+}
+
+function _irasResponder(itemId, resposta, bundleId){
+  _irasRespostas[itemId] = resposta;
+
+  // Atualiza visual do item clicado
+  const bundle = IRAS_BUNDLES.find(b=>b.id===bundleId);
+  if(!bundle) return;
+
+  // Re-renderiza só os botões do item (mais leve que re-renderizar tudo)
+  document.querySelectorAll(`[onclick*="'${itemId}'"]`).forEach(btn => {
+    btn.classList.remove('ativo');
+    const opId = btn.getAttribute('onclick').match(/'([^']+)','[^']+'\)/)?.[1];
+    // Pega a resposta do onclick
+    const respNoBtn = btn.getAttribute('onclick').match(/_irasResponder\('[^']+','([^']+)'/)?.[1];
+    if(respNoBtn === resposta) btn.classList.add('ativo');
+  });
+
+  _atualizarBadgeBundle(bundleId);
+  _atualizarScoreIRAS();
+}
+
+function _atualizarBadgeBundle(bundleId){
+  const bundle = IRAS_BUNDLES.find(b=>b.id===bundleId);
+  if(!bundle) return;
+  const respondidos = bundle.itens.filter(it=>_irasRespostas[it.id]).length;
+  const pct = Math.round(respondidos*100/bundle.itens.length);
+  const badge = document.getElementById('badge-'+bundleId);
+  const bar   = document.getElementById('bar-'+bundleId);
+  if(badge) badge.textContent = `${respondidos}/${bundle.itens.length} · ${pct}%`;
+  if(bar)   bar.style.width = pct+'%';
+}
+
+function _atualizarScoreIRAS(){
+  let totalItens = 0, totalResp = 0, totalSim = 0, totalNao = 0;
+  IRAS_BUNDLES.forEach(b => {
+    b.itens.forEach(it => {
+      totalItens++;
+      const r = _irasRespostas[it.id];
+      if(r){ totalResp++; if(r==='sim') totalSim++; if(r==='nao') totalNao++; }
+    });
+  });
+  const pct = totalItens > 0 ? Math.round(totalResp*100/totalItens) : 0;
+  const el = document.getElementById('iras-score');
+  if(el){
+    const cor = pct >= 80 ? '#155724' : pct >= 50 ? '#856404' : '#721c24';
+    el.innerHTML = `<span style="color:${cor};">Preenchimento: <strong>${pct}%</strong> (${totalResp}/${totalItens})</span>
+      · SIM: <strong style="color:#155724;">${totalSim}</strong>
+      · NÃO: <strong style="color:#721c24;">${totalNao}</strong>`;
+  }
+}
+
+async function salvarIRAS(){
+  if(!leitoAtual) return;
+  const d = coletarDados();
+  const chave = `uti_iras_${d.leito}_${d.turno}_${d.data}`;
+
+  // Calcula scores por bundle para os indicadores
+  const scores = {};
+  IRAS_BUNDLES.forEach(b => {
+    const resp = b.itens.map(it => _irasRespostas[it.id]).filter(Boolean);
+    const sim  = resp.filter(r=>r==='sim').length;
+    scores[b.id] = { respondidos: resp.length, total: b.itens.length, sim };
+  });
+
+  const payload = {
+    leito: d.leito, turno: d.turno, data: d.data,
+    pac: d.pac, respostas: _irasRespostas, scores,
+    salvoEm: new Date().toISOString(), autor: usuarioEmail
+  };
+
+  try {
+    await dbSet(chave, payload);
+    toast('✓ Checklist IRAS salvo');
+  } catch(e){
+    toast('Erro ao salvar: '+e.message, true);
+  }
+}
+
+function fecharIRAS(){
+  document.getElementById('modal-iras').classList.remove('show');
+}
+
+function imprimirIRAS(){
+  document.body.classList.add('printing-iras');
+  window.print();
+  setTimeout(()=>document.body.classList.remove('printing-iras'), 600);
 }
