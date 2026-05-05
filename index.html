@@ -170,6 +170,7 @@
       <button class="ind-cat-btn" data-cat="cruzamentos">🔗 Cruzamentos</button>
       <button class="ind-cat-btn" data-cat="sae_nanda">🩺 SAE/NANDA</button>
       <button class="ind-cat-btn" data-cat="diagnosticos">🏥 Diagnósticos / CID</button>
+      <button class="ind-cat-btn" data-cat="iras">🧫 IRAS / Bundles</button>
     </div>
 
     <!-- Área dinâmica -->
@@ -706,6 +707,7 @@
     <div class="btn-row">
       <button class="btn btn-sec" onclick="irLeitos()">← Leitos</button>
       <button class="btn" style="background:#1a6b3a;color:white;" id="btn-sae" onclick="abrirSAE()">🩺 Gerar SAE / NANDA</button>
+      <button class="btn" style="background:#0d47a1;color:white;" id="btn-iras" onclick="abrirIRAS()">📋 Checklist IRAS</button>
       <button class="btn btn-pri" id="btn-gerar" onclick="gerarPreview()">Gerar Impressão →</button>
     </div>
   </div>
@@ -927,6 +929,28 @@
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:10px 18px;border-top:1px solid #eee;">
       <button class="btn btn-sec btn-sm" onclick="document.getElementById('modal-exportar').classList.remove('show')">Cancelar</button>
       <button class="btn btn-sm" style="background:#1a6b3a;color:white;" id="btn-exportar-ok" onclick="executarExportacao()">📊 Gerar Relatório</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IRAS -->
+<div class="overlay" id="modal-iras">
+  <div class="modal" style="max-width:780px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;">
+      <div>
+        <h3 style="color:white;margin:0;">📋 Checklist IRAS – CCIH</h3>
+        <small id="iras-pac-info" style="opacity:.9;">—</small>
+      </div>
+      <button class="modal-close" style="color:white;" onclick="fecharIRAS()">×</button>
+    </div>
+    <div class="modal-body" id="iras-conteudo" style="max-height:78vh;overflow-y:auto;padding:14px 16px;"></div>
+    <div class="modal-footer" style="background:#e3f0ff;border-top:1px solid #bbdefb;display:flex;gap:8px;justify-content:space-between;align-items:center;padding:10px 16px;flex-shrink:0;">
+      <div id="iras-score" style="font-size:.82rem;color:#0d47a1;font-weight:600;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sec btn-sm" onclick="fecharIRAS()">Fechar</button>
+        <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="salvarIRAS()">💾 Salvar Checklist</button>
+        <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirIRAS()">🖨 Imprimir</button>
+      </div>
     </div>
   </div>
 </div>
