@@ -3340,6 +3340,12 @@ function limparForm(){
   document.getElementById('atb-lista').innerHTML='';
   document.getElementById('dva-outros').innerHTML='';
   document.getElementById('sedo-outros').innerHTML='';
+  // Esconde wraps de retirada e limpa datas (evita herança indevida)
+  ['retirada-avc-wrap','retirada-cdl-wrap','retirada-svd-wrap','retirada-sne-wrap','retirada-tot-wrap','retirada-tqt-wrap'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.style.display = 'none';
+  });
+  ['f-avc-ret','f-dial-ret','f-svd-ret','f-sne-ret','f-tot-ret','f-tqt-ret'].forEach(id => setF(id,''));
 }
 
 async function getAnterior(n) {
@@ -3394,17 +3400,18 @@ async function abrirForm(n) {
   const fonte = evHoje || anterior;
   if (fonte) {
     setF('f-avc-l',fonte.avc_l); setF('f-avc-d',fonte.avc_d);
-    if(fonte.avc_ret){ setF('f-avc-ret',fonte.avc_ret); document.getElementById('retirada-avc-wrap').style.display='flex'; }
+    // Retirada: só exibe o wrap se o dispositivo foi de fato retirado (sem local/número e sem data de instalação ativa)
+    if(fonte.avc_ret && !fonte.avc_l && !fonte.avc_d){ setF('f-avc-ret',fonte.avc_ret); document.getElementById('retirada-avc-wrap').style.display='flex'; }
     setF('f-dial-l',fonte.dial_l); setF('f-dial-d',fonte.dial_d);
-    if(fonte.dial_ret){ setF('f-dial-ret',fonte.dial_ret); document.getElementById('retirada-cdl-wrap').style.display='flex'; }
+    if(fonte.dial_ret && !fonte.dial_l && !fonte.dial_d){ setF('f-dial-ret',fonte.dial_ret); document.getElementById('retirada-cdl-wrap').style.display='flex'; }
     setF('f-svd-n',fonte.svd_n); setF('f-svd-d',fonte.svd_d);
-    if(fonte.svd_ret){ setF('f-svd-ret',fonte.svd_ret); document.getElementById('retirada-svd-wrap').style.display='flex'; }
+    if(fonte.svd_ret && !fonte.svd_n && !fonte.svd_d){ setF('f-svd-ret',fonte.svd_ret); document.getElementById('retirada-svd-wrap').style.display='flex'; }
     setF('f-sne-n',fonte.sne_n); setF('f-sne-d',fonte.sne_d);
-    if(fonte.sne_ret){ setF('f-sne-ret',fonte.sne_ret); document.getElementById('retirada-sne-wrap').style.display='flex'; }
+    if(fonte.sne_ret && !fonte.sne_n && !fonte.sne_d){ setF('f-sne-ret',fonte.sne_ret); document.getElementById('retirada-sne-wrap').style.display='flex'; }
     setF('f-tot-n',fonte.tot_n||''); setF('f-tot-n2',fonte.tot_n||''); setF('f-tot-d',fonte.tot_d||'');
-    if(fonte.tot_ret){ setF('f-tot-ret',fonte.tot_ret); document.getElementById('retirada-tot-wrap').style.display='flex'; }
+    if(fonte.tot_ret && !fonte.tot_n && !fonte.tot_d){ setF('f-tot-ret',fonte.tot_ret); document.getElementById('retirada-tot-wrap').style.display='flex'; }
     setF('f-tqt-n',fonte.tqt_n||''); setF('f-tqt-n2',fonte.tqt_n||''); setF('f-tqt-d',fonte.tqt_d||'');
-    if(fonte.tqt_ret){ setF('f-tqt-ret',fonte.tqt_ret); document.getElementById('retirada-tqt-wrap').style.display='flex'; }
+    if(fonte.tqt_ret && !fonte.tqt_n && !fonte.tqt_d){ setF('f-tqt-ret',fonte.tqt_ret); document.getElementById('retirada-tqt-wrap').style.display='flex'; }
     setF('f-disp-o',fonte.disp_o);
     if(fonte.avps&&fonte.avps.length) fonte.avps.forEach(a=>addAVP(a.local,a.data)); else addAVP();
     if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
@@ -5454,4 +5461,185 @@ function imprimirIRAS(){
   document.body.classList.add('printing-iras');
   window.print();
   setTimeout(()=>document.body.classList.remove('printing-iras'), 600);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// HISTÓRICO DE DISPOSITIVOS
+// ════════════════════════════════════════════════════════════════════════════
+
+// Abre o histórico de dispositivos retirados de um paciente/leito específico (no formulário)
+async function abrirHistoricoDispositivos(leito){
+  const modal = document.getElementById('modal-hist-disp');
+  const body  = document.getElementById('hist-disp-body');
+  const titulo = document.getElementById('hist-disp-titulo');
+  if(!modal) return;
+
+  const pac = gf('f-pac') || '';
+  titulo.textContent = '\uD83D\uDCCB Dispositivos Anteriores \u2013 ' + (pac || 'Leito '+pad(leito));
+  body.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;">Carregando...</div>';
+  modal.classList.add('show');
+
+  try {
+    const log = (await dbGet('uti_disp_log')) || [];
+    const registros = log
+      .filter(r => r.leito == leito && (!pac || r.paciente === pac))
+      .sort((a,b) => (b.data_retirada||'').localeCompare(a.data_retirada||''));
+
+    if(!registros.length){
+      body.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;font-size:.85rem;">Nenhum dispositivo retirado registrado para este paciente.</div>';
+      return;
+    }
+
+    body.innerHTML = `
+      <p style="font-size:.74rem;color:var(--muted);margin-bottom:10px;">${registros.length} registro(s) encontrado(s)</p>
+      <table style="width:100%;border-collapse:collapse;font-size:.78rem;">
+        <thead>
+          <tr style="background:var(--azul);color:white;">
+            <th style="padding:7px 10px;text-align:left;border-radius:6px 0 0 0;">Tipo</th>
+            <th style="padding:7px 10px;text-align:left;">Local / N\u00BA</th>
+            <th style="padding:7px 10px;text-align:center;">Instala\u00E7\u00E3o</th>
+            <th style="padding:7px 10px;text-align:center;">Retirada</th>
+            <th style="padding:7px 10px;text-align:center;border-radius:0 6px 0 0;">Dias</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${registros.map((r,i) => {
+            const dias = (r.data_instalacao && r.data_retirada)
+              ? Math.round((new Date(r.data_retirada) - new Date(r.data_instalacao)) / 86400000)
+              : '\u2013';
+            const bg = i%2===0 ? 'white' : 'var(--cinza)';
+            const instBR = r.data_instalacao ? r.data_instalacao.split('-').reverse().join('/') : '\u2013';
+            const retBR  = r.data_retirada   ? r.data_retirada.split('-').reverse().join('/')   : '\u2013';
+            return `<tr style="background:${bg};">
+              <td style="padding:7px 10px;font-weight:700;color:var(--azul);">${r.tipo||'\u2013'}</td>
+              <td style="padding:7px 10px;">${r.local_ou_numero||'\u2013'}</td>
+              <td style="padding:7px 10px;text-align:center;">${instBR}</td>
+              <td style="padding:7px 10px;text-align:center;color:var(--vermelho);font-weight:600;">${retBR}</td>
+              <td style="padding:7px 10px;text-align:center;font-weight:700;">${dias !== '\u2013' ? dias+(dias===1?' dia':' dias') : '\u2013'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  } catch(e){
+    body.innerHTML = '<div style="color:var(--vermelho);padding:1rem;">Erro ao carregar hist\u00F3rico: '+e.message+'</div>';
+  }
+}
+
+// Abre painel geral de dispositivos de todos os pacientes internados (página de leitos)
+async function abrirHistoricoDispositivosGeral(){
+  const modal = document.getElementById('modal-hist-disp');
+  const body  = document.getElementById('hist-disp-body');
+  const titulo = document.getElementById('hist-disp-titulo');
+  if(!modal) return;
+
+  titulo.textContent = '\uD83E\uDE7A Dispositivos \u2013 Pacientes Internados';
+  body.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;">Carregando...</div>';
+  modal.classList.add('show');
+
+  try {
+    const [leitos, log] = await Promise.all([
+      leitosData(),
+      dbGet('uti_disp_log').then(v => v || [])
+    ]);
+
+    const hj = hoje();
+    const outroTurno = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
+    const ocupados = Object.entries(leitos)
+      .filter(([,l]) => l.ocupado)
+      .sort((a,b) => parseInt(a[0]) - parseInt(b[0]));
+
+    if(!ocupados.length){
+      body.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;">Nenhum leito ocupado no momento.</div>';
+      return;
+    }
+
+    const keys = [];
+    ocupados.forEach(([n]) => {
+      keys.push('uti_ev_'+n+'_'+turno+'_'+hj);
+      keys.push('uti_ev_'+n+'_'+outroTurno+'_'+hj);
+    });
+    const data = await dbGetMany(keys);
+
+    const TIPOS = [
+      {label:'AVC',  local: ev => ev.avc_l,  data: ev => ev.avc_d},
+      {label:'CDL',  local: ev => ev.dial_l, data: ev => ev.dial_d},
+      {label:'SVD',  local: ev => ev.svd_n,  data: ev => ev.svd_d},
+      {label:'SNE',  local: ev => ev.sne_n,  data: ev => ev.sne_d},
+      {label:'TOT',  local: ev => ev.tot_n,  data: ev => ev.tot_d},
+      {label:'TQT',  local: ev => ev.tqt_n,  data: ev => ev.tqt_d},
+    ];
+
+    let html = `<p style="font-size:.74rem;color:var(--muted);margin-bottom:12px;">Dispositivos invasivos ativos por leito \u2014 ${hj.split('-').reverse().join('/')}</p>`;
+
+    ocupados.forEach(([n, l]) => {
+      const ev = data['uti_ev_'+n+'_'+turno+'_'+hj]
+              || data['uti_ev_'+n+'_'+outroTurno+'_'+hj];
+
+      const dispositivos = TIPOS.map(t => {
+        const loc = ev ? t.local(ev) : null;
+        const dt  = ev ? t.data(ev)  : null;
+        if(!loc && !dt) return null;
+        const dias = dt ? _diasDeInstalacao(dt) : null;
+        const dtBR = dt ? dt.split('-').reverse().join('/') : '\u2013';
+        return `<span style="display:inline-flex;align-items:center;gap:4px;background:#e8f4fd;border:1px solid #90caf9;border-radius:10px;padding:3px 9px;font-size:.7rem;font-weight:700;color:#0d47a1;white-space:nowrap;">${t.label}${loc?' \u00B7 '+loc:''}${dtBR?' \u00B7 '+dtBR:''}${dias!==null?' \u00B7 '+dias+'d':''}</span>`;
+      }).filter(Boolean);
+
+      const avps = ev && ev.avps ? ev.avps.filter(a=>a.local) : [];
+      avps.forEach(a => {
+        const dias = a.data ? _diasDeInstalacao(a.data) : null;
+        const dtBR = a.data ? a.data.split('-').reverse().join('/') : '\u2013';
+        dispositivos.push(`<span style="display:inline-flex;align-items:center;gap:4px;background:#f3e5f5;border:1px solid #ce93d8;border-radius:10px;padding:3px 9px;font-size:.7rem;font-weight:700;color:#6a1b9a;white-space:nowrap;">AVP \u00B7 ${a.local}${dtBR?' \u00B7 '+dtBR:''}${dias!==null?' \u00B7 '+dias+'d':''}</span>`);
+      });
+
+      html += `<div style="border:1.5px solid var(--borda);border-radius:8px;padding:10px 14px;margin-bottom:8px;background:white;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-weight:700;font-size:.82rem;color:var(--azul);">LEITO ${pad(parseInt(n))}</span>
+          <span style="font-size:.75rem;color:var(--muted);">${l.pac||'\u2013'}</span>
+        </div>
+        ${dispositivos.length
+          ? `<div style="display:flex;flex-wrap:wrap;gap:5px;">${dispositivos.join('')}</div>`
+          : `<span style="font-size:.74rem;color:var(--muted);font-style:italic;">Sem dispositivos invasivos registrados hoje</span>`
+        }
+      </div>`;
+    });
+
+    // Seção de retiradas recentes (últimas 48h)
+    const limiteData = new Date(); limiteData.setDate(limiteData.getDate()-2);
+    const recentes = log
+      .filter(r => r.data_retirada && new Date(r.data_retirada) >= limiteData)
+      .sort((a,b) => b.data_retirada.localeCompare(a.data_retirada));
+
+    if(recentes.length){
+      html += `<div style="margin-top:16px;border-top:2px solid var(--borda);padding-top:12px;">
+        <p style="font-weight:700;font-size:.8rem;color:var(--vermelho);margin-bottom:8px;">\uD83D\uDD34 Retiradas nos \u00FAltimos 2 dias</p>
+        <table style="width:100%;border-collapse:collapse;font-size:.75rem;">
+          <thead><tr style="background:#fff3cd;">
+            <th style="padding:6px 8px;text-align:left;">Leito</th>
+            <th style="padding:6px 8px;text-align:left;">Paciente</th>
+            <th style="padding:6px 8px;text-align:left;">Tipo</th>
+            <th style="padding:6px 8px;text-align:center;">Retirada</th>
+            <th style="padding:6px 8px;text-align:center;">Dias uso</th>
+          </tr></thead>
+          <tbody>
+            ${recentes.map((r,i) => {
+              const dias = (r.data_instalacao && r.data_retirada)
+                ? Math.round((new Date(r.data_retirada)-new Date(r.data_instalacao))/86400000)
+                : '\u2013';
+              return `<tr style="background:${i%2===0?'white':'#fff9f9'};">
+                <td style="padding:6px 8px;font-weight:700;">${pad(r.leito)}</td>
+                <td style="padding:6px 8px;">${r.paciente||'\u2013'}</td>
+                <td style="padding:6px 8px;color:var(--vermelho);font-weight:700;">${r.tipo||'\u2013'}</td>
+                <td style="padding:6px 8px;text-align:center;">${r.data_retirada?r.data_retirada.split('-').reverse().join('/'):'–'}</td>
+                <td style="padding:6px 8px;text-align:center;">${dias!=='\u2013'?dias+'d':'\u2013'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    }
+
+    body.innerHTML = html;
+  } catch(e){
+    body.innerHTML = '<div style="color:var(--vermelho);padding:1rem;">Erro: '+e.message+'</div>';
+  }
 }
