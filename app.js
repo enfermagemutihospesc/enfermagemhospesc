@@ -3394,6 +3394,13 @@ async function abrirForm(n) {
   mostrarTela('t-form');
   _ativarCaixaAlta();
   window.scrollTo(0,0);
+
+  // Busca automática de culturas em background (não bloqueia abertura do form)
+  const el = document.getElementById('culturas-auto');
+  if(el){ el.style.display='none'; el.innerHTML=''; }
+  if(pac.pac){
+    setTimeout(() => _buscarCulturasAuto(pac.pac, leitoAtual), 800);
+  }
   } catch(e) {
     console.error('abrirForm:', e);
     hideLoading();
@@ -4655,6 +4662,64 @@ function imprimirSAE(){
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// BUSCA AUTOMÁTICA DE CULTURAS AO ABRIR FORMULÁRIO ────────────────────────────
+async function _buscarCulturasAuto(paciente, leito){
+  const el = document.getElementById('culturas-auto');
+  if(!el || !paciente) return;
+
+  el.style.display = 'block';
+  el.innerHTML = `<span style="font-size:.72rem;color:var(--muted);">🔬 Buscando culturas...</span>`;
+
+  try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'culturas',
+        paciente: paciente,
+        leito: leito,
+        sheetId: CULTURAS_SHEET_ID
+      })
+    });
+    const raw = await resp.text();
+    const data = JSON.parse(raw);
+
+    const positivos = (data.resultados||[]).filter(r =>
+      r.microorg && !/negativ|contaminad|pendente/i.test(r.resultado||'')
+    );
+
+    if(!positivos.length){ el.style.display='none'; return; }
+
+    const chips = positivos.map(r => {
+      const microorgEsc = (r.microorg||'').replace(/'/g,"\\'");
+      const sensEsc     = (r.sensibilidade||'').replace(/'/g,"\\'");
+      const dataRes     = r.dataResultado || r.dataRecebimento || '';
+      const cultura     = r.cultura || '';
+      return `<span
+        onclick="_preencherMicroorg('${microorgEsc}','${sensEsc}')"
+        title="${cultura}${dataRes?' · '+dataRes:''} — clique para usar"
+        style="display:inline-flex;align-items:center;gap:4px;background:#fef2f2;border:1px solid #fca5a5;
+               color:#991b1b;border-radius:14px;padding:3px 10px;font-size:.72rem;font-weight:600;
+               cursor:pointer;white-space:nowrap;"
+        onmouseover="this.style.background='#fee2e2'"
+        onmouseout="this.style.background='#fef2f2'">
+        🦠 ${r.microorg}${dataRes?' <span style="font-weight:400;opacity:.7;font-size:.66rem;">'+dataRes+'</span>':''}
+      </span>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">
+        <span style="font-size:.68rem;font-weight:700;color:var(--muted);white-space:nowrap;">Culturas +</span>
+        ${chips}
+        <span style="font-size:.65rem;color:var(--muted);">(clique para usar)</span>
+      </div>`;
+    el.style.display = 'block';
+  } catch(e){
+    el.style.display = 'none';
+    console.warn('[Culturas auto]', e);
+  }
+}
+
 // BUSCA DE CULTURAS – lê a planilha RST CULTURAS via Apps Script
 // ════════════════════════════════════════════════════════════════════════════
 const CULTURAS_SHEET_ID = '1yQHmd84BSlbAs7jb4ztN6fsy6eyZHY4wb6IcqOp0j7U';
