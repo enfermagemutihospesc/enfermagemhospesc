@@ -93,6 +93,7 @@
     <div class="btn-row">
       <button class="btn btn-sec btn-sm" onclick="irTurno()">← Trocar turno</button>
       <button class="btn btn-sec btn-sm" onclick="irNAS()">📊 NAS do Turno</button>
+      <button class="btn btn-sec btn-sm" onclick="abrirHistoricoDispositivosGeral()">🩺 Dispositivos</button>
       <button class="btn btn-sec btn-sm" onclick="irIndicadores()">📈 Indicadores</button>
       <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirTurnoCompleto()">🖨 Imprimir turno</button>
       <button class="btn btn-sm" style="background:#6c3483;color:white;" onclick="enviarTodasEvolucoesTurno()">☁ Enviar tudo ao Drive</button>
@@ -532,7 +533,10 @@
 
     <!-- DISPOSITIVOS -->
     <div class="secao">
-      <div class="secao-t">Dispositivos Médicos <span class="herd-tag">↻ herdado</span></div>
+      <div class="secao-t" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+        <span>Dispositivos Médicos <span class="herd-tag">↻ herdado</span></span>
+        <button class="btn-sec" style="font-size:.72rem;padding:4px 11px;background:#e8f4fd;border-color:#1565c0;color:#0d47a1;font-weight:700;" onclick="abrirHistoricoDispositivos(leitoAtual)">📋 DISPOSITIVOS ANTERIORES</button>
+      </div>
       <div class="secao-c">
         <p class="sub-t">Acesso Venoso Periférico (AVP)</p>
         <div id="avp-lista"></div>
@@ -547,9 +551,10 @@
             <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('AVC','f-avc-l','f-avc-d')">Trocar</button>
             <button class="btn-rem" onclick="retirarDispositivo('AVC','f-avc-l','f-avc-d','f-avc-ret','retirada-avc-wrap')">Retirar</button>
           </div>
-          <div id="retirada-avc-wrap" style="display:none;margin-top:4px;display:none;">
+          <div id="retirada-avc-wrap" style="display:none;margin-top:4px;align-items:center;gap:8px;">
             <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
-            <input type="date" id="f-avc-ret" style="max-width:140px;">
+            <input type="date" id="f-avc-ret" readonly style="max-width:140px;background:#f5f5f5;color:#555;cursor:not-allowed;">
+            <span style="font-size:.68rem;color:var(--muted);font-style:italic;">registrado automaticamente</span>
           </div>
         </div>
 
@@ -562,9 +567,10 @@
             <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('CDL','f-dial-l','f-dial-d')">Trocar</button>
             <button class="btn-rem" onclick="retirarDispositivo('CDL','f-dial-l','f-dial-d','f-dial-ret','retirada-cdl-wrap')">Retirar</button>
           </div>
-          <div id="retirada-cdl-wrap" style="display:none;">
+          <div id="retirada-cdl-wrap" style="display:none;align-items:center;gap:8px;">
             <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
-            <input type="date" id="f-dial-ret" style="max-width:140px;">
+            <input type="date" id="f-dial-ret" readonly style="max-width:140px;background:#f5f5f5;color:#555;cursor:not-allowed;">
+            <span style="font-size:.68rem;color:var(--muted);font-style:italic;">registrado automaticamente</span>
           </div>
         </div>
 
@@ -578,9 +584,10 @@
               <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('SVD','f-svd-n','f-svd-d')">Trocar</button>
               <button class="btn-rem" onclick="retirarDispositivo('SVD','f-svd-n','f-svd-d','f-svd-ret','retirada-svd-wrap')">Retirar</button>
             </div>
-            <div id="retirada-svd-wrap" style="display:none;">
+            <div id="retirada-svd-wrap" style="display:none;align-items:center;gap:8px;">
               <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
-              <input type="date" id="f-svd-ret" style="max-width:140px;">
+              <input type="date" id="f-svd-ret" readonly style="max-width:140px;background:#f5f5f5;color:#555;cursor:not-allowed;">
+              <span style="font-size:.68rem;color:var(--muted);font-style:italic;">registrado automaticamente</span>
             </div>
           </div>
           <div class="disp-wrap" id="disp-sne" data-tipo="SNE">
@@ -592,9 +599,10 @@
               <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('SNE','f-sne-n','f-sne-d')">Trocar</button>
               <button class="btn-rem" onclick="retirarDispositivo('SNE','f-sne-n','f-sne-d','f-sne-ret','retirada-sne-wrap')">Retirar</button>
             </div>
-            <div id="retirada-sne-wrap" style="display:none;">
+            <div id="retirada-sne-wrap" style="display:none;align-items:center;gap:8px;">
               <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
-              <input type="date" id="f-sne-ret" style="max-width:140px;">
+              <input type="date" id="f-sne-ret" readonly style="max-width:140px;background:#f5f5f5;color:#555;cursor:not-allowed;">
+              <span style="font-size:.68rem;color:var(--muted);font-style:italic;">registrado automaticamente</span>
             </div>
           </div>
         </div>
@@ -609,9 +617,10 @@
               <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('TOT','f-tot-n2','f-tot-d')">Trocar</button>
               <button class="btn-rem" onclick="retirarDispositivo('TOT','f-tot-n2','f-tot-d','f-tot-ret','retirada-tot-wrap')">Retirar</button>
             </div>
-            <div id="retirada-tot-wrap" style="display:none;">
+            <div id="retirada-tot-wrap" style="display:none;align-items:center;gap:8px;">
               <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
-              <input type="date" id="f-tot-ret" style="max-width:140px;">
+              <input type="date" id="f-tot-ret" readonly style="max-width:140px;background:#f5f5f5;color:#555;cursor:not-allowed;">
+              <span style="font-size:.68rem;color:var(--muted);font-style:italic;">registrado automaticamente</span>
             </div>
           </div>
           <div class="disp-wrap" id="disp-tqt" data-tipo="TQT">
@@ -623,9 +632,10 @@
               <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('TQT','f-tqt-n2','f-tqt-d')">Trocar</button>
               <button class="btn-rem" onclick="retirarDispositivo('TQT','f-tqt-n2','f-tqt-d','f-tqt-ret','retirada-tqt-wrap')">Retirar</button>
             </div>
-            <div id="retirada-tqt-wrap" style="display:none;">
+            <div id="retirada-tqt-wrap" style="display:none;align-items:center;gap:8px;">
               <label style="font-size:.74rem;color:var(--muted);">Data retirada</label>
-              <input type="date" id="f-tqt-ret" style="max-width:140px;">
+              <input type="date" id="f-tqt-ret" readonly style="max-width:140px;background:#f5f5f5;color:#555;cursor:not-allowed;">
+              <span style="font-size:.68rem;color:var(--muted);font-style:italic;">registrado automaticamente</span>
             </div>
           </div>
         </div>
@@ -959,5 +969,18 @@
      JAVASCRIPT
 ═════════════════════════════════════════════ -->
 <script src="app.js"></script>
+<!-- MODAL HISTÓRICO DE DISPOSITIVOS -->
+<div class="overlay" id="modal-hist-disp">
+  <div class="modal" style="max-width:620px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;">
+      <h3 style="color:white;margin:0;" id="hist-disp-titulo">📋 Dispositivos</h3>
+      <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-hist-disp').classList.remove('show')">×</button>
+    </div>
+    <div class="modal-body" style="padding:16px;max-height:72vh;overflow-y:auto;" id="hist-disp-body">
+      <div style="text-align:center;color:var(--muted);padding:2rem;">Carregando...</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
