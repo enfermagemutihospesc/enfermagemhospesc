@@ -239,12 +239,28 @@
         <label class="ri"><input type="radio" name="isolamento" value="Aerossóis"> Aerossóis</label>
       </div>
     </div>
-    <div class="fl"><label>Microrganismo</label>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <input type="text" id="f-microorg" placeholder="Ex: MRSA, KPC..." style="flex:1;">
-        <button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;" onclick="buscarCulturas()">🔬 Culturas</button>
+    <div class="fl"><label>Culturas Positivas</label>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+        <button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;" onclick="buscarCulturas()">🔬 Buscar na planilha</button>
+        <button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;background:#f0f4fa;" onclick="_abrirEntradaManualCultura()">✏️ Adicionar manual</button>
       </div>
-      <div id="culturas-auto" style="display:none;margin-top:5px;"></div>
+      <div id="culturas-lista" style="display:flex;flex-direction:column;gap:3px;min-height:0;"></div>
+      <div id="culturas-auto" style="display:none;margin-top:4px;"></div>
+      <!-- campo oculto mantém compatibilidade com coleta de dados e texto da evolução -->
+      <input type="text" id="f-microorg" style="display:none;">
+      <!-- entrada manual inline (colapsada) -->
+      <div id="cult-manual-inline" style="display:none;margin-top:6px;padding:10px;background:#f0f4fa;border-radius:8px;border:1px solid #d0d8e8;">
+        <div style="font-size:.76rem;font-weight:700;color:var(--azul);margin-bottom:6px;">✏️ Registrar manualmente</div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <input id="cult-inline-sito" type="text" placeholder="Sítio (ex: Hemocultura, Urinocultura, Secreção traqueal...)" style="border:1px solid #c8d4e8;border-radius:6px;padding:5px 9px;font-size:.8rem;">
+          <input id="cult-inline-mo" type="text" placeholder="Microrganismo (ex: MRSA, KPC, Candida albicans...)" style="border:1px solid #c8d4e8;border-radius:6px;padding:5px 9px;font-size:.8rem;">
+          <input id="cult-inline-sens" type="text" placeholder="Sensibilidade (opcional)" style="border:1px solid #c8d4e8;border-radius:6px;padding:5px 9px;font-size:.8rem;">
+          <div style="display:flex;gap:6px;">
+            <button onclick="_confirmarEntradaManualCultura()" class="btn" style="background:var(--azul);color:white;font-size:.78rem;padding:5px 14px;">+ Adicionar</button>
+            <button onclick="document.getElementById('cult-manual-inline').style.display='none'" class="btn btn-sec" style="font-size:.78rem;padding:5px 10px;">Cancelar</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
