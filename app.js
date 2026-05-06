@@ -3189,6 +3189,21 @@ function _calcIdadeDisplay(idDN, idSpan){
   el.textContent = i !== null ? i+' anos' : '';
 }
 
+function _calcPAM(){
+  const pas = parseFloat(document.getElementById('f-pas')?.value);
+  const pad = parseFloat(document.getElementById('f-pad')?.value);
+  const camPAM = document.getElementById('f-pam');
+  const tag    = document.getElementById('pam-auto-tag');
+  if(!isNaN(pas) && !isNaN(pad) && camPAM){
+    const pam = Math.round((pas + 2 * pad) / 3);
+    camPAM.value = pam;
+    if(tag) tag.style.display = 'inline';
+  } else if(camPAM) {
+    camPAM.value = '';
+    if(tag) tag.style.display = 'none';
+  }
+}
+
 function toggleVMI(){ const v=document.querySelector('input[name="vent"]:checked'); const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI'); document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':''); document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex'; }
 
 // ── SUGESTÃO AUTOMÁTICA DE CID-10 VIA GROQ ───────────────────────────────────
@@ -3451,7 +3466,8 @@ async function abrirForm(n) {
     setF('vmi-fr',fonte.vmi_fr);       setF('vmi-sens',fonte.vmi_sens);  setF('vmi-vt',fonte.vmi_vt);
     setF('f-spo2',fonte.spo2);         setF('f-spo2-av',fonte.spo2av);
     setF('f-fr-vmi',fonte.fr||'');     setF('f-fr-av',fonte.fr||'');
-    setF('f-pas',fonte.pas||'');       setF('f-pad',fonte.pad||'');    setF('f-pam',fonte.pam||'');  setF('f-temp',fonte.temp||'');
+    setF('f-pas',fonte.pas||'');       setF('f-pad',fonte.pad||'');    setF('f-temp',fonte.temp||'');
+    _calcPAM();
     setChecks('f-edema-loc',fonte.edemaLoc||[]);
     if(fonte.edemaGrau){ const r=document.querySelector(`input[name="edema-grau"][value="${fonte.edemaGrau}"]`); if(r) r.checked=true; }
     setChecks('f-car',fonte.car);      setF('f-fc-norm',fonte.fcNorm);  setF('f-fc-taqui',fonte.fcTaqui);  setF('f-fc-bradi',fonte.fcBradi);
