@@ -3344,6 +3344,8 @@ function limparForm(){
   document.getElementById('atb-lista').innerHTML='';
   document.getElementById('dva-outros').innerHTML='';
   document.getElementById('sedo-outros').innerHTML='';
+  const cultLista = document.getElementById('culturas-lista');
+  if(cultLista) cultLista.innerHTML='';
   // Esconde wraps de retirada e limpa datas (evita herança indevida)
   ['retirada-avc-wrap','retirada-cdl-wrap','retirada-svd-wrap','retirada-sne-wrap','retirada-tot-wrap','retirada-tqt-wrap'].forEach(id=>{
     const el = document.getElementById(id);
@@ -3425,7 +3427,16 @@ async function abrirForm(n) {
     if(fonte.morse){ ['m1','m2','m3','m4','m5','m6'].forEach((nm,i)=>{const r=document.querySelector('input[name="'+nm+'"][value="'+fonte.morse[i]+'"]');if(r)r.checked=true;}); calcM(); }
     if(fonte.pulseira)   setRadio('pulseira',   fonte.pulseira);
     if(fonte.isolamento) setRadio('isolamento', fonte.isolamento);
-    setF('f-microorg',    fonte.microorg||'');
+    // Herda culturas: reconstrói chips a partir do valor salvo
+    if(fonte.microorg){
+      // Formato salvo: "MRSA (Hemocultura); KPC (Urina)" ou texto simples legado
+      const partes = fonte.microorg.split(';').map(p=>p.trim()).filter(Boolean);
+      partes.forEach(p => {
+        const m = p.match(/^(.+?)\s*\((.+)\)$/);
+        if(m) _adicionarCultura(m[2].trim(), m[1].trim(), '', '', 'heranca');
+        else   _adicionarCultura('', p, '', '', 'heranca');
+      });
+    }
     // ── herda TUDO – turno anterior e evHoje tratados igual ──────────────────
     loadDVA('dva-l',fonte.dva);  loadDVA('sedo-l',fonte.sedo);
     if(fonte.dvaOutros&&fonte.dvaOutros.length) fonte.dvaOutros.forEach(o=>addOutraInfusao('dva-outros',o.nome,o.val));
@@ -4776,68 +4787,111 @@ function imprimirSAE(){
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// BUSCA AUTOMÁTICA DE CULTURAS AO ABRIR FORMULÁRIO ────────────────────────────
+// CULTURAS – nova lógica: registra positivas com sítio + entrada manual
+// ════════════════════════════════════════════════════════════════════════════
+const CULTURAS_SHEET_ID = '1yQHmd84BSlbAs7jb4ztN6fsy6eyZHY4wb6IcqOp0j7U';
+
+// Retorna array de culturas já registradas no campo culturas-lista
+function _getCulturasRegistradas(){
+  const lista = document.getElementById('culturas-lista');
+  if(!lista) return [];
+  return Array.from(lista.querySelectorAll('.cultura-item')).map(el => ({
+    sito: el.dataset.sito || '',
+    microorg: el.dataset.microorg || '',
+    sensibilidade: el.dataset.sens || '',
+    data: el.dataset.data || ''
+  }));
+}
+
+// Adiciona uma cultura à lista visual e ao campo f-microorg (texto composto)
+function _adicionarCultura(sito, microorg, sensibilidade, data, origem){
+  const lista = document.getElementById('culturas-lista');
+  if(!lista) return;
+  const m = (microorg||'').trim().toUpperCase();
+  const s = (sito||'').trim();
+  if(!m) return;
+
+  // Evita duplicata exata
+  const jaExiste = Array.from(lista.querySelectorAll('.cultura-item')).some(el =>
+    el.dataset.microorg === m && el.dataset.sito === s
+  );
+  if(jaExiste){ toast('Cultura já registrada'); return; }
+
+  const item = document.createElement('div');
+  item.className = 'cultura-item';
+  item.dataset.sito = s;
+  item.dataset.microorg = m;
+  item.dataset.sens = sensibilidade || '';
+  item.dataset.data = data || '';
+  item.style.cssText = 'display:flex;align-items:center;gap:6px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:5px 10px;margin-bottom:5px;flex-wrap:wrap;';
+  item.innerHTML = `
+    <span style="font-size:.8rem;font-weight:700;color:#991b1b;flex:1;">
+      🦠 ${m}${s?' <span style="font-weight:400;color:#666;font-size:.74rem;">· '+s+'</span>':''}${data?' <span style="font-weight:400;color:#888;font-size:.7rem;">'+data+'</span>':''}
+    </span>
+    ${sensibilidade?`<span style="font-size:.7rem;color:#555;background:#fff3f3;border-radius:4px;padding:1px 6px;">${sensibilidade}</span>`:''}
+    <button onclick="this.closest('.cultura-item').remove();_sincronizarMicroorg()" style="background:none;border:none;color:#991b1b;cursor:pointer;font-size:1rem;padding:0 2px;line-height:1;" title="Remover">×</button>
+  `;
+  lista.appendChild(item);
+  _sincronizarMicroorg();
+
+  // Aplica isolamento se detectado
+  if(m){
+    const cbs = document.querySelectorAll('input[name="isolamento"]');
+    cbs.forEach(cb => { if(cb.value && m.includes(cb.value.toUpperCase())) cb.checked = true; });
+  }
+  // Adiciona sensibilidade ao obs se vier da planilha
+  if(sensibilidade && origem === 'planilha'){
+    const obs = document.getElementById('f-obs');
+    if(obs){
+      const atual = obs.value.trim();
+      const linha = `Sensibilidade (${m}): ${sensibilidade.trim()}`;
+      if(!atual.includes(linha)) obs.value = (atual ? atual+'\n' : '') + linha;
+    }
+  }
+  if(origem !== 'heranca') toast('✓ Cultura registrada');
+}
+
+// Mantém f-microorg sincronizado com a lista de chips (para salvar e gerar texto)
+function _sincronizarMicroorg(){
+  const itens = _getCulturasRegistradas();
+  const val = itens.map(i => i.sito ? `${i.microorg} (${i.sito})` : i.microorg).join('; ');
+  const el = document.getElementById('f-microorg');
+  if(el) el.value = val;
+}
+
+// Busca automática ao abrir o formulário
 async function _buscarCulturasAuto(paciente, leito){
   const el = document.getElementById('culturas-auto');
   if(!el || !paciente) return;
-
   el.style.display = 'block';
   el.innerHTML = `<span style="font-size:.72rem;color:var(--muted);">🔬 Buscando culturas...</span>`;
-
   try {
     const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'culturas',
-        paciente: paciente,
-        leito: leito,
-        sheetId: CULTURAS_SHEET_ID
-      })
+      body: JSON.stringify({ action:'culturas', paciente, leito, sheetId:CULTURAS_SHEET_ID })
     });
-    const raw = await resp.text();
-    const data = JSON.parse(raw);
-
+    const data = JSON.parse(await resp.text());
     const positivos = (data.resultados||[]).filter(r =>
       r.microorg && !/negativ|contaminad|pendente/i.test(r.resultado||'')
     );
+    if(!positivos.length){ el.innerHTML=''; el.style.display='none'; return; }
 
-    if(!positivos.length){ el.style.display='none'; return; }
-
-    const chips = positivos.map(r => {
-      const microorgEsc = (r.microorg||'').replace(/'/g,"\\'");
-      const sensEsc     = (r.sensibilidade||'').replace(/'/g,"\\'");
-      const dataRes     = r.dataResultado || r.dataRecebimento || '';
-      const cultura     = r.cultura || '';
-      return `<span
-        onclick="_preencherMicroorg('${microorgEsc}','${sensEsc}')"
-        title="${cultura}${dataRes?' · '+dataRes:''} — clique para usar"
-        style="display:inline-flex;align-items:center;gap:4px;background:#fef2f2;border:1px solid #fca5a5;
-               color:#991b1b;border-radius:14px;padding:3px 10px;font-size:.72rem;font-weight:600;
-               cursor:pointer;white-space:nowrap;"
-        onmouseover="this.style.background='#fee2e2'"
-        onmouseout="this.style.background='#fef2f2'">
-        🦠 ${r.microorg}${dataRes?' <span style="font-weight:400;opacity:.7;font-size:.66rem;">'+dataRes+'</span>':''}
-      </span>`;
-    }).join('');
-
-    el.innerHTML = `
-      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">
-        <span style="font-size:.68rem;font-weight:700;color:var(--muted);white-space:nowrap;">Culturas +</span>
-        ${chips}
-        <span style="font-size:.65rem;color:var(--muted);">(clique para usar)</span>
-      </div>`;
-    el.style.display = 'block';
+    // Registra automaticamente cada positivo na lista
+    positivos.forEach(r => {
+      _adicionarCultura(r.cultura||'', r.microorg||'', r.sensibilidade||'',
+        r.dataResultado||r.dataRecebimento||'', 'planilha');
+    });
+    el.innerHTML = `<span style="font-size:.72rem;color:#1a6b3a;font-weight:600;">✓ ${positivos.length} cultura(s) positiva(s) registrada(s) da planilha</span>`;
+    setTimeout(()=>{ el.style.display='none'; }, 4000);
   } catch(e){
+    el.innerHTML = '';
     el.style.display = 'none';
     console.warn('[Culturas auto]', e);
   }
 }
 
-// BUSCA DE CULTURAS – lê a planilha RST CULTURAS via Apps Script
-// ════════════════════════════════════════════════════════════════════════════
-const CULTURAS_SHEET_ID = '1yQHmd84BSlbAs7jb4ztN6fsy6eyZHY4wb6IcqOp0j7U';
-
+// Modal completo de culturas (botão 🔬)
 async function buscarCulturas(){
   if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
   const pac = gf('f-pac').trim();
@@ -4856,76 +4910,132 @@ async function buscarCulturas(){
     const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'culturas',
-        paciente: pac,
-        leito: leitoAtual,
-        sheetId: CULTURAS_SHEET_ID
-      })
+      body: JSON.stringify({ action:'culturas', paciente:pac, leito:leitoAtual, sheetId:CULTURAS_SHEET_ID })
     });
-    const raw = await resp.text();
-    const data = JSON.parse(raw);
-
+    const data = JSON.parse(await resp.text());
     if(data.error) throw new Error(data.error);
-    if(!data.resultados || !data.resultados.length){
-      conteudo.innerHTML = `<div class="sae-aviso" style="margin:16px;">⚠️ Nenhuma cultura encontrada para <strong>${pac}</strong> nos últimos meses.<br><small>Verifique se o nome está idêntico ao da planilha.</small></div>`;
-      return;
-    }
-
-    conteudo.innerHTML = _renderCulturas(data.resultados, data.pacienteEncontrado);
+    conteudo.innerHTML = _renderCulturas(data.resultados||[], data.pacienteEncontrado, !data.resultados||!data.resultados.length);
   } catch(err){
     console.error('[Culturas]', err);
-    conteudo.innerHTML = `<div class="sae-erro" style="margin:16px;">❌ ${err.message||'Erro ao buscar culturas. Verifique a conexão e tente novamente.'}</div>`;
+    conteudo.innerHTML = _renderCulturas([], '', true);
   }
 }
 
-function _renderCulturas(resultados, pacienteEncontrado){
-  let h = `<div style="padding:12px 16px 4px;font-size:.8rem;color:var(--muted);">
-    Paciente encontrado: <strong>${pacienteEncontrado||'—'}</strong> · ${resultados.length} resultado(s)
-  </div>`;
+function _renderCulturas(resultados, pacienteEncontrado, semResultados){
+  const positivos = resultados.filter(r => r.microorg && !/negativ|contaminad/i.test(r.resultado||''));
+  const negativos = resultados.filter(r => /negativ|contaminad/i.test(r.resultado||''));
 
-  h += resultados.map(r => {
-    const isNeg = /negativ|contaminad/i.test(r.resultado||'');
-    const cor = isNeg ? '#888' : '#991b1b';
-    const bg  = isNeg ? '#f8f8f8' : '#fef2f2';
-    const borda = isNeg ? '#ddd' : '#fca5a5';
-    return `
-    <div style="margin:8px 16px;padding:12px 14px;background:${bg};border:1px solid ${borda};border-radius:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">
-        <div>
-          <span style="font-weight:700;font-size:.86rem;">${r.cultura||'—'}</span>
-          <span style="font-size:.74rem;color:var(--muted);margin-left:8px;">${r.dataResultado||r.dataRecebimento||''}</span>
-        </div>
-        ${!isNeg ? `<button onclick="_preencherMicroorg('${(r.microorg||'').replace(/'/g,"\\'")}','${(r.sensibilidade||'').replace(/'/g,"\\'")}');document.getElementById('modal-culturas').classList.remove('show')"
-          class="btn btn-sm" style="font-size:.7rem;padding:3px 10px;background:#991b1b;color:white;">
-          ✓ Usar este resultado
-        </button>` : ''}
-      </div>
-      <div style="margin-top:6px;font-size:.84rem;color:${cor};font-weight:600;">${r.resultado||'—'}</div>
-      ${r.sensibilidade ? `<div style="font-size:.76rem;color:#555;margin-top:3px;">Sensibilidade: ${r.sensibilidade}</div>` : ''}
+  let h = '';
+
+  // Cabeçalho com paciente encontrado
+  if(pacienteEncontrado){
+    h += `<div style="padding:10px 16px 2px;font-size:.78rem;color:var(--muted);">
+      Paciente: <strong>${pacienteEncontrado}</strong> · ${resultados.length} resultado(s)
     </div>`;
-  }).join('');
+  }
+
+  // Positivos
+  if(positivos.length){
+    h += `<div style="padding:8px 16px 4px;font-size:.74rem;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.04em;">🦠 Positivos</div>`;
+    h += positivos.map(r => {
+      const sito = (r.cultura||'').replace(/'/g,"\\'");
+      const mo   = (r.microorg||'').replace(/'/g,"\\'");
+      const sens = (r.sensibilidade||'').replace(/'/g,"\\'");
+      const dt   = r.dataResultado||r.dataRecebimento||'';
+      return `<div style="margin:4px 16px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
+          <div>
+            <span style="font-weight:700;font-size:.85rem;color:#991b1b;">${r.microorg||'—'}</span>
+            <span style="font-size:.74rem;color:var(--muted);margin-left:6px;">${r.cultura||''}</span>
+            ${dt?`<span style="font-size:.7rem;color:#888;margin-left:6px;">${dt}</span>`:''}
+          </div>
+          <button onclick="_adicionarCultura('${sito}','${mo}','${sens}','${dt}','modal');document.getElementById('modal-culturas').classList.remove('show')"
+            class="btn btn-sm" style="font-size:.7rem;padding:3px 10px;background:#991b1b;color:white;">
+            + Registrar
+          </button>
+        </div>
+        ${r.resultado?`<div style="margin-top:4px;font-size:.8rem;color:#991b1b;font-weight:600;">${r.resultado}</div>`:''}
+        ${r.sensibilidade?`<div style="font-size:.74rem;color:#555;margin-top:3px;">Sensibilidade: ${r.sensibilidade}</div>`:''}
+      </div>`;
+    }).join('');
+  }
+
+  // Negativos (discretos, colapsados)
+  if(negativos.length){
+    h += `<details style="margin:8px 16px 0;"><summary style="font-size:.74rem;color:var(--muted);cursor:pointer;padding:4px 0;">
+      Ver ${negativos.length} resultado(s) negativo(s) / contaminação
+    </summary>`;
+    h += negativos.map(r => `
+      <div style="margin:4px 0;padding:8px 12px;background:#f8f8f8;border:1px solid #ddd;border-radius:6px;">
+        <span style="font-weight:600;font-size:.82rem;color:#666;">${r.cultura||'—'}</span>
+        <span style="font-size:.7rem;color:#999;margin-left:6px;">${r.dataResultado||r.dataRecebimento||''}</span>
+        <div style="font-size:.78rem;color:#888;margin-top:2px;">${r.resultado||'—'}</div>
+      </div>`).join('');
+    h += `</details>`;
+  }
+
+  // Sem resultados
+  if(semResultados || !resultados.length){
+    h += `<div class="sae-aviso" style="margin:12px 16px;">
+      ⚠️ Nenhuma cultura encontrada na planilha para <strong>${gf('f-pac')}</strong>.<br>
+      <small>A planilha pode não estar atualizada. Use o campo abaixo para registrar manualmente.</small>
+    </div>`;
+  }
+
+  // Entrada manual — sempre disponível
+  h += `<div style="margin:12px 16px 4px;padding:12px;background:#f0f4fa;border-radius:8px;border:1px solid #d0d8e8;">
+    <div style="font-size:.78rem;font-weight:700;color:var(--azul);margin-bottom:8px;">✏️ Registrar manualmente</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <input id="cult-manual-sito" type="text" placeholder="Sítio (ex: Hemocultura, Urinocultura, Secreção traqueal...)"
+        style="border:1px solid #c8d4e8;border-radius:6px;padding:6px 10px;font-size:.82rem;width:100%;box-sizing:border-box;">
+      <input id="cult-manual-mo" type="text" placeholder="Microrganismo (ex: MRSA, KPC, Candida albicans...)"
+        style="border:1px solid #c8d4e8;border-radius:6px;padding:6px 10px;font-size:.82rem;width:100%;box-sizing:border-box;">
+      <input id="cult-manual-sens" type="text" placeholder="Sensibilidade (opcional)"
+        style="border:1px solid #c8d4e8;border-radius:6px;padding:6px 10px;font-size:.82rem;width:100%;box-sizing:border-box;">
+      <button onclick="_registrarCulturaManual()" class="btn" style="background:var(--azul);color:white;font-size:.8rem;padding:6px 16px;align-self:flex-start;">
+        + Adicionar
+      </button>
+    </div>
+  </div>`;
 
   return h;
 }
 
+function _registrarCulturaManual(){
+  const sito = (document.getElementById('cult-manual-sito')?.value||'').trim();
+  const mo   = (document.getElementById('cult-manual-mo')?.value||'').trim();
+  const sens = (document.getElementById('cult-manual-sens')?.value||'').trim();
+  if(!mo){ toast('Informe o microrganismo', true); return; }
+  _adicionarCultura(sito, mo, sens, '', 'manual');
+  document.getElementById('modal-culturas').classList.remove('show');
+}
+
+// Compatibilidade: mantém _preencherMicroorg para qualquer chamada legada
 function _preencherMicroorg(microorg, sensibilidade){
-  if(microorg){
-    setF('f-microorg', microorg.toUpperCase());
-    // Marca o checkbox de isolamento correspondente se não estiver marcado
-    const cbs = document.querySelectorAll('input[name="isolamento"]');
-    cbs.forEach(cb => { if(cb.value && microorg.toUpperCase().includes(cb.value.toUpperCase())) cb.checked = true; });
-    // Também preenche o campo obs com a sensibilidade se existir
-    if(sensibilidade){
-      const obs = document.getElementById('f-obs');
-      if(obs){
-        const atual = obs.value.trim();
-        const linha = 'Perfil de sensibilidade: '+sensibilidade.trim();
-        if(!atual.includes(linha)) obs.value = (atual ? atual+'\n' : '') + linha;
-      }
-    }
-    toast('✓ Microrganismo preenchido');
+  _adicionarCultura('', microorg, sensibilidade, '', 'legado');
+}
+
+// Entrada manual inline (botão no formulário, fora do modal)
+function _abrirEntradaManualCultura(){
+  const wrap = document.getElementById('cult-manual-inline');
+  if(!wrap) return;
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+  if(wrap.style.display === 'block'){
+    const inp = document.getElementById('cult-inline-mo');
+    if(inp) inp.focus();
   }
+}
+
+function _confirmarEntradaManualCultura(){
+  const sito = (document.getElementById('cult-inline-sito')?.value||'').trim();
+  const mo   = (document.getElementById('cult-inline-mo')?.value||'').trim();
+  const sens = (document.getElementById('cult-inline-sens')?.value||'').trim();
+  if(!mo){ toast('Informe o microrganismo', true); return; }
+  _adicionarCultura(sito, mo, sens, '', 'manual');
+  document.getElementById('cult-inline-sito').value = '';
+  document.getElementById('cult-inline-mo').value = '';
+  document.getElementById('cult-inline-sens').value = '';
+  document.getElementById('cult-manual-inline').style.display = 'none';
 }
 
 // ════════════════════════════════════════════════════════════════════════════
