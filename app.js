@@ -4925,23 +4925,24 @@ function abrirModalExportarRelatorio(){
 function _coletarDadosRelatorio(periodo, secoes){
   const { admissoes, altas, dispLog, evolucoes, nas } = _indCache;
   const dados = { periodo: periodo.rotulo, secoes: {} };
+  const pct = (n, t) => t > 0 ? +(n*100/t).toFixed(1) : null;
+  const med = arr => arr.length ? +(arr.reduce((s,x)=>s+x,0)/arr.length).toFixed(1) : null;
 
   // ── OCUPAÇÃO ──────────────────────────────────────────────────────────────
   if(secoes.includes('ocupacao')){
     const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
     const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
     const diasPeriodo = Math.round((periodo.fim - periodo.inicio)/86400000) + 1;
-    // Pacientes-dia via evoluções (mesma lógica do indicador)
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const turnos = new Set();
     evPer.forEach(e => { if(e.leito && e.data && e.turno) turnos.add(e.leito+'|'+e.data+'|'+e.turno); });
     const pacientesDia = Math.round(turnos.size * 0.5 * 10) / 10;
+    const perms = altasPer.map(a => _diasEntre(a.admUTI, a.dataAlta)).filter(d => d !== null);
     dados.secoes.ocupacao = {
-      admissoes: admPer.length,
-      altas: altasPer.length,
-      taxaOcupacao: TOTAL*diasPeriodo > 0 ? +(pacientesDia*100/(TOTAL*diasPeriodo)).toFixed(1) : null,
+      admissoes: admPer.length, altas: altasPer.length,
+      taxaOcupacao: TOTAL*diasPeriodo > 0 ? pct(pacientesDia, TOTAL*diasPeriodo) : null,
       giroLeito: TOTAL > 0 ? +(admPer.length/TOTAL).toFixed(1) : null,
-      diasPeriodo, pacientesDia
+      permanenciaMedia: med(perms), diasPeriodo, pacientesDia, leitos: TOTAL
     };
   }
 
@@ -4951,11 +4952,13 @@ function _coletarDadosRelatorio(periodo, secoes){
     const freq = {};
     altasPer.forEach(a => { const t = a.tipoAlta||'Não informado'; freq[t]=(freq[t]||0)+1; });
     const obitos = (freq['Óbito']||0) + (freq['Óbito por causa básica']||0) + (freq['Óbito 24h']||0);
+    const ob24h = freq['Óbito 24h']||0;
+    const destinos = {}; altasPer.forEach(a=>{if(a.destino){destinos[a.destino]=(destinos[a.destino]||0)+1;}});
     dados.secoes.saida = {
-      totalAltas: altasPer.length,
-      obitos,
-      taxaLetali: altasPer.length > 0 ? +(obitos*100/altasPer.length).toFixed(1) : null,
-      tiposAlta: freq
+      totalAltas: altasPer.length, obitos, ob24h,
+      taxaLetali: pct(obitos, altasPer.length),
+      taxaOb24h: pct(ob24h, altasPer.length),
+      tiposAlta: freq, topDestinos: Object.entries(destinos).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>({k,v}))
     };
   }
 
@@ -4965,18 +4968,53 @@ function _coletarDadosRelatorio(periodo, secoes){
     const idades = [];
     admPer.forEach(a => {
       if(!a.dn || !a.admUTI) return;
-      const dn = _dataLocal(a.dn); const adm = _dataLocal(a.admUTI);
+      const dn = _dataLocal(a.dn), adm = _dataLocal(a.admUTI);
       if(dn && adm){ const i = Math.floor((adm-dn)/(365.25*86400000)); if(i>=0 && i<120) idades.push(i); }
     });
     const masc = admPer.filter(a => a.sexo==='M').length;
     const fem  = admPer.filter(a => a.sexo==='F').length;
+    const origens = {}; admPer.forEach(a=>{const k=a.origem||'Não informado'; origens[k]=(origens[k]||0)+1;});
+    const faixas = {'< 18':0,'18–40':0,'41–60':0,'61–80':0,'> 80':0};
+    idades.forEach(i=>{ if(i<18)faixas['< 18']++; else if(i<=40)faixas['18–40']++; else if(i<=60)faixas['41–60']++; else if(i<=80)faixas['61–80']++; else faixas['> 80']++; });
     dados.secoes.demograficos = {
-      totalPacientes: admPer.length,
-      idadeMedia: idades.length ? +(idades.reduce((s,x)=>s+x,0)/idades.length).toFixed(1) : null,
+      totalPacientes: admPer.length, idadeMedia: med(idades),
       idadeMin: idades.length ? Math.min(...idades) : null,
       idadeMax: idades.length ? Math.max(...idades) : null,
-      masculino: masc, feminino: fem,
-      origens: (() => { const o={}; admPer.forEach(a=>{const k=a.origem||'Não informado'; o[k]=(o[k]||0)+1;}); return o; })()
+      masculino: masc, feminino: fem, origens, faixasEtarias: faixas
+    };
+  }
+
+  // ── SAZONALIDADE ─────────────────────────────────────────────────────────
+  if(secoes.includes('sazonalidade')){
+    const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
+    const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+    const porMes = {}; admPer.forEach(a=>{ if(a.admUTI){ const m=a.admUTI.slice(0,7); porMes[m]=(porMes[m]||0)+1; } });
+    const mortPorMes = {}, totPorMes = {};
+    altasPer.forEach(a=>{ if(a.dataAlta){ const m=a.dataAlta.slice(0,7); totPorMes[m]=(totPorMes[m]||0)+1; if(a.tipoAlta==='Óbito') mortPorMes[m]=(mortPorMes[m]||0)+1; } });
+    const meses = Object.keys(porMes).sort();
+    dados.secoes.sazonalidade = {
+      meses, admPorMes: porMes,
+      mediaAdmMes: meses.length ? +(admPer.length/meses.length).toFixed(1) : null,
+      taxaMortPorMes: Object.fromEntries(Object.keys(totPorMes).map(k=>[k, pct(mortPorMes[k]||0, totPorMes[k])]))
+    };
+  }
+
+  // ── CLÍNICOS ─────────────────────────────────────────────────────────────
+  if(secoes.includes('clinicos')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const total = evPer.length;
+    const comBraden = evPer.filter(e => e.bradScore && e.bradScore !== '–').length;
+    const comMorse  = evPer.filter(e => e.morseScore && e.morseScore !== '–' && e.morseScore !== '0').length;
+    dados.secoes.clinicos = {
+      totalEvolucoes: total,
+      isolContato:   evPer.filter(e=>e.isolamento==='Contato').length,
+      isolGoticulas: evPer.filter(e=>e.isolamento==='Gotículas').length,
+      isolAerossois: evPer.filter(e=>e.isolamento==='Aerossóis').length,
+      isolVigilancia:evPer.filter(e=>e.isolamento==='Vigilância').length,
+      lppAlto: evPer.filter(e=>parseInt(e.bradScore)>0&&parseInt(e.bradScore)<=11).length,
+      quedaAlto: evPer.filter(e=>parseInt(e.morseScore)>=45).length,
+      pulseira: evPer.filter(e=>e.pulseira==='Sim').length,
+      comBraden, comMorse
     };
   }
 
@@ -4984,15 +5022,18 @@ function _coletarDadosRelatorio(periodo, secoes){
   if(secoes.includes('ventilacao')){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const total = evPer.length;
-    const diasVMI = evPer.filter(e => e.vent&&(e.vent.includes('TOT')||e.vent.includes('TQT'))).length;
+    const diasVMI = evPer.filter(e=>e.vent&&(e.vent.includes('TOT')||e.vent.includes('TQT'))).length;
     const fio2s = evPer.map(e=>parseFloat(e.vmi_fio2)).filter(n=>!isNaN(n)&&n>0&&n<=100);
-    const modos = {}; evPer.forEach(e=>{ if(e.vmi_modo){ modos[e.vmi_modo]=(modos[e.vmi_modo]||0)+1; } });
+    const peeps = evPer.map(e=>parseFloat(e.vmi_peep)).filter(n=>!isNaN(n)&&n>0);
+    const frs   = evPer.map(e=>parseFloat(e.vmi_fr)).filter(n=>!isNaN(n)&&n>0);
+    const modos = {}; evPer.forEach(e=>{ if(e.vmi_modo) modos[e.vmi_modo]=(modos[e.vmi_modo]||0)+1; });
+    const oxig  = {}; evPer.forEach(e=>{ if(e.vent) oxig[e.vent]=(oxig[e.vent]||0)+1; });
     dados.secoes.ventilacao = {
-      totalEvolucoes: total,
-      diasVMI,
-      taxaVMI: total>0 ? +(diasVMI*100/total).toFixed(1) : null,
-      fio2Medio: fio2s.length ? +(fio2s.reduce((s,x)=>s+x,0)/fio2s.length).toFixed(1) : null,
-      modos
+      totalEvolucoes: total, diasVMI,
+      taxaVMI: pct(diasVMI, total), fio2Medio: med(fio2s),
+      peepMedio: med(peeps), frMedia: med(frs),
+      modos: Object.entries(modos).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>({k,v})),
+      oxigenoterapia: Object.entries(oxig).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>({k,v}))
     };
   }
 
@@ -5000,35 +5041,166 @@ function _coletarDadosRelatorio(periodo, secoes){
   if(secoes.includes('dispositivos')){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const total = evPer.length;
-    const prev = (campo) => total>0 ? +(evPer.filter(e=>e[campo]).length*100/total).toFixed(1) : null;
+    const diasPac = new Set(evPer.map(e=>e.leito+'|'+e.data)).size;
+    const cv = campo => evPer.filter(e=>e[campo]).length;
+    const retiPer = dispLog.filter(d => _dentroPeriodo(d.data_retirada, periodo));
+    const tempoMedio = tipo => {
+      const arr = retiPer.filter(r=>r.tipo===tipo&&r.data_instalacao&&r.data_retirada).map(r=>_diasEntre(r.data_instalacao,r.data_retirada)).filter(d=>d!==null);
+      return med(arr);
+    };
+    const qtdAVPs = evPer.reduce((s,e)=>s+((e.avps||[]).filter(a=>a.local).length),0);
     dados.secoes.dispositivos = {
-      totalEvolucoes: total,
-      prevAVC: prev('avc_l'), prevCDL: prev('dial_l'),
-      prevSVD: prev('svd_n'), prevSNE: prev('sne_n'),
-      prevTOT: prev('tot_n'), prevTQT: prev('tqt_n'),
-      totalRetiradas: dispLog.filter(d => _dentroPeriodo(d.data_retirada, periodo)).length
+      totalEvolucoes: total, diasPaciente: diasPac,
+      prevAVC: pct(cv('avc_l'),total), prevCDL: pct(cv('dial_l'),total),
+      prevSVD: pct(cv('svd_n'),total), prevSNE: pct(cv('sne_n'),total),
+      prevTOT: pct(cv('tot_n'),total), prevTQT: pct(cv('tqt_n'),total),
+      diasAVC: cv('avc_l'), diasCDL: cv('dial_l'), diasSVD: cv('svd_n'),
+      diasSNE: cv('sne_n'), diasTOT: cv('tot_n'), diasTQT: cv('tqt_n'),
+      taxaAVC: pct(cv('avc_l'),diasPac), taxaCDL: pct(cv('dial_l'),diasPac),
+      taxaSVD: pct(cv('svd_n'),diasPac), taxaSNE: pct(cv('sne_n'),diasPac),
+      taxaTOT: pct(cv('tot_n'),diasPac), taxaTQT: pct(cv('tqt_n'),diasPac),
+      totalAVPs: qtdAVPs, totalRetiradas: retiPer.length,
+      tempoMedioAVC: tempoMedio('AVC'), tempoMedioCDL: tempoMedio('CDL'),
+      tempoMedioSVD: tempoMedio('SVD'), tempoMedioTOT: tempoMedio('TOT')
+    };
+  }
+
+  // ── INFUSÕES ─────────────────────────────────────────────────────────────
+  if(secoes.includes('infusoes')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const total = evPer.length;
+    const comDVA = evPer.filter(e=>(e.dva&&Object.values(e.dva).some(v=>v.checked))||(e.dvaOutros||[]).length>0).length;
+    const comSedo= evPer.filter(e=>(e.sedo&&Object.values(e.sedo).some(v=>v.checked))||(e.sedoOutros||[]).length>0).length;
+    const dvaCount = {}, sedoCount = {};
+    evPer.forEach(e=>{
+      if(e.dva) Object.entries(e.dva).forEach(([k,v])=>{if(v.checked) dvaCount[k]=(dvaCount[k]||0)+1;});
+      (e.dvaOutros||[]).forEach(o=>{if(o.nome){const n=o.nome.trim().toUpperCase(); dvaCount[n]=(dvaCount[n]||0)+1;}});
+      if(e.sedo) Object.entries(e.sedo).forEach(([k,v])=>{if(v.checked) sedoCount[k]=(sedoCount[k]||0)+1;});
+      (e.sedoOutros||[]).forEach(o=>{if(o.nome){const n=o.nome.trim().toUpperCase(); sedoCount[n]=(sedoCount[n]||0)+1;}});
+    });
+    dados.secoes.infusoes = {
+      totalEvolucoes: total, comDVA, comSedo,
+      taxaDVA: pct(comDVA, total), taxaSedo: pct(comSedo, total),
+      topDVA:  Object.entries(dvaCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>({k,v})),
+      topSedo: Object.entries(sedoCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>({k,v}))
     };
   }
 
   // ── ANTIMICROBIANOS ───────────────────────────────────────────────────────
   if(secoes.includes('atbs')){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
-    const freq = {}; const total = evPer.length;
+    const total = evPer.length;
+    const freq = {};
     evPer.forEach(e => { (e.atbs||[]).forEach(a => { if(a.nome){ const k=a.nome.trim().toUpperCase(); freq[k]=(freq[k]||0)+1; } }); });
     const comATB = evPer.filter(e => e.atbs && e.atbs.some(a=>a.nome)).length;
-    const top5 = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([nome,n])=>({nome,n}));
-    dados.secoes.atbs = { totalEvolucoes: total, comATB, taxaATB: total>0?+(comATB*100/total).toFixed(1):null, top5 };
+    const microCount = {};
+    evPer.forEach(e=>{ if(e.microorg){ const k=e.microorg.trim().toUpperCase(); microCount[k]=(microCount[k]||0)+1; } });
+    dados.secoes.atbs = {
+      totalEvolucoes: total, comATB, taxaATB: pct(comATB, total),
+      top5: Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([nome,n])=>({nome,n})),
+      topMicroorg: Object.entries(microCount).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>({k,v}))
+    };
   }
 
   // ── NAS ───────────────────────────────────────────────────────────────────
   if(secoes.includes('nas')){
     const nasPer = nas.filter(n => _dentroPeriodo(n.data, periodo));
     const totais = nasPer.map(n=>parseFloat(n.total)).filter(n=>!isNaN(n)&&n>0);
+    const evPer  = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const evKeys = new Set(evPer.map(e=>`${e.leito}|${e.turno}|${e.data}`));
+    const nasKeys= new Set(nasPer.map(n=>`${n.leito}|${n.turno}|${n.data}`));
+    const comAmbos = Array.from(evKeys).filter(k=>nasKeys.has(k)).length;
+    const diurno = nasPer.filter(n=>n.turno==='DIURNO').map(n=>parseFloat(n.total)).filter(n=>!isNaN(n));
+    const noturno= nasPer.filter(n=>n.turno==='NOTURNO').map(n=>parseFloat(n.total)).filter(n=>!isNaN(n));
+    const porTurno = {};
+    nasPer.forEach(n=>{ const k=n.data+'|'+n.turno; if(!porTurno[k]) porTurno[k]=0; porTurno[k]+=parseFloat(n.total)||0; });
+    const sobrecarga = Object.values(porTurno).filter(t=>t>=100*TOTAL).length;
     dados.secoes.nas = {
-      registros: nasPer.length,
-      mediaNAS: totais.length ? +(totais.reduce((s,x)=>s+x,0)/totais.length).toFixed(1) : null,
-      maxNAS: totais.length ? Math.max(...totais) : null,
-      minNAS: totais.length ? Math.min(...totais) : null
+      registros: nasPer.length, mediaNAS: med(totais),
+      maxNAS: totais.length ? +Math.max(...totais).toFixed(1) : null,
+      minNAS: totais.length ? +Math.min(...totais).toFixed(1) : null,
+      medDiurno: med(diurno), medNoturno: med(noturno),
+      coberturaReg: comAmbos, coberturaTot: evKeys.size,
+      coberturaPct: pct(comAmbos, evKeys.size), sobrecarga
+    };
+  }
+
+  // ── NUTRIÇÃO ─────────────────────────────────────────────────────────────
+  if(secoes.includes('nutricao')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const total = evPer.length;
+    dados.secoes.nutricao = {
+      totalEvolucoes: total,
+      sne:  evPer.filter(e=>e.dieta==='SNE').length,
+      soe:  evPer.filter(e=>e.dieta==='SOE').length,
+      oral: evPer.filter(e=>e.dieta==='Oral').length,
+      npt:  evPer.filter(e=>e.dieta==='NPT').length,
+      jejum:evPer.filter(e=>e.dieta==='Jejum/Zero').length
+    };
+  }
+
+  // ── NEUROLÓGICOS ─────────────────────────────────────────────────────────
+  if(secoes.includes('neuro')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const total = evPer.length;
+    const glasgows = evPer.map(e=>parseInt(e.glas)).filter(n=>!isNaN(n)&&n>=3&&n<=15);
+    dados.secoes.neuro = {
+      totalEvolucoes: total,
+      glasgowMedio: med(glasgows), comGlasgow: glasgows.length,
+      comatosos: evPer.filter(e=>(e.neuro||[]).includes('Comatoso')).length,
+      sedacaoProf: evPer.filter(e=>{ const r=parseInt(e.rass); return !isNaN(r)&&r<=-3; }).length
+    };
+  }
+
+  // ── OPERACIONAIS ─────────────────────────────────────────────────────────
+  if(secoes.includes('operacionais')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const nasPer = nas.filter(n => _dentroPeriodo(n.data, periodo));
+    const evKeys = new Set(evPer.map(e=>`${e.leito}|${e.turno}|${e.data}`));
+    const nasKeys= new Set(nasPer.map(n=>`${n.leito}|${n.turno}|${n.data}`));
+    const comAmbos = Array.from(evKeys).filter(k=>nasKeys.has(k)).length;
+    const autores = {}; evPer.forEach(e=>{ if(e.autor){ autores[e.autor]=(autores[e.autor]||0)+1; } });
+    dados.secoes.operacionais = {
+      evolucoes: evKeys.size, nasRegistros: nasKeys.size,
+      coberturaNAS: pct(comAmbos, evKeys.size),
+      topAutores: Object.entries(autores).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>({k,v}))
+    };
+  }
+
+  // ── CRUZAMENTOS ──────────────────────────────────────────────────────────
+  if(secoes.includes('cruzamentos')){
+    const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const porOrigem = {};
+    altasPer.forEach(a=>{
+      const o = a.origem||'Não informado';
+      if(!porOrigem[o]) porOrigem[o]={total:0,obitos:0};
+      porOrigem[o].total++;
+      if(a.tipoAlta==='Óbito') porOrigem[o].obitos++;
+    });
+    const gravMax = evPer.filter(e=>{
+      const temDVA=(e.dva&&Object.values(e.dva).some(v=>v.checked))||(e.dvaOutros||[]).length>0;
+      const temVMI=e.vent&&(e.vent.includes('TOT')||e.vent.includes('TQT'));
+      const temATB=(e.atbs||[]).some(a=>a.nome&&a.nome.trim());
+      return temDVA&&temVMI&&temATB;
+    }).length;
+    dados.secoes.cruzamentos = {
+      totalAltas: altasPer.length,
+      gravMax, taxaGravMax: pct(gravMax, evPer.length),
+      mortPorOrigem: Object.entries(porOrigem).map(([origem,v])=>({origem, total:v.total, obitos:v.obitos, taxa: pct(v.obitos,v.total)})).sort((a,b)=>b.taxa-a.taxa)
+    };
+  }
+
+  // ── SAE/NANDA ─────────────────────────────────────────────────────────────
+  if(secoes.includes('sae_nanda')){
+    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const comSAE = evPer.filter(e => e.sae && e.sae.diagnosticos && e.sae.diagnosticos.length);
+    const freqDx = {};
+    comSAE.forEach(e => { e.sae.diagnosticos.forEach(dx => { if(dx.titulo_nanda){ const k=dx.titulo_nanda.trim(); freqDx[k]=(freqDx[k]||0)+1; } }); });
+    dados.secoes.sae_nanda = {
+      totalEvolucoes: evPer.length, comSAE: comSAE.length,
+      taxaSAE: pct(comSAE.length, evPer.length),
+      top5: Object.entries(freqDx).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([dx,n])=>({dx,n}))
     };
   }
 
@@ -5045,14 +5217,27 @@ function _coletarDadosRelatorio(periodo, secoes){
     dados.secoes.diagnosticos = { totalComCID: Object.values(freq).reduce((s,x)=>s+x,0), top10 };
   }
 
-  // ── SAE/NANDA ─────────────────────────────────────────────────────────────
-  if(secoes.includes('sae_nanda')){
-    const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
-    const comSAE = evPer.filter(e => e.sae && e.sae.diagnosticos && e.sae.diagnosticos.length);
-    const freqDx = {};
-    comSAE.forEach(e => { e.sae.diagnosticos.forEach(dx => { if(dx.titulo_nanda){ const k=dx.titulo_nanda.trim(); freqDx[k]=(freqDx[k]||0)+1; } }); });
-    const top5 = Object.entries(freqDx).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([dx,n])=>({dx,n}));
-    dados.secoes.sae_nanda = { totalEvolucoes: evPer.length, comSAE: comSAE.length, top5 };
+  // ── IRAS / BUNDLES ────────────────────────────────────────────────────────
+  if(secoes.includes('iras')){
+    const checklists = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(!k||!k.startsWith('uti_iras_')) continue;
+      try{ const v=JSON.parse(localStorage.getItem(k)); if(v&&_dentroPeriodo(v.data||k.split('_').pop(),periodo)) checklists.push(v); }catch(e){}
+    }
+    const bundleStats = {};
+    IRAS_BUNDLES.forEach(b=>{ bundleStats[b.id]={titulo:b.titulo, sim:0, respondidos:0, total:0, n:0}; });
+    checklists.forEach(ck=>{
+      if(!ck.scores) return;
+      IRAS_BUNDLES.forEach(b=>{ const sc=ck.scores[b.id]; if(!sc) return; bundleStats[b.id].sim+=sc.sim; bundleStats[b.id].respondidos+=sc.respondidos; bundleStats[b.id].total+=sc.total; bundleStats[b.id].n++; });
+    });
+    dados.secoes.iras = {
+      totalChecklists: checklists.length,
+      bundles: Object.entries(bundleStats).map(([id,st])=>({
+        id, titulo:st.titulo, n:st.n,
+        aderencia: st.respondidos>0 ? pct(st.sim, st.respondidos) : null
+      })).filter(b=>b.n>0)
+    };
   }
 
   return dados;
@@ -5115,74 +5300,262 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
-    const W = 210, margem = 18, larg = W - 2*margem;
-    let y = margem;
+    const W = 210, M = 18, L = W - 2*M;
+    let y = M;
 
-    // Cabeçalho
-    doc.setFillColor(26, 107, 58);
-    doc.rect(0, 0, W, 28, 'F');
-    doc.setTextColor(255,255,255);
-    doc.setFont('helvetica','bold'); doc.setFontSize(14);
-    doc.text(titulo, margem, 12);
-    doc.setFont('helvetica','normal'); doc.setFontSize(9);
-    doc.text('Hospital dos Pescadores · UTI Adulto · '+periodoRotulo, margem, 20);
-    doc.setTextColor(0,0,0);
-    y = 36;
-
-    // Aviso de IA
-    doc.setFillColor(255,243,205);
-    doc.rect(margem, y, larg, 8, 'F');
-    doc.setFontSize(7.5); doc.setTextColor(133,100,4);
-    doc.text('⚠ Narrativa gerada por inteligência artificial (Groq/Llama). Revisar antes de uso oficial.', margem+2, y+5);
-    doc.setTextColor(0,0,0);
-    y += 12;
-
-    // Narrativa
-    doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    doc.text('Análise Narrativa', margem, y); y += 6;
-    doc.setFont('helvetica','normal'); doc.setFontSize(9);
-    const linhas = doc.splitTextToSize(narrativa, larg);
-    linhas.forEach(l => {
-      if(y > 270){ doc.addPage(); y = margem; }
-      doc.text(l, margem, y); y += 5;
-    });
-    y += 4;
-
-    // KPIs por seção
-    const secNomes = {
-      ocupacao:'Ocupação', saida:'Saída/Mortalidade', demograficos:'Perfil Demográfico',
-      ventilacao:'Ventilação Mecânica', dispositivos:'Dispositivos Invasivos',
-      atbs:'Antimicrobianos', nas:'NAS', diagnosticos:'Diagnósticos/CID', sae_nanda:'SAE/NANDA'
+    const novaPagSe = (min=30) => { if(y > 297-min){ doc.addPage(); y = M; } };
+    const secTitulo = (nome, cor=[13,71,161]) => {
+      novaPagSe(16);
+      doc.setFillColor(...cor); doc.rect(M, y, L, 8, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
+      doc.text(nome, M+3, y+5.5); doc.setTextColor(0,0,0); y += 11;
     };
-    for(const [sec, secDados] of Object.entries(dados.secoes||{})){
-      if(y > 250){ doc.addPage(); y = margem; }
-      // Título da seção
-      doc.setFillColor(234,245,238);
-      doc.rect(margem, y, larg, 7, 'F');
-      doc.setFont('helvetica','bold'); doc.setFontSize(10);
-      doc.text(secNomes[sec]||sec, margem+2, y+5);
-      y += 10;
-      // KPIs em grid 2 colunas
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-      const kpis = _kpisParaPDF(sec, secDados);
-      kpis.forEach((kpi, i) => {
-        const col = i%2 === 0 ? margem : margem + larg/2 + 2;
-        if(i%2 === 0 && i > 0) y += 7;
-        doc.setFont('helvetica','bold'); doc.text(kpi.v, col, y);
-        doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
-        doc.text(kpi.label, col + doc.getTextWidth(kpi.v) + 2, y);
-        doc.setTextColor(0,0,0);
+    const linha = (label, valor, unidade='', destaque=false) => {
+      novaPagSe(7);
+      doc.setFont('helvetica', destaque ? 'bold' : 'normal'); doc.setFontSize(8.5);
+      doc.setTextColor(80,80,80); doc.text(label+':', M+2, y);
+      doc.setFont('helvetica','bold'); doc.setTextColor(destaque ? 26:0, destaque ? 107:0, destaque ? 58:0);
+      doc.text(String(valor ?? '–')+(unidade?' '+unidade:''), M+70, y);
+      doc.setTextColor(0,0,0); y += 5.5;
+    };
+    const tabela = (cabecalho, linhas, colunas) => {
+      novaPagSe(10);
+      const cw = colunas || [80, 35, 30];
+      // cabeçalho
+      doc.setFillColor(240,240,240); doc.rect(M, y, L, 6, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(60,60,60);
+      let cx = M+2;
+      cabecalho.forEach((c,i)=>{ doc.text(c, cx, y+4); cx += cw[i]; });
+      doc.setTextColor(0,0,0); y += 7;
+      // linhas
+      linhas.forEach((row,ri)=>{
+        novaPagSe(7);
+        if(ri%2===0){ doc.setFillColor(250,250,250); doc.rect(M, y-4, L, 5.5, 'F'); }
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); cx = M+2;
+        row.forEach((cell,i)=>{ doc.text(String(cell??'–').substring(0,38), cx, y); cx += cw[i]; });
+        y += 5.5;
       });
-      if(kpis.length % 2 !== 0) y += 7;
-      y += 5;
+      y += 3;
+    };
+
+    // ── CAPA ─────────────────────────────────────────────────────────────────
+    doc.setFillColor(26,107,58); doc.rect(0,0,W,32,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
+    doc.text(titulo, M, 13);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.text('Hospital dos Pescadores · UTI Adulto · '+periodoRotulo, M, 22);
+    doc.text('Gerado em '+new Date().toLocaleDateString('pt-BR')+' · Sistema UTI HOSPESC', M, 29);
+    doc.setTextColor(0,0,0); y = 40;
+
+    // ── AVISO IA ─────────────────────────────────────────────────────────────
+    if(narrativa){
+      doc.setFillColor(255,243,205); doc.rect(M, y, L, 7,'F');
+      doc.setFontSize(7.5); doc.setTextColor(133,100,4);
+      doc.text('\u26A0 Narrativa gerada por IA (Groq/Llama). Revise antes do uso oficial.', M+2, y+4.5);
+      doc.setTextColor(0,0,0); y += 10;
+
+      // ── NARRATIVA ────────────────────────────────────────────────────────────
+      secTitulo('Análise Narrativa', [26,107,58]);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.splitTextToSize(narrativa, L).forEach(l=>{ novaPagSe(6); doc.text(l, M, y); y += 5; });
+      y += 4;
     }
 
-    // Rodapé
+    const d = dados.secoes || {};
+
+    // ── OCUPAÇÃO ─────────────────────────────────────────────────────────────
+    if(d.ocupacao){ const s=d.ocupacao;
+      secTitulo('Ocupação');
+      linha('Leitos operacionais', s.leitos);
+      linha('Admissões no período', s.admissoes);
+      linha('Altas no período', s.altas);
+      linha('Pacientes-dia', s.pacientesDia);
+      linha('Taxa de ocupação', s.taxaOcupacao, '%', true);
+      linha('Giro de leito', s.giroLeito, 'adm/leito');
+      linha('Permanência média', s.permanenciaMedia, 'dias');
+    }
+
+    // ── SAÍDA / MORTALIDADE ───────────────────────────────────────────────────
+    if(d.saida){ const s=d.saida;
+      secTitulo('Saída / Mortalidade');
+      linha('Total de altas', s.totalAltas);
+      linha('Óbitos totais', s.obitos, '', true);
+      linha('Taxa de letalidade', s.taxaLetali, '%', true);
+      linha('Óbitos em 24h', s.ob24h);
+      linha('Taxa de óbito em 24h', s.taxaOb24h, '%');
+      if(s.tiposAlta && Object.keys(s.tiposAlta).length){
+        y += 2;
+        tabela(['Tipo de Alta','Qtd'],[...Object.entries(s.tiposAlta).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v])],[110,20]);
+      }
+    }
+
+    // ── DEMOGRÁFICOS ──────────────────────────────────────────────────────────
+    if(d.demograficos){ const s=d.demograficos;
+      secTitulo('Perfil Demográfico');
+      linha('Total de pacientes', s.totalPacientes);
+      linha('Idade média', s.idadeMedia, 'anos', true);
+      linha('Amplitude etária', `${s.idadeMin ?? '–'} a ${s.idadeMax ?? '–'}`, 'anos');
+      linha('Masculino', s.masculino); linha('Feminino', s.feminino);
+      if(s.faixasEtarias){
+        y += 2;
+        tabela(['Faixa etária','Pacientes'],[...Object.entries(s.faixasEtarias).map(([k,v])=>[k,v])],[100,30]);
+      }
+      if(s.origens && Object.keys(s.origens).length){
+        tabela(['Origem','Pacientes'],[...Object.entries(s.origens).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v])],[110,20]);
+      }
+    }
+
+    // ── SAZONALIDADE ─────────────────────────────────────────────────────────
+    if(d.sazonalidade){ const s=d.sazonalidade;
+      secTitulo('Sazonalidade');
+      linha('Meses com admissões', s.meses?.length);
+      linha('Média de admissões/mês', s.mediaAdmMes);
+      if(s.admPorMes && Object.keys(s.admPorMes).length){
+        y += 2;
+        tabela(['Mês','Adm','Mortalidade (%)'],
+          s.meses.map(m=>[m, s.admPorMes[m]||0, s.taxaMortPorMes?.[m]??'–']),
+          [55,30,45]);
+      }
+    }
+
+    // ── CLÍNICOS ─────────────────────────────────────────────────────────────
+    if(d.clinicos){ const s=d.clinicos;
+      secTitulo('Indicadores Clínicos');
+      linha('Evoluções no período', s.totalEvolucoes);
+      linha('Isolamento de contato', s.isolContato); linha('Isolamento gotículas', s.isolGoticulas);
+      linha('Isolamento aerossóis', s.isolAerossois); linha('Vigilância', s.isolVigilancia);
+      linha('Braden avaliados', s.comBraden); linha('Risco alto LPP (Braden ≤11)', s.lppAlto, '', true);
+      linha('Morse avaliados', s.comMorse); linha('Risco alto queda (Morse ≥45)', s.quedaAlto, '', true);
+      linha('Com pulseira de identificação', s.pulseira);
+    }
+
+    // ── VENTILAÇÃO ────────────────────────────────────────────────────────────
+    if(d.ventilacao){ const s=d.ventilacao;
+      secTitulo('Ventilação Mecânica');
+      linha('Evoluções totais', s.totalEvolucoes);
+      linha('Evoluções com VMI', s.diasVMI);
+      linha('Taxa de VMI', s.taxaVMI, '%', true);
+      linha('FiO₂ médio', s.fio2Medio, '%');
+      linha('PEEP médio', s.peepMedio, 'cmH₂O');
+      linha('FR média', s.frMedia, 'ipm');
+      if(s.modos?.length){ y+=2; tabela(['Modo Ventilatório','Usos'],s.modos.map(({k,v})=>[k,v]),[110,20]); }
+      if(s.oxigenoterapia?.length){ tabela(['Oxigenoterapia','Evoluções'],s.oxigenoterapia.map(({k,v})=>[k,v]),[110,20]); }
+    }
+
+    // ── DISPOSITIVOS ──────────────────────────────────────────────────────────
+    if(d.dispositivos){ const s=d.dispositivos;
+      secTitulo('Dispositivos Invasivos');
+      linha('Evoluções totais', s.totalEvolucoes);
+      linha('Dias-paciente (leito/dia)', s.diasPaciente);
+      linha('Retiradas no período', s.totalRetiradas);
+      linha('AVPs totais registrados', s.totalAVPs);
+      y += 2;
+      tabela(['Dispositivo','Dias uso','Taxa util. (%)','Tempo médio uso'],
+        [
+          ['AVC', s.diasAVC, s.taxaAVC, s.tempoMedioAVC ? s.tempoMedioAVC+'d' : '–'],
+          ['CDL', s.diasCDL, s.taxaCDL, s.tempoMedioCDL ? s.tempoMedioCDL+'d' : '–'],
+          ['SVD', s.diasSVD, s.taxaSVD, s.tempoMedioSVD ? s.tempoMedioSVD+'d' : '–'],
+          ['SNE', s.diasSNE, s.taxaSNE, '–'],
+          ['TOT', s.diasTOT, s.taxaTOT, s.tempoMedioTOT ? s.tempoMedioTOT+'d' : '–'],
+          ['TQT', s.diasTQT, s.taxaTQT, '–'],
+        ], [28,22,32,35]);
+    }
+
+    // ── INFUSÕES ─────────────────────────────────────────────────────────────
+    if(d.infusoes){ const s=d.infusoes;
+      secTitulo('Infusões Vasoativas e Sedoanalgesia');
+      linha('Evoluções totais', s.totalEvolucoes);
+      linha('Com DVA', s.comDVA); linha('Taxa DVA', s.taxaDVA, '%', true);
+      linha('Com Sedoanalgesia', s.comSedo); linha('Taxa Sedoanalgesia', s.taxaSedo, '%', true);
+      if(s.topDVA?.length){ y+=2; tabela(['DVA','Evoluções'],s.topDVA.map(({k,v})=>[k,v]),[110,20]); }
+      if(s.topSedo?.length){ tabela(['Sedoanalgesia','Evoluções'],s.topSedo.map(({k,v})=>[k,v]),[110,20]); }
+    }
+
+    // ── ANTIMICROBIANOS ───────────────────────────────────────────────────────
+    if(d.atbs){ const s=d.atbs;
+      secTitulo('Antimicrobianos');
+      linha('Evoluções totais', s.totalEvolucoes);
+      linha('Com ATB', s.comATB); linha('Taxa de uso ATB', s.taxaATB, '%', true);
+      if(s.top5?.length){ y+=2; tabela(['Antimicrobiano','Evoluções'],s.top5.map(({nome,n})=>[nome,n]),[110,20]); }
+      if(s.topMicroorg?.length){ tabela(['Microrganismo isolado','Evoluções'],s.topMicroorg.map(({k,v})=>[k,v]),[110,20]); }
+    }
+
+    // ── NAS ───────────────────────────────────────────────────────────────────
+    if(d.nas){ const s=d.nas;
+      secTitulo('NAS – Nursing Activities Score');
+      linha('Registros NAS', s.registros);
+      linha('NAS médio', s.mediaNAS, '%', true);
+      linha('NAS máximo', s.maxNAS, '%'); linha('NAS mínimo', s.minNAS, '%');
+      linha('NAS médio (Diurno)', s.medDiurno, '%'); linha('NAS médio (Noturno)', s.medNoturno, '%');
+      linha('Cobertura NAS', s.coberturaPct, '%');
+      linha('Turnos com sobrecarga (≥100%/leito)', s.sobrecarga, '', s.sobrecarga>0);
+    }
+
+    // ── NUTRIÇÃO ─────────────────────────────────────────────────────────────
+    if(d.nutricao){ const s=d.nutricao; const t=s.totalEvolucoes;
+      secTitulo('Nutrição');
+      linha('Evoluções totais', t);
+      const pctN=(n)=>t>0?+(n*100/t).toFixed(1)+'%':'–';
+      tabela(['Via de Alimentação','Evoluções','%'],[
+        ['SNE',s.sne,pctN(s.sne)], ['SOE',s.soe,pctN(s.soe)],
+        ['Oral',s.oral,pctN(s.oral)], ['NPT',s.npt,pctN(s.npt)],
+        ['Jejum/Zero',s.jejum,pctN(s.jejum)]
+      ],[70,25,25]);
+    }
+
+    // ── NEUROLÓGICOS ─────────────────────────────────────────────────────────
+    if(d.neuro){ const s=d.neuro;
+      secTitulo('Neurológicos');
+      linha('Evoluções totais', s.totalEvolucoes);
+      linha('Glasgow médio', s.glasgowMedio, `(${s.comGlasgow} registros)`, true);
+      linha('Comatosos', s.comatosos); linha('Sedação profunda RASS ≤-3', s.sedacaoProf);
+    }
+
+    // ── OPERACIONAIS ─────────────────────────────────────────────────────────
+    if(d.operacionais){ const s=d.operacionais;
+      secTitulo('Operacionais');
+      linha('Evoluções registradas', s.evolucoes);
+      linha('Registros NAS', s.nasRegistros);
+      linha('Cobertura NAS', s.coberturaNAS, '%', true);
+      if(s.topAutores?.length){ y+=2; tabela(['Enfermeiro','Evoluções'],s.topAutores.map(({k,v})=>[k.split('@')[0],v]),[110,20]); }
+    }
+
+    // ── CRUZAMENTOS ──────────────────────────────────────────────────────────
+    if(d.cruzamentos){ const s=d.cruzamentos;
+      secTitulo('Cruzamentos');
+      linha('Total de altas analisadas', s.totalAltas);
+      linha('Gravidade máxima (DVA+VMI+ATB)', s.gravMax); linha('Taxa gravidade máxima', s.taxaGravMax, '%', true);
+      if(s.mortPorOrigem?.length){ y+=2; tabela(['Origem','Altas','Óbitos','Mortalidade (%)'],s.mortPorOrigem.map(o=>[o.origem,o.total,o.obitos,o.taxa??'–']),[65,20,20,30]); }
+    }
+
+    // ── SAE / NANDA ───────────────────────────────────────────────────────────
+    if(d.sae_nanda){ const s=d.sae_nanda;
+      secTitulo('SAE / NANDA');
+      linha('Evoluções totais', s.totalEvolucoes);
+      linha('Com SAE preenchida', s.comSAE); linha('Taxa SAE', s.taxaSAE, '%', true);
+      if(s.top5?.length){ y+=2; tabela(['Diagnóstico NANDA','Freq.'],s.top5.map(({dx,n})=>[dx.substring(0,50),n]),[125,15]); }
+    }
+
+    // ── DIAGNÓSTICOS / CID ────────────────────────────────────────────────────
+    if(d.diagnosticos){ const s=d.diagnosticos;
+      secTitulo('Diagnósticos / CID-10');
+      linha('Total com CID registrado', s.totalComCID);
+      if(s.top10?.length){ y+=2; tabela(['CID','Frequência'],s.top10.map(({cid,n})=>[cid,n]),[60,30]); }
+    }
+
+    // ── IRAS / BUNDLES ────────────────────────────────────────────────────────
+    if(d.iras){ const s=d.iras;
+      secTitulo('IRAS / Bundles CCIH');
+      linha('Checklists preenchidos', s.totalChecklists);
+      if(s.bundles?.length){ y+=2; tabela(['Bundle','Checklists','Aderência (%)'],s.bundles.map(b=>[b.titulo.substring(0,50),b.n,b.aderencia??'–']),[105,22,18]); }
+    }
+
+    // ── RODAPÉ ───────────────────────────────────────────────────────────────
     const totalPag = doc.internal.getNumberOfPages();
     for(let p=1;p<=totalPag;p++){
       doc.setPage(p);
       doc.setFontSize(7); doc.setTextColor(150,150,150);
-      doc.text(`Pág ${p}/${totalPag} · Gerado em ${new Date().toLocaleDateString('pt-BR')} · Sistema UTI HOSPESC`, margem, 292);
+      doc.text(`Pág ${p}/${totalPag} · Gerado em ${new Date().toLocaleDateString('pt-BR')} · Sistema UTI HOSPESC`, M, 291);
     }
 
     doc.save(titulo.replace(/\s+/g,'_')+'.pdf');
@@ -5190,39 +5563,9 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
 }
 
 function _kpisParaPDF(sec, d){
-  const kpis = [];
-  if(sec==='ocupacao'){
-    if(d.taxaOcupacao!==null) kpis.push({v:d.taxaOcupacao+'%', label:'Taxa de ocupação'});
-    kpis.push({v:d.admissoes+'', label:'Admissões no período'});
-    if(d.giroLeito!==null) kpis.push({v:d.giroLeito+'', label:'Giro de leito'});
-  } else if(sec==='saida'){
-    if(d.taxaLetali!==null) kpis.push({v:d.taxaLetali+'%', label:'Taxa de letalidade'});
-    kpis.push({v:d.obitos+'', label:'Óbitos'});
-    kpis.push({v:d.totalAltas+'', label:'Total de altas'});
-  } else if(sec==='demograficos'){
-    if(d.idadeMedia!==null) kpis.push({v:d.idadeMedia+' anos', label:'Idade média'});
-    kpis.push({v:d.masculino+' / '+d.feminino, label:'Masc / Fem'});
-  } else if(sec==='ventilacao'){
-    if(d.taxaVMI!==null) kpis.push({v:d.taxaVMI+'%', label:'Taxa de VMI'});
-    if(d.fio2Medio!==null) kpis.push({v:d.fio2Medio+'%', label:'FiO₂ médio'});
-  } else if(sec==='dispositivos'){
-    if(d.prevSVD!==null) kpis.push({v:d.prevSVD+'%', label:'Prevalência SVD'});
-    if(d.prevAVC!==null) kpis.push({v:d.prevAVC+'%', label:'Prevalência AVC'});
-    if(d.prevCDL!==null) kpis.push({v:d.prevCDL+'%', label:'Prevalência CDL'});
-  } else if(sec==='atbs'){
-    if(d.taxaATB!==null) kpis.push({v:d.taxaATB+'%', label:'Evoluções com ATB'});
-    if(d.top5 && d.top5[0]) kpis.push({v:d.top5[0].nome, label:'ATB mais usado'});
-  } else if(sec==='nas'){
-    if(d.mediaNAS!==null) kpis.push({v:d.mediaNAS+'', label:'Média NAS'});
-    kpis.push({v:d.registros+'', label:'Registros'});
-  } else if(sec==='diagnosticos'){
-    kpis.push({v:d.totalComCID+'', label:'Pacientes com CID'});
-    if(d.top10 && d.top10[0]) kpis.push({v:d.top10[0].cid, label:'CID mais frequente'});
-  } else if(sec==='sae_nanda'){
-    kpis.push({v:d.comSAE+'', label:'Evoluções com SAE'});
-    if(d.top5 && d.top5[0]) kpis.push({v:'', label:d.top5[0].dx});
-  }
-  return kpis;
+  // Mantido por compatibilidade com chamadas legadas – retorna array vazio pois
+  // _gerarPDFRelatorio agora renderiza cada seção diretamente.
+  return [];
 }
 
 // ════════════════════════════════════════════════════════════════════════════
