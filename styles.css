@@ -463,3 +463,21 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
   body.printing-iras .modal-footer, body.printing-iras .modal-close { display:none !important; }
   body.printing-iras .iras-radio-btn { border-color:#999 !important; }
 }
+
+/* ── Botão de referência de escala ── */
+.btn-escala{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--azul);color:white;border:none;font-size:.65rem;font-weight:700;cursor:pointer;line-height:1;flex-shrink:0;padding:0;}
+.btn-escala:hover{opacity:.8;}
+
+/* ── Modal de escalas ── */
+#modal-escala .modal{max-width:560px;}
+.escala-tab{display:flex;border-bottom:2px solid var(--borda);background:#f7f7f7;}
+.escala-tab button{flex:1;padding:8px 4px;border:none;background:none;font-size:.8rem;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;}
+.escala-tab button.ativo{color:var(--azul);border-bottom-color:var(--azul);background:white;}
+.escala-secao{padding:14px 16px;}
+.escala-table{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:8px;}
+.escala-table th{background:var(--azul);color:white;padding:5px 8px;text-align:left;font-weight:600;}
+.escala-table td{padding:5px 8px;border-bottom:1px solid var(--borda);vertical-align:top;}
+.escala-table tr:last-child td{border-bottom:none;}
+.escala-table tr:nth-child(even) td{background:#f5f8ff;}
+.escala-badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:.72rem;font-weight:700;}
+.escala-fonte{font-size:.7rem;color:var(--muted);padding:10px 16px;border-top:1px solid var(--borda);font-style:italic;}
