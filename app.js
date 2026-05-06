@@ -3450,6 +3450,10 @@ async function abrirForm(n) {
     setF('vmi-modo',fonte.vmi_modo);   setF('vmi-fio2',fonte.vmi_fio2);  setF('vmi-peep',fonte.vmi_peep);
     setF('vmi-fr',fonte.vmi_fr);       setF('vmi-sens',fonte.vmi_sens);  setF('vmi-vt',fonte.vmi_vt);
     setF('f-spo2',fonte.spo2);         setF('f-spo2-av',fonte.spo2av);
+    setF('f-fr-vmi',fonte.fr||'');     setF('f-fr-av',fonte.fr||'');
+    setF('f-pas',fonte.pas||'');       setF('f-pad',fonte.pad||'');    setF('f-pam',fonte.pam||'');  setF('f-temp',fonte.temp||'');
+    setChecks('f-edema-loc',fonte.edemaLoc||[]);
+    if(fonte.edemaGrau){ const r=document.querySelector(`input[name="edema-grau"][value="${fonte.edemaGrau}"]`); if(r) r.checked=true; }
     setChecks('f-car',fonte.car);      setF('f-fc-norm',fonte.fcNorm);  setF('f-fc-taqui',fonte.fcTaqui);  setF('f-fc-bradi',fonte.fcBradi);
     setChecks('f-abd',fonte.abd);
     // dieta e diu: suporta novo formato (array de checkboxes) e legado (string de radio)
@@ -3531,7 +3535,10 @@ examesSolic:gf('f-exames-solic'),
     cnLmin:gf('f-cn-lmin'), mnrLmin:gf('f-mnr-lmin'), mvFio2:gf('f-mv-fio2'),
     vmi_modo:gf('vmi-modo'), vmi_fio2:gf('vmi-fio2'), vmi_peep:gf('vmi-peep'), vmi_fr:gf('vmi-fr'), vmi_sens:gf('vmi-sens'), vmi_vt:gf('vmi-vt'),
     spo2:isVMI?gf('f-spo2'):'', spo2av:isVMI?'':gf('f-spo2-av'),
+    fr:isVMI?gf('f-fr-vmi'):gf('f-fr-av'),
     car:gChecked('f-car'), fcNorm:gf('f-fc-norm'), fcTaqui:gf('f-fc-taqui'), fcBradi:gf('f-fc-bradi'),
+    edemaLoc:gChecked('f-edema-loc'), edemaGrau:gRadio('edema-grau'),
+    pas:gf('f-pas'), pad:gf('f-pad'), pam:gf('f-pam'), temp:gf('f-temp'),
     abd:gChecked('f-abd'),
     dieta:gChecked('f-dieta'), vdieta:gf('f-vdieta'),
     diu:gChecked('f-diu'), uri:gChecked('f-uri'), ddiu:gf('f-ddiu'), eli:gChecked('f-eli'),
@@ -4221,12 +4228,21 @@ function gerarTextoEvolucao(){
   const ventTxt = _descreveVent(d);
   if (ventTxt) partes.push(ventTxt);
 
-  // SpO2 (fora do bloco vent pra quando for ar ambiente)
+  // SpO2 + FR
   const spo2 = d.spo2 || d.spo2av;
-  if (spo2) partes.push(`SpO2 ${spo2}%.`);
+  const frTxt = d.fr ? `FR ${d.fr} irpm` : '';
+  if (spo2 && frTxt) partes.push(`SpO2 ${spo2}%, ${frTxt}.`);
+  else if (spo2) partes.push(`SpO2 ${spo2}%.`);
+  else if (frTxt) partes.push(`${frTxt}.`);
 
   // Ausculta
   if (d.ausc && d.ausc.length) partes.push('Ausculta: ' + d.ausc.join(', ') + '.');
+
+  // Sinais vitais
+  const sv = [];
+  if (d.pas && d.pad) sv.push(`PA ${d.pas}/${d.pad} mmHg${d.pam?` (PAM ${d.pam})`:''}` );
+  if (d.temp) sv.push(`T°C ${d.temp}`);
+  if (sv.length) partes.push('Sinais vitais: ' + sv.join(', ') + '.');
 
   // Cardiovascular
   const car = [];
@@ -4237,6 +4253,9 @@ function gerarTextoEvolucao(){
       else if (v==='Bradicárdico' && d.fcBradi) car.push(`bradicárdico (FC ${d.fcBradi} bpm)`);
       else car.push(v.toLowerCase());
     });
+  }
+  if (d.edemaLoc && d.edemaLoc.length && !d.edemaLoc.includes('Sem edema')) {
+    car.push(`edema em ${d.edemaLoc.join(', ').toLowerCase()}${d.edemaGrau && d.edemaGrau!=='NA'?' grau '+d.edemaGrau:''}`);
   }
   if (car.length) partes.push('Cardiovascular: ' + car.join(', ') + '.');
 
@@ -4523,11 +4542,17 @@ function _resumoClinicoParaSAE(d){
   if(d.cnLmin) linhas.push('CN: '+d.cnLmin+' L/min');
   if(d.mnrLmin) linhas.push('Máscara NR: '+d.mnrLmin+' L/min');
   if(d.spo2 || d.spo2av) linhas.push('SpO2: '+(d.spo2||d.spo2av)+'%');
+  if(d.fr) linhas.push('FR: '+d.fr+' irpm');
   if(arr(d.resp)) linhas.push('Tórax: '+arr(d.resp));
   if(arr(d.ausc)) linhas.push('Ausculta: '+arr(d.ausc));
 
+  linhas.push('\n== SINAIS VITAIS ==');
+  if(d.pas && d.pad) linhas.push('PA: '+d.pas+'/'+d.pad+' mmHg'+(d.pam?' PAM: '+d.pam:''));
+  if(d.temp) linhas.push('Temperatura: '+d.temp+' °C');
+
   linhas.push('\n== CARDIOVASCULAR ==');
   if(arr(d.car)) linhas.push('Estado: '+arr(d.car));
+  if(d.edemaLoc && d.edemaLoc.length) linhas.push('Edema: '+arr(d.edemaLoc)+(d.edemaGrau&&d.edemaGrau!=='NA'?' grau '+d.edemaGrau:''));
   const ritmoFC = [];
   if(d.fcNorm) ritmoFC.push('Normocárdico ('+d.fcNorm+'bpm)');
   if(d.fcTaqui) ritmoFC.push('Taquicárdico ('+d.fcTaqui+'bpm)');
@@ -6169,4 +6194,118 @@ async function abrirHistoricoDispositivosGeral(){
   } catch(e){
     body.innerHTML = '<div style="color:var(--vermelho);padding:1rem;">Erro: '+e.message+'</div>';
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODAL DE ESCALAS CLÍNICAS – Glasgow e RASS
+// ════════════════════════════════════════════════════════════════════════════
+
+const _ESCALAS = {
+  glasgow: {
+    titulo: 'Escala de Coma de Glasgow (ECG)',
+    cor: '#1a6b3a',
+    html: `
+      <div class="escala-secao">
+        <p style="font-size:.8rem;color:#555;margin-bottom:10px;">Avalia o nível de consciência por meio de três domínios. O escore total varia de <strong>3</strong> (mínimo, coma profundo) a <strong>15</strong> (normal). Calculada como <strong>AO + MV + MR</strong>.</p>
+        <p class="sub-t" style="margin-bottom:4px;">AO – Abertura Ocular</p>
+        <table class="escala-table">
+          <thead><tr><th>Pontos</th><th>Resposta</th></tr></thead>
+          <tbody>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">4</span></td><td>Espontânea</td></tr>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">3</span></td><td>À voz / estímulo verbal</td></tr>
+            <tr><td><span class="escala-badge" style="background:#fff3cd;color:#856404;">2</span></td><td>À dor / estímulo doloroso</td></tr>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">1</span></td><td>Ausente</td></tr>
+          </tbody>
+        </table>
+        <p class="sub-t" style="margin:10px 0 4px;">MV – Melhor Resposta Verbal</p>
+        <table class="escala-table">
+          <thead><tr><th>Pontos</th><th>Resposta</th></tr></thead>
+          <tbody>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">5</span></td><td>Orientado (nome, data, local)</td></tr>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">4</span></td><td>Confuso / desorientado</td></tr>
+            <tr><td><span class="escala-badge" style="background:#fff3cd;color:#856404;">3</span></td><td>Palavras inapropriadas</td></tr>
+            <tr><td><span class="escala-badge" style="background:#fff3cd;color:#856404;">2</span></td><td>Sons incompreensíveis</td></tr>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">1</span></td><td>Ausente · <em style="font-size:.74rem;">se intubado: 1T</em></td></tr>
+          </tbody>
+        </table>
+        <p class="sub-t" style="margin:10px 0 4px;">MR – Melhor Resposta Motora</p>
+        <table class="escala-table">
+          <thead><tr><th>Pontos</th><th>Resposta</th></tr></thead>
+          <tbody>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">6</span></td><td>Obedece a comandos verbais</td></tr>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">5</span></td><td>Localiza a dor</td></tr>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">4</span></td><td>Retirada inespecífica (flexão normal)</td></tr>
+            <tr><td><span class="escala-badge" style="background:#fff3cd;color:#856404;">3</span></td><td>Flexão anormal – decorticação</td></tr>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">2</span></td><td>Extensão – descerebração</td></tr>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">1</span></td><td>Ausente</td></tr>
+          </tbody>
+        </table>
+        <p class="sub-t" style="margin:10px 0 4px;">Interpretação clínica</p>
+        <table class="escala-table">
+          <thead><tr><th>Escore</th><th>Classificação</th><th>Conduta habitual</th></tr></thead>
+          <tbody>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">13–15</span></td><td>Leve / normal</td><td>Monitorização</td></tr>
+            <tr><td><span class="escala-badge" style="background:#fff3cd;color:#856404;">9–12</span></td><td>Moderado</td><td>Vigilância intensiva</td></tr>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">3–8</span></td><td>Grave / coma</td><td>Considerar IOT (≤ 8)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="escala-fonte">Teasdale G, Jennett B. Lancet 1974. · Recomendada pelo COFEN como instrumento de avaliação contínua (Res. 736/2024).</div>
+    `
+  },
+  rass: {
+    titulo: 'RASS – Richmond Agitation-Sedation Scale',
+    cor: '#1a6b3a',
+    html: `
+      <div class="escala-secao">
+        <p style="font-size:.8rem;color:#555;margin-bottom:10px;">Avalia o nível de sedação e agitação em pacientes críticos. Escore de <strong>–5</strong> (não responsivo) a <strong>+4</strong> (combativo). Meta habitual em UTI: <strong>RASS –1 a 0</strong> (sedação leve / alerta calmo).</p>
+        <table class="escala-table">
+          <thead><tr><th>Escore</th><th>Termo</th><th>Descrição</th></tr></thead>
+          <tbody>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">+4</span></td><td>Combativo</td><td>Violento, perigo imediato à equipe</td></tr>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">+3</span></td><td>Muito agitado</td><td>Puxa ou remove tubos/cateteres; agressivo</td></tr>
+            <tr><td><span class="escala-badge" style="background:#fff3cd;color:#856404;">+2</span></td><td>Agitado</td><td>Movimentos frequentes e sem propósito; luta com o ventilador</td></tr>
+            <tr><td><span class="escala-badge" style="background:#fff3cd;color:#856404;">+1</span></td><td>Inquieto</td><td>Ansioso, movimentos não vigorosos</td></tr>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">0</span></td><td>Alerta e calmo</td><td>Estado desejável em UTI sem sedação</td></tr>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">–1</span></td><td>Sonolento</td><td>Abre olhos e mantém contato visual por > 10 s à voz</td></tr>
+            <tr><td><span class="escala-badge" style="background:#d4edda;color:#155724;">–2</span></td><td>Sedação leve</td><td>Abre olhos brevemente (< 10 s) à voz; sem contato visual sustentado</td></tr>
+            <tr><td><span class="escala-badge" style="background:#fff3cd;color:#856404;">–3</span></td><td>Sedação moderada</td><td>Algum movimento à voz, mas sem abertura ocular</td></tr>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">–4</span></td><td>Sedação profunda</td><td>Sem resposta à voz; movimento ou abertura ocular à dor</td></tr>
+            <tr><td><span class="escala-badge" style="background:#f8d7da;color:#721c24;">–5</span></td><td>Não responsivo</td><td>Sem resposta a voz ou a dor</td></tr>
+          </tbody>
+        </table>
+        <p class="sub-t" style="margin:12px 0 4px;">Método de avaliação (sequência)</p>
+        <ol style="font-size:.79rem;color:#444;padding-left:1.2rem;line-height:1.7;">
+          <li>Observe o paciente → escore <strong>0 a +4</strong> sem estímulo</li>
+          <li>Chame pelo nome em voz normal → avalie abertura ocular e contato visual</li>
+          <li>Repita em voz alta ou peça para abrir os olhos → escore <strong>–1 a –3</strong></li>
+          <li>Se sem resposta verbal → estimulação dolorosa (pressão no esterno ou leito ungueal) → escore <strong>–4 a –5</strong></li>
+        </ol>
+        <p class="sub-t" style="margin:10px 0 4px;">Metas clínicas</p>
+        <table class="escala-table">
+          <thead><tr><th>Situação</th><th>Meta RASS</th></tr></thead>
+          <tbody>
+            <tr><td>UTI geral – sedação leve (recomendado)</td><td><strong>–1 a 0</strong></td></tr>
+            <tr><td>VMI em desmame</td><td><strong>–1 a +1</strong></td></tr>
+            <tr><td>Hipertensão intracraniana / status epiléptico</td><td><strong>–3 a –5</strong> (protocolo)</td></tr>
+            <tr><td>SDRA grave com decúbito prona</td><td><strong>–3 a –4</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="escala-fonte">Sessler CN et al. Am J Respir Crit Care Med 2002. · Ely EW et al. JAMA 2003. · SCCM PAD Guidelines 2018. · Utilização recomendada pela AMIB e indicadores COFEN 736/2024.</div>
+    `
+  }
+};
+
+function abrirEscala(tipo) {
+  const e = _ESCALAS[tipo];
+  if (!e) return;
+  document.getElementById('escala-titulo').textContent = e.titulo;
+  document.getElementById('escala-header').style.background = e.cor;
+  document.getElementById('escala-body').innerHTML = e.html;
+  document.getElementById('modal-escala').classList.add('show');
+}
+
+function fecharEscala() {
+  document.getElementById('modal-escala').classList.remove('show');
 }
