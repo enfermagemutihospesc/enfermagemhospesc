@@ -38,6 +38,10 @@ function initFirebase() {
 function pad(n){ return String(n).padStart(2,'0'); }
 function hoje(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function ontem(){ const d=new Date(); d.setDate(d.getDate()-1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// Retorna a data correta do turno:
+// Diurno  → 07:00–18:59 (sempre hoje)
+// Noturno → 19:00–23:59 = hoje | 00:00–06:59 = ontem (turno começou no dia anterior)
+function dataDoTurno(){ const h=new Date().getHours(); if(turno==='NOTURNO' && h>=0 && h<=6) return ontem(); return hoje(); }
 function fmtD(s){ if(!s||s==='–') return '–'; try{ const[y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }catch(e){ return s; } }
 function gf(id){ const e=document.getElementById(id); return e?e.value:''; }
 function gChecked(cls){ return Array.from(document.querySelectorAll('.'+cls+':checked')).map(e=>e.value); }
@@ -215,7 +219,7 @@ async function renderNAS(){
   }
 
   const outroTurno = turno==='DIURNO' ? 'NOTURNO' : 'DIURNO';
-  const hj = hoje();
+  const hj = dataDoTurno();
 
   // Monta todas as chaves do dia de uma vez e busca em paralelo
   const keysDia = [];
@@ -393,7 +397,7 @@ async function salvarNAS(leito){
     }
   }
   const data = {
-    leito, turno, data:hoje(),
+    leito, turno, data:dataDoTurno(),
     paciente: pac,
     respostas,
     total: calcNASTotal(leito),
@@ -402,7 +406,7 @@ async function salvarNAS(leito){
   };
   // Compatibilidade retroativa: também expõe as respostas no raiz (legado)
   Object.assign(data, respostas);
-  await dbSet('uti_nas_'+leito+'_'+turno+'_'+hoje(),data);
+  await dbSet('uti_nas_'+leito+'_'+turno+'_'+dataDoTurno(),data);
   toast('✓ NAS Leito '+L+' salvo');
 }
 
@@ -414,7 +418,7 @@ async function salvarNAS(leito){
 async function _ultimoNASDoLeito(leito, pacienteAtual){
   const chaves = new Set();
   const prefixo = 'uti_nas_' + leito + '_';
-  const hj = hoje();
+  const hj = dataDoTurno();
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (k && k.startsWith(prefixo)) chaves.add(k);
@@ -2764,7 +2768,7 @@ async function renderLeitos() {
   }
   const d = await leitosData();
   const outroTurno = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
-  const hj = hoje();
+  const hj = dataDoTurno();
   // Monta todas as chaves e busca em paralelo (uma única round-trip ao Firestore)
   const keys = [];
   for (let i=1;i<=TOTAL;i++) {
@@ -3256,7 +3260,7 @@ async function _sugerirCID(idDiag, idCID){
 async function _atualizarDiasSemEvacoar(leito){
   const elWrap = document.getElementById('dias-sem-evacuar');
   if(!elWrap) return;
-  const hj = hoje();
+  const hj = dataDoTurno();
   // Limites: paciente atual + data de admissão na UTI
   const pacAtual = (gf('f-pac')||'').trim().toUpperCase();
   const admAtual = gf('f-adm') || '';  // YYYY-MM-DD
@@ -3350,9 +3354,11 @@ function limparForm(){
 
 async function getAnterior(n) {
   const outro = turno==='DIURNO'?'NOTURNO':'DIURNO';
-  return (await dbGet('uti_ev_'+n+'_'+outro+'_'+hoje()))
-      || (await dbGet('uti_ev_'+n+'_'+turno+'_'+ontem()))
-      || (await dbGet('uti_ev_'+n+'_'+outro+'_'+ontem()));
+  const dtT = dataDoTurno();
+  const dtAntes = dtT === hoje() ? ontem() : hoje();
+  return (await dbGet('uti_ev_'+n+'_'+outro+'_'+dtT))
+      || (await dbGet('uti_ev_'+n+'_'+turno+'_'+dtAntes))
+      || (await dbGet('uti_ev_'+n+'_'+outro+'_'+dtAntes));
 }
 
 async function abrirForm(n) {
@@ -3363,7 +3369,7 @@ async function abrirForm(n) {
   const pac = d[n];
   limparForm();
   const anterior = await getAnterior(n);
-  const evHoje = await dbGet('uti_ev_'+n+'_'+turno+'_'+hoje());
+  const evHoje = await dbGet('uti_ev_'+n+'_'+turno+'_'+dataDoTurno());
 
   document.getElementById('herd-tag').style.display = anterior ? 'inline' : 'none';
   document.getElementById('cloud-tag').style.display = (!modoOffline && (anterior||evHoje)) ? 'inline' : 'none';
@@ -3395,7 +3401,7 @@ async function abrirForm(n) {
     } catch(e){ /* silencioso */ }
   }
   setF('f-sexo', sexoFinal);
-  setF('f-leito','Leito '+pad(n)+' – UTI Geral'); setF('f-data',hoje());
+  setF('f-leito','Leito '+pad(n)+' – UTI Geral'); setF('f-data',dataDoTurno());
 
   const fonte = evHoje || anterior;
   if (fonte) {
@@ -3814,7 +3820,7 @@ async function enviarTodasEvolucoesTurno(){
   if(!ocupados.length){ toast('Nenhum leito ocupado.'); return; }
 
   // Primeiro, identifica quais têm evolução salva hoje neste turno
-  const hj = hoje();
+  const hj = dataDoTurno();
   const comEvolucao = [];
   for(const [k,pac] of ocupados){
     const leito = parseInt(k);
@@ -4388,7 +4394,7 @@ async function imprimirTurnoCompleto(){
   const ocupados = Object.entries(leitos).filter(([,v])=>v.ocupado).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
   if(!ocupados.length){ toast('Nenhum leito ocupado.'); return; }
 
-  const hj = hoje();
+  const hj = dataDoTurno();
   const comEvolucao = [];
   for(const [k,pac] of ocupados){
     const leito = parseInt(k);
@@ -4584,7 +4590,7 @@ function _resumoClinicoParaSAE(d){
 // Roteador: decide se mostra a SAE salva ou abre o modal para gerar uma nova.
 async function abrirSAE(){
   if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
-  const evKey = 'uti_ev_'+leitoAtual+'_'+turno+'_'+hoje();
+  const evKey = 'uti_ev_'+leitoAtual+'_'+turno+'_'+dataDoTurno();
   const ev = await dbGet(evKey);
   if(ev && ev.sae && ev.sae.diagnosticos && ev.sae.diagnosticos.length){
     _mostrarSAESalva(ev);
