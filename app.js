@@ -4147,30 +4147,50 @@ function gerarTextoEvolucao(){
   const d = coletarDados();
   const partes = [];
 
-  // Introdução fixa: DIH, diagnóstico, comorbidades, alergias
-  let dih = '';
-  if (d.admHosp) {
-    const [ano,mes,dia] = d.admHosp.split('-');
-    const dAdm = new Date(+ano, +mes-1, +dia);
-    const diffMs = new Date() - dAdm;
-    const dias = Math.max(1, Math.floor(diffMs / 86400000));
-    dih = `${dias}º DIH`;
-  } else if (d.adm) {
-    const [ano,mes,dia] = d.adm.split('-');
-    const dAdm = new Date(+ano, +mes-1, +dia);
-    const diffMs = new Date() - dAdm;
-    const dias = Math.max(1, Math.floor(diffMs / 86400000));
-    dih = `${dias}º DIH`;
-  } else {
-    dih = 'No X DIH';
-  }
+// Introdução fixa: DIH / dias em UTI, diagnóstico, comorbidades, alergias
+  const _diasInternacao = (dataStr) => {
+    if (!dataStr) return null;
+    const [a, m, d2] = dataStr.split('-').map(Number);
+    return Math.max(0, Math.floor((new Date() - new Date(a, m - 1, d2)) / 86400000));
+  };
+  const _ehHoje = (dataStr) => {
+    if (!dataStr) return false;
+    return dataStr === hoje();
+  };
 
-  const diag   = d.diag  ? d.diag.trim()  : 'diagnóstico não registrado';
-  const comor  = d.comor ? ', COMORBIDADES: ' + d.comor.trim() : '';
-  const aler   = (d.alergia && d.alergia.trim() && !/^nega|^nkda/i.test(d.alergia.trim()))
-                 ? `, alérgico a ${d.alergia.trim()}`
-                 : ', nega alergias';
-  partes.push(`Paciente no ${dih} em UTI por ${diag}${comor}${aler}.`);
+  const diag  = d.diag  ? d.diag.trim()  : 'diagnóstico não registrado';
+  const comor = d.comor ? ', COMORBIDADES: ' + d.comor.trim() : '';
+  const aler  = (d.alergia && d.alergia.trim() && !/^nega|^nkda/i.test(d.alergia.trim()))
+                ? `, alérgico a ${d.alergia.trim()}`
+                : ', nega alergias';
+
+  let introTxt = '';
+  const diasHosp = _diasInternacao(d.admHosp);
+  const diasUTI  = _diasInternacao(d.adm);
+
+  if (d.adm && _ehHoje(d.adm)) {
+    // Admissão na UTI hoje
+    introTxt = `Admitido paciente em UTI por ${diag}${comor}${aler}.`;
+  } else if (d.admHosp && d.adm) {
+    if (d.admHosp === d.adm) {
+      // Datas iguais: só conta os dias de UTI
+      const n = Math.max(1, diasUTI);
+      introTxt = `Paciente no ${n}º dia de internação em UTI por ${diag}${comor}${aler}.`;
+    } else {
+      // Datas diferentes: DIH (hospesc) + dias UTI
+      const nHosp = Math.max(1, diasHosp);
+      const nUTI  = Math.max(1, diasUTI);
+      introTxt = `Paciente no ${nHosp}º DIH, ${nUTI}º dia de internação em UTI por ${diag}${comor}${aler}.`;
+    }
+  } else if (d.adm) {
+    // Só tem data de UTI
+    const n = Math.max(1, diasUTI);
+    introTxt = `Paciente no ${n}º dia de internação em UTI por ${diag}${comor}${aler}.`;
+  } else {
+    // Nenhuma data disponível
+    introTxt = `Paciente em UTI por ${diag}${comor}${aler}.`;
+  }
+  partes.push(introTxt);
 
   // Neurológico
   const neuro = [];
