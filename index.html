@@ -272,22 +272,41 @@
         <div class="cg">
           <label class="ci"><input type="checkbox" class="f-neuro" value="Consciente"> Consciente</label>
           <label class="ci"><input type="checkbox" class="f-neuro" value="Orientado"> Orientado</label>
+          <label class="ci"><input type="checkbox" class="f-neuro" value="Vigil"> Vigil</label>
           <label class="ci"><input type="checkbox" class="f-neuro" value="Desorientado"> Desorientado</label>
-          <label class="ci"><input type="checkbox" class="f-neuro" value="Comatoso"> Comatoso</label>
           <label class="ci"><input type="checkbox" class="f-neuro" value="Sedado"> Sedado</label>
+          <label class="ci"><input type="checkbox" class="f-neuro" value="Comatoso"> Comatoso</label>
         </div>
         <div class="dc">
-          <div class="fl"><label>Glasgow</label><input type="number" id="f-glas" min="3" max="15" placeholder="3–15"></div>
-          <div class="fl"><label>RASS</label><input type="number" id="f-rass" min="-5" max="4" placeholder="-5 a +4"></div>
+          <div class="fl">
+            <label style="display:flex;align-items:center;gap:6px;">Glasgow
+              <button type="button" class="btn-escala" onclick="abrirEscala('glasgow')" title="Ver escala Glasgow">?</button>
+            </label>
+            <input type="number" id="f-glas" min="3" max="15" placeholder="3–15">
+          </div>
+          <div class="fl">
+            <label style="display:flex;align-items:center;gap:6px;">RASS
+              <button type="button" class="btn-escala" onclick="abrirEscala('rass')" title="Ver escala RASS">?</button>
+            </label>
+            <input type="number" id="f-rass" min="-5" max="4" placeholder="-5 a +4">
+          </div>
         </div>
         <p class="sub-t">Pupilas</p>
-        <div class="cg">
-          <label class="ci"><input type="checkbox" class="f-pup" value="Isocóricas"> Isocóricas</label>
-          <label class="ci"><input type="checkbox" class="f-pup" value="Anisocóricas"> Anisocóricas</label>
-          <label class="ci"><input type="checkbox" class="f-pup" value="Midriáticas"> Midriáticas</label>
-          <label class="ci"><input type="checkbox" class="f-pup" value="Mióticas"> Mióticas</label>
-          <label class="ci"><input type="checkbox" class="f-pup" value="Fixas"> Fixas</label>
-          <label class="ci"><input type="checkbox" class="f-pup" value="Fotorreagentes"> Fotorreagentes</label>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div class="cg">
+            <label class="ci"><input type="checkbox" class="f-pup" value="Isocóricas"> Isocóricas</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="Anisocóricas"> Anisocóricas</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="Mióticas"> Mióticas</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="Midriáticas"> Midriáticas</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="Fixas"> Fixas</label>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px 0;align-items:center;">
+            <span style="font-size:.73rem;font-weight:800;color:var(--azul);min-width:34px;">RFM</span>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-pup" value="RFM+ OD"> + OD</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-pup" value="RFM+ OE"> + OE</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-pup" value="RFM- OD"> – OD</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="RFM- OE"> – OE</label>
+          </div>
         </div>
       </div>
     </div>
@@ -322,21 +341,34 @@
         <p class="sub-t">Ausculta Pulmonar</p>
         <div class="sub-blk">
           <div style="display:flex;flex-wrap:wrap;gap:4px 0;align-items:center;">
-            <span style="font-size:.73rem;font-weight:800;color:var(--azul);min-width:34px;">MV+</span>
+            <span style="font-size:.73rem;font-weight:800;color:var(--azul);min-width:44px;">MV+</span>
             <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV+ Bilateral"> Bilateral</label>
             <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV+ Direita"> Direita</label>
             <label class="ci"><input type="checkbox" class="f-ausc" value="MV+ Esquerda"> Esquerda</label>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:4px 0;align-items:center;">
-            <span style="font-size:.73rem;font-weight:800;color:#c0392b;min-width:34px;">MV–</span>
-            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Bilateral"> Bilateral</label>
-            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Direita"> Direita</label>
-            <label class="ci"><input type="checkbox" class="f-ausc" value="MV- Esquerda"> Esquerda</label>
+            <span style="font-size:.73rem;font-weight:800;color:#c0392b;min-width:44px;">MV↓</span>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV↓ Bilateral"> Bilateral</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV↓ Base D"> Base D</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV↓ Base E"> Base E</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV↓ Ápice D"> Ápice D</label>
+            <label class="ci"><input type="checkbox" class="f-ausc" value="MV↓ Ápice E"> Ápice E</label>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:5px 12px;padding-top:2px;border-top:1px solid var(--borda);">
+          <div style="display:flex;flex-wrap:wrap;gap:4px 0;align-items:center;">
+            <span style="font-size:.73rem;font-weight:800;color:#7b1f1f;min-width:44px;">MV–</span>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Bilateral"> Bilateral</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Base D"> Base D</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Base E"> Base E</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Ápice D"> Ápice D</label>
+            <label class="ci"><input type="checkbox" class="f-ausc" value="MV- Ápice E"> Ápice E</label>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px 12px;padding-top:4px;border-top:1px solid var(--borda);">
             <label class="ci"><input type="checkbox" class="f-ausc" value="Roncos"> Roncos</label>
             <label class="ci"><input type="checkbox" class="f-ausc" value="Sibilos"> Sibilos</label>
-            <label class="ci"><input type="checkbox" class="f-ausc" value="Creptos/Estertor"> Creptos/Estertor</label>
+            <label class="ci"><input type="checkbox" class="f-ausc" value="Creptos Finos"> Creptos Finos</label>
+            <label class="ci"><input type="checkbox" class="f-ausc" value="Creptos Grossos"> Creptos Grossos</label>
+            <label class="ci"><input type="checkbox" class="f-ausc" value="Estertor"> Estertor</label>
+            <label class="ci"><input type="checkbox" class="f-ausc" value="Atrito Pleural"> Atrito Pleural</label>
           </div>
         </div>
         <p class="sub-t">Ventilação</p>
@@ -377,10 +409,12 @@
             <div class="vf"><label>SENS</label><input type="number" id="vmi-sens" step="0.1" placeholder="Ex: -2"></div>
             <div class="vf"><label>VT (mL)</label><input type="number" id="vmi-vt" placeholder="Ex: 450"></div>
             <div class="vf"><label>SpO2 (%)</label><input type="number" id="f-spo2" min="0" max="100" placeholder="Ex: 98"></div>
+            <div class="vf"><label>FR esp. (irpm)</label><input type="number" id="f-fr-vmi" min="0" max="80" placeholder="Ex: 18"></div>
           </div>
         </div>
-        <div id="spo2-avulso" class="fl">
-          <label>SpO2 (%)</label><input type="number" id="f-spo2-av" min="0" max="100" placeholder="Ex: 98">
+        <div id="spo2-avulso" class="dc">
+          <div class="fl"><label>SpO2 (%)</label><input type="number" id="f-spo2-av" min="0" max="100" placeholder="Ex: 98"></div>
+          <div class="fl"><label>FR (irpm)</label><input type="number" id="f-fr-av" min="0" max="80" placeholder="Ex: 18"></div>
         </div>
       </div>
     </div>
@@ -392,9 +426,27 @@
         <div class="cg">
           <label class="ci"><input type="checkbox" class="f-car" value="Perfusão inalterada"> Perfusão inalterada</label>
           <label class="ci"><input type="checkbox" class="f-car" value="Perfusão lentificada"> Perfusão lentificada</label>
-          <label class="ci"><input type="checkbox" class="f-car" value="Edema"> Edema</label>
           <label class="ci"><input type="checkbox" class="f-car" value="Ausculta em 2T"> Ausculta em 2T</label>
           <label class="ci"><input type="checkbox" class="f-car" value="Bulhas acessórias"> Bulhas acessórias</label>
+        </div>
+        <p class="sub-t">Edema</p>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div class="cg">
+            <label class="ci"><input type="checkbox" class="f-edema-loc" value="Sem edema"> Sem edema</label>
+            <label class="ci"><input type="checkbox" class="f-edema-loc" value="MMII"> MMII</label>
+            <label class="ci"><input type="checkbox" class="f-edema-loc" value="MMSS"> MMSS</label>
+            <label class="ci"><input type="checkbox" class="f-edema-loc" value="Sacral"> Sacral</label>
+            <label class="ci"><input type="checkbox" class="f-edema-loc" value="Facial"> Facial</label>
+            <label class="ci"><input type="checkbox" class="f-edema-loc" value="Anasarca"> Anasarca</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:.76rem;color:var(--muted);font-weight:600;">Grau</span>
+            <label class="ci"><input type="radio" name="edema-grau" value="+1"> +1</label>
+            <label class="ci"><input type="radio" name="edema-grau" value="+2"> +2</label>
+            <label class="ci"><input type="radio" name="edema-grau" value="+3"> +3</label>
+            <label class="ci"><input type="radio" name="edema-grau" value="+4"> +4</label>
+            <label class="ci"><input type="radio" name="edema-grau" value="NA"> N/A</label>
+          </div>
         </div>
         <p class="sub-t">Ritmo / Frequência Cardíaca</p>
         <div style="display:flex;flex-direction:column;gap:6px;">
@@ -413,6 +465,31 @@
             <input type="number" id="f-fc-bradi" class="fc-inline" placeholder="FC" min="0" max="400">
             <span style="font-size:.74rem;color:var(--muted);">bpm</span>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SINAIS VITAIS COMPLEMENTARES -->
+    <div class="secao">
+      <div class="secao-t">Sinais Vitais</div>
+      <div class="secao-c">
+        <div class="dc">
+          <div class="fl">
+            <label>PAS / PAD (mmHg)</label>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <input type="number" id="f-pas" min="0" max="300" placeholder="PAS" style="flex:1;">
+              <span style="font-size:.82rem;color:var(--muted);">/</span>
+              <input type="number" id="f-pad" min="0" max="200" placeholder="PAD" style="flex:1;">
+            </div>
+          </div>
+          <div class="fl">
+            <label>PAM (mmHg)</label>
+            <input type="number" id="f-pam" min="0" max="200" placeholder="Ex: 80">
+          </div>
+        </div>
+        <div class="dc">
+          <div class="fl"><label>Temperatura (°C)</label><input type="number" id="f-temp" min="30" max="43" step="0.1" placeholder="Ex: 36.5"></div>
+          <div class="fl" style="opacity:.5;pointer-events:none;"><label>&nbsp;</label><input type="text" placeholder=""></div>
         </div>
       </div>
     </div>
@@ -1003,6 +1080,17 @@
     <div class="modal-body" style="padding:16px;max-height:72vh;overflow-y:auto;" id="hist-disp-body">
       <div style="text-align:center;color:var(--muted);padding:2rem;">Carregando...</div>
     </div>
+  </div>
+</div>
+
+<!-- MODAL ESCALAS GLASGOW / RASS -->
+<div class="overlay" id="modal-escala">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header" id="escala-header">
+      <h3 id="escala-titulo">Escala</h3>
+      <button class="modal-close" onclick="fecharEscala()">×</button>
+    </div>
+    <div class="modal-body" id="escala-body" style="padding:0;max-height:80vh;overflow-y:auto;"></div>
   </div>
 </div>
 
