@@ -2366,62 +2366,142 @@ function _indIRAS(periodo){
     return h;
   }
 
-  // Agrega scores por bundle
+  // Re-avalia cada checklist usando o critério "tudo ou nada"
+  // (refaz mesmo para registros antigos, contanto que o objeto `respostas` exista).
   const bundleStats = {};
   IRAS_BUNDLES.forEach(b => {
-    bundleStats[b.id] = { titulo: b.titulo, icone: b.icone, totalItens: b.itens.length,
-      somaResp: 0, somaSim: 0, somaNao: 0, checklists: 0 };
+    bundleStats[b.id] = {
+      titulo: b.titulo, icone: b.icone, totalItens: b.itens.length,
+      checklistsAvaliados: 0,    // observados (denominador) — exclui os com status NA
+      checklistsAderentes: 0,    // numerador all-or-nothing
+      itensAderentes: 0, itensNaoAderentes: 0, itensNA: 0,
+      checklistsTotal: 0
+    };
   });
 
-  let totalRespondidos = 0, totalItens = 0;
+  let pacientesAvaliados = 0, pacientesTodosAderentes = 0;
+
   checklists.forEach(ck => {
-    if(!ck.scores) return;
+    let pacienteTemBundleAvaliavel = false;
+    let pacienteFalhouAlgum = false;
+
     IRAS_BUNDLES.forEach(b => {
-      const sc = ck.scores[b.id];
-      if(!sc) return;
-      bundleStats[b.id].somaResp  += sc.respondidos;
-      bundleStats[b.id].somaSim   += sc.sim;
-      bundleStats[b.id].somaNao   += (sc.respondidos - sc.sim);
-      bundleStats[b.id].checklists++;
-      totalRespondidos += sc.respondidos;
-      totalItens += sc.total;
+      let av;
+      // Preferimos re-avaliar a partir das respostas (caso novos critérios tenham sido aplicados)
+      if(ck.respostas){
+        av = _irasAvaliarBundle(b, ck.respostas);
+      } else if(ck.scores && ck.scores[b.id]){
+        // Compatibilidade com formato antigo: status já calculado
+        const sc = ck.scores[b.id];
+        av = {
+          status: sc.status || (sc.sim === sc.respondidos && sc.respondidos > 0 ? 'aderente' : 'nao_aderente'),
+          aderentes: sc.itensAderentes ?? sc.sim ?? 0,
+          naoAderentes: sc.itensNaoAderentes ?? Math.max(0,(sc.respondidos||0)-(sc.sim||0)),
+          na: sc.itensNA ?? 0,
+          semResposta: sc.itensSemResposta ?? Math.max(0,(sc.total||0)-(sc.respondidos||0)),
+          total: sc.total || b.itens.length
+        };
+      } else {
+        return;
+      }
+
+      bundleStats[b.id].checklistsTotal++;
+      bundleStats[b.id].itensAderentes    += av.aderentes;
+      bundleStats[b.id].itensNaoAderentes += av.naoAderentes;
+      bundleStats[b.id].itensNA           += av.na;
+
+      // No critério tudo-ou-nada, só contam bundles efetivamente avaliados
+      if(av.status === 'na' || av.status === 'incompleto') return;
+      bundleStats[b.id].checklistsAvaliados++;
+      if(av.status === 'aderente') bundleStats[b.id].checklistsAderentes++;
+
+      pacienteTemBundleAvaliavel = true;
+      if(av.status === 'nao_aderente') pacienteFalhouAlgum = true;
     });
+
+    if(pacienteTemBundleAvaliavel){
+      pacientesAvaliados++;
+      if(!pacienteFalhouAlgum) pacientesTodosAderentes++;
+    }
   });
 
-  const pctGeral = totalItens > 0 ? Math.round(totalRespondidos*100/totalItens) : 0;
-  const cor = pctGeral >= 80 ? '' : pctGeral >= 50 ? 'amarelo' : 'vermelho';
+  const pctGlobal = pacientesAvaliados > 0 ? Math.round(pacientesTodosAderentes*100/pacientesAvaliados) : 0;
+  const corGlobal = pctGlobal >= 95 ? '' : pctGlobal >= 80 ? 'amarelo' : 'vermelho';
 
   let h = '<div class="ind-grid">';
   h += _cardInd('Checklists IRAS', totalCheck, 'no período', '', 'iras_total');
-  h += _cardInd('Preenchimento geral', pctGeral+'%', `${totalRespondidos}/${totalItens} itens`, cor, 'iras_pct');
+  h += _cardInd('Adesão global (tudo ou nada)', pctGlobal+'%',
+                `${pacientesTodosAderentes}/${pacientesAvaliados} checklists 100% aderentes`, corGlobal, 'iras_pct');
   h += '</div>';
 
-  // Score por bundle
-  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">📊 Aderência por Bundle</div>';
+  // Score por bundle (aderência all-or-nothing por bundle)
+  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">📊 Adesão por Bundle (tudo ou nada)</div>';
   h += '<div style="display:flex;flex-direction:column;gap:8px;">';
 
   IRAS_BUNDLES.forEach(b => {
     const st = bundleStats[b.id];
-    if(!st.checklists) return;
-    const pct = st.somaResp > 0 ? Math.round(st.somaSim*100/st.somaResp) : 0;
-    const barCor = pct >= 80 ? '#1a6b3a' : pct >= 60 ? '#856404' : '#dc3545';
+    if(!st.checklistsTotal) return;
+    const pct = st.checklistsAvaliados > 0 ? Math.round(st.checklistsAderentes*100/st.checklistsAvaliados) : 0;
+    const barCor = st.checklistsAvaliados === 0 ? '#999' : pct >= 95 ? '#1a6b3a' : pct >= 80 ? '#856404' : '#dc3545';
+    const naoAderentes = st.checklistsAvaliados - st.checklistsAderentes;
     h += `<div style="background:white;border:1px solid #e0e0e0;border-radius:8px;padding:10px 14px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
         <span style="font-size:.84rem;font-weight:600;">${b.icone} ${b.titulo.replace(/Bundle de Prevenção de /,'')}</span>
-        <span style="font-size:.84rem;font-weight:700;color:${barCor};">${pct}% SIM</span>
+        <span style="font-size:.84rem;font-weight:700;color:${barCor};">${st.checklistsAvaliados>0 ? pct+'% adesão' : '— sem dados'}</span>
       </div>
       <div style="background:#f0f0f0;border-radius:4px;height:8px;overflow:hidden;">
         <div style="background:${barCor};height:100%;border-radius:4px;width:${pct}%;transition:width .3s;"></div>
       </div>
       <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:.72rem;color:var(--muted);">
-        <span>SIM: <strong style="color:#155724;">${st.somaSim}</strong> · NÃO: <strong style="color:#dc3545;">${st.somaNao}</strong></span>
-        <span>${st.checklists} checklist${st.checklists>1?'s':''} preenchido${st.checklists>1?'s':''}</span>
+        <span>Aderentes: <strong style="color:#155724;">${st.checklistsAderentes}</strong> · Falhas: <strong style="color:#dc3545;">${naoAderentes}</strong> · N/A: <strong>${st.checklistsTotal - st.checklistsAvaliados}</strong></span>
+        <span>${st.checklistsAvaliados} observado${st.checklistsAvaliados!==1?'s':''} de ${st.checklistsTotal}</span>
       </div>
     </div>`;
   });
 
   h += '</div>';
-  h += '<div class="ind-hint" style="margin-top:12px;">💡 Aderência = proporção de itens respondidos como SIM em relação ao total de itens respondidos (excluindo N/A).</div>';
+
+  // Conformidade individual por item — quando a adesão é baixa, mostra onde estão as falhas
+  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">🔎 Conformidade por Item</div>';
+  h += '<div class="ind-hint" style="margin-bottom:10px;">Quando a adesão geral está abaixo da meta, identifique aqui quais itens específicos do bundle estão falhando.</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:6px;">';
+
+  IRAS_BUNDLES.forEach(b => {
+    const st = bundleStats[b.id];
+    if(!st.checklistsTotal) return;
+
+    // Acumula resultados por item ao longo dos checklists
+    const itemStats = {};
+    b.itens.forEach(it => { itemStats[it.id] = { texto: it.texto, ad: 0, naoAd: 0, na: 0, sr: 0 }; });
+    checklists.forEach(ck => {
+      if(!ck.respostas) return;
+      b.itens.forEach(it => {
+        const av = _irasAvaliarItem(it, ck.respostas);
+        if(av === 'aderente')         itemStats[it.id].ad++;
+        else if(av === 'nao_aderente') itemStats[it.id].naoAd++;
+        else if(av === 'na')           itemStats[it.id].na++;
+        else                           itemStats[it.id].sr++;
+      });
+    });
+
+    h += `<details style="background:white;border:1px solid #e0e0e0;border-radius:8px;">
+      <summary style="cursor:pointer;padding:8px 12px;font-size:.82rem;font-weight:600;">${b.icone} ${b.titulo.replace(/Bundle de Prevenção de /,'')}</summary>
+      <div style="padding:6px 12px 10px;">`;
+    b.itens.forEach(it => {
+      const s = itemStats[it.id];
+      const denom = s.ad + s.naoAd; // exclui N/A e sem resposta
+      const pct = denom > 0 ? Math.round(s.ad*100/denom) : null;
+      const cor = pct === null ? '#999' : pct >= 95 ? '#1a6b3a' : pct >= 80 ? '#856404' : '#dc3545';
+      h += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:.76rem;padding:4px 0;border-bottom:1px dashed #eee;">
+        <span style="flex:1;color:#333;">${it.texto}</span>
+        <span style="color:${cor};font-weight:700;min-width:90px;text-align:right;">${pct === null ? '—' : pct+'% ('+s.ad+'/'+denom+')'}</span>
+      </div>`;
+    });
+    h += '</div></details>';
+  });
+
+  h += '</div>';
+  h += '<div class="ind-hint" style="margin-top:12px;">💡 <strong>Tudo ou nada (IHI):</strong> o bundle só é considerado aderente quando 100% dos itens aplicáveis (não-N/A) estão conformes. Meta institucional recomendada: ≥ 95%.</div>';
   return h;
 }
 
@@ -5402,18 +5482,49 @@ function _coletarDadosRelatorio(periodo, secoes){
       if(!k||!k.startsWith('uti_iras_')) continue;
       try{ const v=JSON.parse(localStorage.getItem(k)); if(v&&_dentroPeriodo(v.data||k.split('_').pop(),periodo)) checklists.push(v); }catch(e){}
     }
+    // Agrega por bundle usando metodologia all-or-nothing (IHI)
     const bundleStats = {};
-    IRAS_BUNDLES.forEach(b=>{ bundleStats[b.id]={titulo:b.titulo, sim:0, respondidos:0, total:0, n:0}; });
-    checklists.forEach(ck=>{
-      if(!ck.scores) return;
-      IRAS_BUNDLES.forEach(b=>{ const sc=ck.scores[b.id]; if(!sc) return; bundleStats[b.id].sim+=sc.sim; bundleStats[b.id].respondidos+=sc.respondidos; bundleStats[b.id].total+=sc.total; bundleStats[b.id].n++; });
+    IRAS_BUNDLES.forEach(b=>{
+      bundleStats[b.id] = { titulo:b.titulo, observados:0, aderentes:0, naoAderentes:0, naBundle:0 };
+    });
+    let pacientesAvaliados = 0, pacientesAderentes = 0;
+    checklists.forEach(ck => {
+      let temAvaliavel = false, falhouAlgum = false;
+      IRAS_BUNDLES.forEach(b => {
+        let av;
+        if(ck.respostas){
+          av = _irasAvaliarBundle(b, ck.respostas);
+        } else if(ck.scores && ck.scores[b.id]){
+          const sc = ck.scores[b.id];
+          av = { status: sc.status || (sc.sim===sc.respondidos && sc.respondidos>0 ? 'aderente':'nao_aderente') };
+        } else { return; }
+        if(av.status === 'na'){ bundleStats[b.id].naBundle++; return; }
+        if(av.status === 'incompleto') return;
+        bundleStats[b.id].observados++;
+        if(av.status === 'aderente') bundleStats[b.id].aderentes++;
+        else                          bundleStats[b.id].naoAderentes++;
+        temAvaliavel = true;
+        if(av.status === 'nao_aderente') falhouAlgum = true;
+      });
+      if(temAvaliavel){
+        pacientesAvaliados++;
+        if(!falhouAlgum) pacientesAderentes++;
+      }
     });
     dados.secoes.iras = {
       totalChecklists: checklists.length,
+      pacientesAvaliados,
+      pacientesAderentes,
+      adesaoGlobal: pacientesAvaliados > 0 ? pct(pacientesAderentes, pacientesAvaliados) : null,
+      metodologia: 'tudo_ou_nada_IHI',
       bundles: Object.entries(bundleStats).map(([id,st])=>({
-        id, titulo:st.titulo, n:st.n,
-        aderencia: st.respondidos>0 ? pct(st.sim, st.respondidos) : null
-      })).filter(b=>b.n>0)
+        id, titulo:st.titulo,
+        observados: st.observados,
+        aderentes: st.aderentes,
+        naoAderentes: st.naoAderentes,
+        naBundle: st.naBundle,
+        aderencia: st.observados>0 ? pct(st.aderentes, st.observados) : null
+      })).filter(b => b.observados > 0 || b.naBundle > 0)
     };
   }
 
@@ -5722,9 +5833,19 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
 
     // ── IRAS / BUNDLES ────────────────────────────────────────────────────────
     if(d.iras){ const s=d.iras;
-      secTitulo('IRAS / Bundles CCIH');
+      secTitulo('IRAS / Bundles CCIH (metodologia tudo ou nada – IHI)');
       linha('Checklists preenchidos', s.totalChecklists);
-      if(s.bundles?.length){ y+=2; tabela(['Bundle','Checklists','Aderência (%)'],s.bundles.map(b=>[b.titulo.substring(0,50),b.n,b.aderencia??'–']),[105,22,18]); }
+      if(s.adesaoGlobal != null){
+        linha('Adesão global (pacientes 100% aderentes)', `${s.adesaoGlobal}%  (${s.pacientesAderentes}/${s.pacientesAvaliados})`);
+      }
+      if(s.bundles?.length){
+        y+=2;
+        tabela(
+          ['Bundle','Observados','Aderentes','Adesão (%)'],
+          s.bundles.map(b=>[b.titulo.substring(0,50), b.observados ?? 0, b.aderentes ?? 0, b.aderencia ?? '–']),
+          [95, 25, 25, 25]
+        );
+      }
     }
 
     // ── RODAPÉ ───────────────────────────────────────────────────────────────
@@ -5749,6 +5870,16 @@ function _kpisParaPDF(sec, d){
 // CHECKLIST IRAS – CCIH UTI
 // ════════════════════════════════════════════════════════════════════════════
 
+// ────────────────────────────────────────────────────────────────────────────
+// IRAS / BUNDLES
+// Critérios de aderência por item (metodologia "tudo ou nada" - IHI):
+//   - 'sim'        → aderente apenas se a resposta for SIM
+//   - 'nao'        → aderente apenas se a resposta for NÃO
+//   - 'sim_ou_nao' → aderente se for SIM ou NÃO (não pode ser N/A) -- usado p/ "precisa ser trocado?"
+//   - 'gaze_ou_filme' → opções customizadas: aderente se GAZE ou FILME (não N/A)
+//   - 'condicional_curativo' → aderente conforme tipo de curativo (gaze=SIM, filme=NÃO)
+// N/A em qualquer item = item fora do cálculo (mas se TODOS forem N/A, bundle inteiro fica N/A)
+// ────────────────────────────────────────────────────────────────────────────
 const IRAS_BUNDLES = [
   {
     id: 'cdl',
@@ -5756,13 +5887,13 @@ const IRAS_BUNDLES = [
     icone: '🩸',
     condicao: (d) => !!(d.dial_l || d.dial_d || d.avc_l || d.avc_d),
     itens: [
-      { id:'cdl_curativo_tipo',   texto:'Qual curativo utilizado?', opcoes:['GAZE','FILME','N/A'] },
-      { id:'cdl_curativo_data',   texto:'Curativo com data da realização?' },
-      { id:'cdl_curativo_troca',  texto:'Curativo precisa ser trocado?' },
-      { id:'cdl_sem_sangue',      texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?' },
-      { id:'cdl_equipo_data',     texto:'Equipos e dispositivos com data da instalação?' },
-      { id:'cdl_equipo_troca',    texto:'Equipos e dispositivos precisam ser trocados?' },
-      { id:'cdl_alcool',          texto:'Realizada orientação sobre desinfecção das conexões com álcool 70% antes de equipos ou seringas?' },
+      { id:'cdl_curativo_tipo',   texto:'Qual curativo utilizado?', opcoes:['GAZE','FILME','N/A'], criterio:'gaze_ou_filme' },
+      { id:'cdl_curativo_data',   texto:'Curativo com data da realização?', criterio:'sim' },
+      { id:'cdl_curativo_troca',  texto:'Curativo precisa ser trocado?', criterio:'condicional_curativo' },
+      { id:'cdl_sem_sangue',      texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?', criterio:'sim' },
+      { id:'cdl_equipo_data',     texto:'Equipos e dispositivos com data da instalação?', criterio:'sim' },
+      { id:'cdl_equipo_troca',    texto:'Equipos e dispositivos precisam ser trocados?', criterio:'sim_ou_nao' },
+      { id:'cdl_alcool',          texto:'Realizada orientação sobre desinfecção das conexões com álcool 70% antes de equipos ou seringas?', criterio:'sim' },
     ]
   },
   {
@@ -5771,12 +5902,12 @@ const IRAS_BUNDLES = [
     icone: '💉',
     condicao: (d) => !!(d.avps && d.avps.some(a=>a.local)),
     itens: [
-      { id:'avp_curativo_limpo',  texto:'Curativo limpo e seco?' },
-      { id:'avp_dor_edema',       texto:'Paciente refere dor, ou apresenta edema, hiperemia?' },
-      { id:'avp_data_puncao',     texto:'Acesso com data que foi realizada a punção?' },
-      { id:'avp_sem_sangue',      texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?' },
-      { id:'avp_equipo_data',     texto:'Equipos com data da instalação?' },
-      { id:'avp_equipo_troca',    texto:'Equipos precisam ser trocados?' },
+      { id:'avp_curativo_limpo',  texto:'Curativo limpo e seco?', criterio:'sim' },
+      { id:'avp_dor_edema',       texto:'Paciente refere dor, ou apresenta edema, hiperemia?', criterio:'nao' },
+      { id:'avp_data_puncao',     texto:'Acesso com data que foi realizada a punção?', criterio:'sim' },
+      { id:'avp_sem_sangue',      texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?', criterio:'sim' },
+      { id:'avp_equipo_data',     texto:'Equipos com data da instalação?', criterio:'sim' },
+      { id:'avp_equipo_troca',    texto:'Equipos precisam ser trocados?', criterio:'sim_ou_nao' },
     ]
   },
   {
@@ -5785,12 +5916,12 @@ const IRAS_BUNDLES = [
     icone: '🫘',
     condicao: (d) => !!(d.svd_n || d.svd_d),
     itens: [
-      { id:'svd_data',            texto:'Possui identificação da data da instalação?' },
-      { id:'svd_fixacao',         texto:'Sonda fixada corretamente no paciente?' },
-      { id:'svd_higiene',         texto:'Realizada higiene do meato urinário?' },
-      { id:'svd_dobras',          texto:'Apresenta dobras no sistema?' },
-      { id:'svd_bolsa_nivel',     texto:'Bolsa coletora está abaixo do nível da bexiga e sem contato com o chão?' },
-      { id:'svd_bolsa_volume',    texto:'Bolsa coletora com volume até 2/3 da sua capacidade?' },
+      { id:'svd_data',            texto:'Possui identificação da data da instalação?', criterio:'sim' },
+      { id:'svd_fixacao',         texto:'Sonda fixada corretamente no paciente?', criterio:'sim' },
+      { id:'svd_higiene',         texto:'Realizada higiene do meato urinário?', criterio:'sim' },
+      { id:'svd_dobras',          texto:'Apresenta dobras no sistema?', criterio:'nao' },
+      { id:'svd_bolsa_nivel',     texto:'Bolsa coletora está abaixo do nível da bexiga e sem contato com o chão?', criterio:'sim' },
+      { id:'svd_bolsa_volume',    texto:'Bolsa coletora com volume até 2/3 da sua capacidade?', criterio:'sim' },
     ]
   },
   {
@@ -5799,17 +5930,97 @@ const IRAS_BUNDLES = [
     icone: '🫁',
     condicao: (d) => !!(d.vent && (d.vent.includes('VMI') || d.vent.includes('TOT') || d.vent.includes('TQT'))),
     itens: [
-      { id:'pav_higiene_oral',    texto:'Realizada HIGIENE ORAL?' },
-      { id:'pav_cabeceira',       texto:'Cabeceira elevada (30-45°)?' },
-      { id:'pav_fixacao',         texto:'TOT ou TQT com fixação adequada?' },
-      { id:'pav_sne',             texto:'Sonda Nasoenteral com fixação adequada?' },
-      { id:'pav_aspiracao',       texto:'Sistema de aspiração fechado dentro do prazo de validade?' },
-      { id:'pav_latex',           texto:'Realizada troca do látex e vacuômetro conforme rotina?' },
+      { id:'pav_higiene_oral',    texto:'Realizada HIGIENE ORAL?', criterio:'sim' },
+      { id:'pav_cabeceira',       texto:'Cabeceira elevada (30-45°)?', criterio:'sim' },
+      { id:'pav_fixacao',         texto:'TOT ou TQT com fixação adequada?', criterio:'sim' },
+      { id:'pav_sne',             texto:'Sonda Nasoenteral com fixação adequada?', criterio:'sim' },
+      { id:'pav_aspiracao',       texto:'Sistema de aspiração fechado dentro do prazo de validade?', criterio:'sim' },
+      { id:'pav_latex',           texto:'Realizada troca do látex e vacuômetro conforme rotina?', criterio:'sim' },
     ]
   }
 ];
 
-let _irasRespostas = {}; // { id: 'sim'|'nao'|'na' }
+let _irasRespostas = {}; // { id: 'sim'|'nao'|'na'|'gaze'|'filme'|'n_a' }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Avalia se um item é aderente conforme seu critério.
+// Retorna: 'aderente' | 'nao_aderente' | 'na' | 'sem_resposta'
+// Observações:
+//  - 'sim_ou_nao': N/A é resposta INVÁLIDA (item não aceita N/A); marca como nao_aderente.
+//  - 'condicional_curativo': se o tipo de curativo for 'n_a', este item depende dele
+//    e fica como nao_aderente (porque o item-pai já falhou).
+//  - Para os demais critérios, N/A → 'na' (item retirado do cálculo do bundle).
+// ────────────────────────────────────────────────────────────────────────────
+function _irasAvaliarItem(item, respostas){
+  const r = respostas[item.id];
+  if(!r) return 'sem_resposta';
+  const isNA = (r === 'na' || r === 'n_a');
+
+  switch(item.criterio){
+    case 'sim':
+      if(isNA) return 'na';
+      return r === 'sim' ? 'aderente' : 'nao_aderente';
+
+    case 'nao':
+      if(isNA) return 'na';
+      return r === 'nao' ? 'aderente' : 'nao_aderente';
+
+    case 'sim_ou_nao':
+      // N/A não é aceito neste item → conta como falha
+      if(isNA) return 'nao_aderente';
+      return (r === 'sim' || r === 'nao') ? 'aderente' : 'nao_aderente';
+
+    case 'gaze_ou_filme':
+      // GAZE/FILME = aderente; N/A = não aderente (CDL sem curativo válido = falha)
+      if(isNA) return 'nao_aderente';
+      return (r === 'gaze' || r === 'filme') ? 'aderente' : 'nao_aderente';
+
+    case 'condicional_curativo': {
+      const tipo = respostas['cdl_curativo_tipo'];
+      // Se o tipo de curativo é N/A, este item-filho herda a falha
+      if(tipo === 'n_a') return 'nao_aderente';
+      // Sem tipo escolhido ainda → pendente
+      if(!tipo) return 'sem_resposta';
+      if(isNA) return 'na';  // marcou N/A aqui mas tipo definido (raro) → tira do cálculo
+      if(tipo === 'gaze')  return r === 'sim' ? 'aderente' : 'nao_aderente';
+      if(tipo === 'filme') return r === 'nao' ? 'aderente' : 'nao_aderente';
+      return 'sem_resposta';
+    }
+
+    default:
+      if(isNA) return 'na';
+      return r === 'sim' ? 'aderente' : 'nao_aderente';
+  }
+}
+
+// Avalia o bundle inteiro com critério "tudo ou nada".
+// Retorna { status: 'aderente' | 'nao_aderente' | 'incompleto' | 'na', itensAderentes, itensTotais, itensNA, itensNaoAderentes, itensSemResposta }
+function _irasAvaliarBundle(bundle, respostas){
+  // Caso especial: todas as respostas existem e são N/A literais → bundle não aplicável.
+  // (Paciente sem o dispositivo; auto-marcado pela rotina de abertura do checklist.)
+  const respostasItens = bundle.itens.map(it => respostas[it.id]);
+  const todosRespondidos = respostasItens.every(r => !!r);
+  const todosNA = respostasItens.every(r => r === 'na' || r === 'n_a');
+  if(todosRespondidos && todosNA){
+    return { status:'na', aderentes:0, naoAderentes:0, na:bundle.itens.length, semResposta:0, total:bundle.itens.length };
+  }
+
+  let aderentes = 0, naoAderentes = 0, na = 0, semResposta = 0;
+  bundle.itens.forEach(it => {
+    const v = _irasAvaliarItem(it, respostas);
+    if(v === 'aderente')         aderentes++;
+    else if(v === 'nao_aderente') naoAderentes++;
+    else if(v === 'na')           na++;
+    else                          semResposta++;
+  });
+  const total = bundle.itens.length;
+  let status;
+  if(na === total)                                  status = 'na';            // todos N/A
+  else if(semResposta > 0)                          status = 'incompleto';    // há item não respondido
+  else if(naoAderentes === 0)                       status = 'aderente';      // todos os não-N/A são aderentes
+  else                                              status = 'nao_aderente'; // pelo menos um item falhou
+  return { status, aderentes, naoAderentes, na, semResposta, total };
+}
 
 async function abrirIRAS(){
   if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
@@ -5860,6 +6071,23 @@ async function abrirIRAS(){
 
     _irasRespostas = salvo ? { ...salvo } : {};
 
+    // Auto-marca N/A nos bundles cujo dispositivo NÃO está presente na evolução,
+    // mas só nos itens que ainda não tenham resposta (não sobrescreve registros existentes).
+    IRAS_BUNDLES.forEach(bundle => {
+      const dispositivoPresente = bundle.condicao(d);
+      if(dispositivoPresente) return;
+      bundle.itens.forEach(item => {
+        if(_irasRespostas[item.id]) return;          // já tem resposta, preserva
+        if(item.opcoes){
+          // Item com opções customizadas (ex: GAZE/FILME/N/A) → marca 'n_a'
+          const opNA = item.opcoes.find(o => o.toUpperCase().includes('N/A') || o.toUpperCase()==='NA');
+          _irasRespostas[item.id] = opNA ? opNA.toLowerCase().replace(/\//g,'_') : 'na';
+        } else {
+          _irasRespostas[item.id] = 'na';
+        }
+      });
+    });
+
     // Exibe tag de herança na barra de info do modal
     if(herdado){
       const infoEl = document.getElementById('iras-pac-info');
@@ -5873,6 +6101,18 @@ async function abrirIRAS(){
     _renderIRAS(d);
   } catch(e){
     _irasRespostas = {};
+    // mesmo no erro, aplica auto-N/A nos bundles ausentes
+    IRAS_BUNDLES.forEach(bundle => {
+      if(bundle.condicao(d)) return;
+      bundle.itens.forEach(item => {
+        if(item.opcoes){
+          const opNA = item.opcoes.find(o => o.toUpperCase().includes('N/A') || o.toUpperCase()==='NA');
+          _irasRespostas[item.id] = opNA ? opNA.toLowerCase().replace(/\//g,'_') : 'na';
+        } else {
+          _irasRespostas[item.id] = 'na';
+        }
+      });
+    });
     _renderIRAS(d);
   }
 
@@ -5886,26 +6126,29 @@ function _renderIRAS(d){
   IRAS_BUNDLES.forEach(bundle => {
     const ativo = bundle.condicao(d);
     const itens = bundle.itens;
-    const respostas = itens.map(it => _irasRespostas[it.id]);
-    const respondidos = respostas.filter(r => r).length;
-    const pct = itens.length > 0 ? Math.round(respondidos*100/itens.length) : 0;
+    const av = _irasAvaliarBundle(bundle, _irasRespostas);
+    const { badgeText, barWidth, barClass } = _irasBadgeInfo(av);
 
     html += `<div class="iras-bundle" id="bundle-${bundle.id}">
       <div class="iras-bundle-header">
         <span>${bundle.icone} ${bundle.titulo}</span>
-        <span class="iras-bundle-badge" id="badge-${bundle.id}">${respondidos}/${itens.length} · ${pct}%</span>
+        <span class="iras-bundle-badge" id="badge-${bundle.id}">${badgeText}</span>
       </div>`;
 
     if(!ativo){
       html += `<div style="padding:10px 14px;font-size:.8rem;color:var(--muted);background:#f8f9fa;font-style:italic;">
-        ⚠ Dispositivo não registrado na evolução atual — preencha mesmo assim se aplicável.
+        ⚠ Dispositivo não registrado na evolução — itens marcados como N/A automaticamente. Altere se aplicável.
       </div>`;
     }
 
     itens.forEach(item => {
       const resp = _irasRespostas[item.id] || '';
       const usaOpcoes = item.opcoes;
-      html += `<div class="iras-item" data-item-id="${item.id}" data-bundle-id="${bundle.id}">
+      const itemAv = _irasAvaliarItem(item, _irasRespostas);
+      const itemCls = itemAv === 'aderente' ? ' aderente'
+                    : itemAv === 'nao_aderente' ? ' nao-aderente'
+                    : itemAv === 'na' ? ' item-na' : '';
+      html += `<div class="iras-item${itemCls}" data-item-id="${item.id}" data-bundle-id="${bundle.id}">
         <div class="iras-item-texto">${item.texto}</div>
         <div class="iras-radios">`;
 
@@ -5927,7 +6170,7 @@ function _renderIRAS(d){
     });
 
     html += `<div class="iras-score-bar">
-      <div class="iras-score-bar-fill" id="bar-${bundle.id}" style="width:${pct}%"></div>
+      <div class="iras-score-bar-fill ${barClass}" id="bar-${bundle.id}" style="width:${barWidth}%"></div>
     </div></div>`;
   });
 
@@ -5940,6 +6183,23 @@ function _renderIRAS(d){
   });
 
   _atualizarScoreIRAS();
+}
+
+// Calcula texto/largura/classe da barra de progresso conforme avaliação do bundle
+function _irasBadgeInfo(av){
+  if(av.status === 'na'){
+    return { badgeText: 'N/A · sem dispositivo', barWidth: 0, barClass: 'bar-na' };
+  }
+  if(av.status === 'incompleto'){
+    const respondidos = av.aderentes + av.naoAderentes + av.na;
+    const pct = av.total > 0 ? Math.round(respondidos*100/av.total) : 0;
+    return { badgeText: `${respondidos}/${av.total} · preenchendo`, barWidth: pct, barClass: 'bar-incompleto' };
+  }
+  if(av.status === 'aderente'){
+    return { badgeText: `✓ ADERENTE · ${av.aderentes}/${av.total - av.na}`, barWidth: 100, barClass: 'bar-aderente' };
+  }
+  // não aderente
+  return { badgeText: `✗ NÃO ADERENTE · ${av.naoAderentes} falha${av.naoAderentes>1?'s':''}`, barWidth: 100, barClass: 'bar-nao-aderente' };
 }
 
 function _irasClickHandler(ev){
@@ -5960,37 +6220,68 @@ function _irasClickHandler(ev){
   item.querySelectorAll('.iras-radio-btn').forEach(b => b.classList.remove('ativo'));
   btn.classList.add('ativo');
 
+  // Caso especial: alterar tipo de curativo do CDL afeta o item "precisa ser trocado?"
+  // → re-renderiza só o item dependente para refletir mudança de critério
+  if(itemId === 'cdl_curativo_tipo'){
+    const dep = document.querySelector('[data-item-id="cdl_curativo_troca"]');
+    if(dep) _irasAtualizarClasseItem(dep, 'cdl_curativo_troca');
+  }
+
+  // Atualiza classe deste item, badge do bundle e score geral
+  _irasAtualizarClasseItem(item, itemId);
   _atualizarBadgeBundle(bundleId);
   _atualizarScoreIRAS();
+}
+
+// Atualiza apenas a classe visual do item (aderente / não aderente / n_a)
+function _irasAtualizarClasseItem(itemEl, itemId){
+  let bundle = null, item = null;
+  for(const b of IRAS_BUNDLES){
+    const it = b.itens.find(i=>i.id===itemId);
+    if(it){ bundle = b; item = it; break; }
+  }
+  if(!item) return;
+  const av = _irasAvaliarItem(item, _irasRespostas);
+  itemEl.classList.remove('aderente','nao-aderente','item-na');
+  if(av === 'aderente')         itemEl.classList.add('aderente');
+  else if(av === 'nao_aderente') itemEl.classList.add('nao-aderente');
+  else if(av === 'na')           itemEl.classList.add('item-na');
 }
 
 function _atualizarBadgeBundle(bundleId){
   const bundle = IRAS_BUNDLES.find(b=>b.id===bundleId);
   if(!bundle) return;
-  const respondidos = bundle.itens.filter(it=>_irasRespostas[it.id]).length;
-  const pct = Math.round(respondidos*100/bundle.itens.length);
+  const av = _irasAvaliarBundle(bundle, _irasRespostas);
+  const { badgeText, barWidth, barClass } = _irasBadgeInfo(av);
   const badge = document.getElementById('badge-'+bundleId);
   const bar   = document.getElementById('bar-'+bundleId);
-  if(badge) badge.textContent = `${respondidos}/${bundle.itens.length} · ${pct}%`;
-  if(bar)   bar.style.width = pct+'%';
+  if(badge) badge.textContent = badgeText;
+  if(bar){
+    bar.classList.remove('bar-na','bar-incompleto','bar-aderente','bar-nao-aderente');
+    if(barClass) bar.classList.add(barClass);
+    bar.style.width = barWidth+'%';
+  }
 }
 
 function _atualizarScoreIRAS(){
-  let totalItens = 0, totalResp = 0, totalSim = 0, totalNao = 0;
+  let bundlesAvaliados = 0, bundlesAderentes = 0, bundlesIncompletos = 0;
   IRAS_BUNDLES.forEach(b => {
-    b.itens.forEach(it => {
-      totalItens++;
-      const r = _irasRespostas[it.id];
-      if(r){ totalResp++; if(r==='sim') totalSim++; if(r==='nao') totalNao++; }
-    });
+    const av = _irasAvaliarBundle(b, _irasRespostas);
+    if(av.status === 'na') return;            // bundle ignorado (sem dispositivo)
+    bundlesAvaliados++;
+    if(av.status === 'aderente') bundlesAderentes++;
+    if(av.status === 'incompleto') bundlesIncompletos++;
   });
-  const pct = totalItens > 0 ? Math.round(totalResp*100/totalItens) : 0;
+  const pct = bundlesAvaliados > 0 ? Math.round(bundlesAderentes*100/bundlesAvaliados) : 0;
   const el = document.getElementById('iras-score');
   if(el){
-    const cor = pct >= 80 ? '#155724' : pct >= 50 ? '#856404' : '#721c24';
-    el.innerHTML = `<span style="color:${cor};">Preenchimento: <strong>${pct}%</strong> (${totalResp}/${totalItens})</span>
-      · SIM: <strong style="color:#155724;">${totalSim}</strong>
-      · NÃO: <strong style="color:#721c24;">${totalNao}</strong>`;
+    const cor = pct >= 95 ? '#155724' : pct >= 80 ? '#856404' : '#721c24';
+    if(bundlesAvaliados === 0){
+      el.innerHTML = `<span style="color:#6c757d;">Nenhum bundle aplicável (todos N/A).</span>`;
+    } else {
+      el.innerHTML = `<span style="color:${cor};">Adesão (tudo ou nada): <strong>${pct}%</strong> (${bundlesAderentes}/${bundlesAvaliados} bundles)</span>` +
+        (bundlesIncompletos>0 ? ` · <span style="color:#856404;">${bundlesIncompletos} pendente${bundlesIncompletos>1?'s':''}</span>` : '');
+    }
   }
 }
 
@@ -5999,12 +6290,26 @@ async function salvarIRAS(){
   const d = coletarDados();
   const chave = `uti_iras_${d.leito}_${d.turno}_${d.data}`;
 
-  // Calcula scores por bundle para os indicadores
+  // Calcula scores por bundle para os indicadores ─ formato all-or-nothing.
+  // Mantém também os campos antigos (sim/respondidos) para retrocompatibilidade
+  // com checklists já salvos e o módulo de exportação.
   const scores = {};
   IRAS_BUNDLES.forEach(b => {
+    const av = _irasAvaliarBundle(b, _irasRespostas);
     const resp = b.itens.map(it => _irasRespostas[it.id]).filter(Boolean);
     const sim  = resp.filter(r=>r==='sim').length;
-    scores[b.id] = { respondidos: resp.length, total: b.itens.length, sim };
+    scores[b.id] = {
+      // legacy
+      respondidos: resp.length,
+      total: b.itens.length,
+      sim,
+      // all-or-nothing
+      status: av.status,                  // 'aderente' | 'nao_aderente' | 'incompleto' | 'na'
+      itensAderentes: av.aderentes,
+      itensNaoAderentes: av.naoAderentes,
+      itensNA: av.na,
+      itensSemResposta: av.semResposta
+    };
   });
 
   const payload = {
@@ -6016,6 +6321,7 @@ async function salvarIRAS(){
   try {
     await dbSet(chave, payload);
     toast('✓ Checklist IRAS salvo');
+    fecharIRAS();   // ← fecha automaticamente após salvar
   } catch(e){
     toast('Erro ao salvar: '+e.message, true);
   }
