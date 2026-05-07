@@ -2389,7 +2389,11 @@ function _indIRAS(periodo){
       let av;
       // Preferimos re-avaliar a partir das respostas (caso novos critérios tenham sido aplicados)
       if(ck.respostas){
-        av = _irasAvaliarBundle(b, ck.respostas);
+        // Reconstrói contexto da evolução a partir dos dispositivos salvos no payload.
+        // Para checklists antigos sem essa info, assume dispositivo presente
+        // (postura conservadora: melhor exigir preenchimento do que ignorar).
+        const ctx = _irasReconstruirContextoCk(ck);
+        av = _irasAvaliarBundle(b, ck.respostas, ctx);
       } else if(ck.scores && ck.scores[b.id]){
         // Compatibilidade com formato antigo: status já calculado
         const sc = ck.scores[b.id];
@@ -5490,10 +5494,11 @@ function _coletarDadosRelatorio(periodo, secoes){
     let pacientesAvaliados = 0, pacientesAderentes = 0;
     checklists.forEach(ck => {
       let temAvaliavel = false, falhouAlgum = false;
+      const ctx = _irasReconstruirContextoCk(ck);
       IRAS_BUNDLES.forEach(b => {
         let av;
         if(ck.respostas){
-          av = _irasAvaliarBundle(b, ck.respostas);
+          av = _irasAvaliarBundle(b, ck.respostas, ctx);
         } else if(ck.scores && ck.scores[b.id]){
           const sc = ck.scores[b.id];
           av = { status: sc.status || (sc.sim===sc.respondidos && sc.respondidos>0 ? 'aderente':'nao_aderente') };
@@ -5941,6 +5946,42 @@ const IRAS_BUNDLES = [
 ];
 
 let _irasRespostas = {}; // { id: 'sim'|'nao'|'na'|'gaze'|'filme'|'n_a' }
+let _irasEvolucaoAtual = null; // snapshot da evolução do paciente (para distinguir N/A com vs sem dispositivo)
+
+// ────────────────────────────────────────────────────────────────────────────
+// Reconstrói o "contexto da evolução" a partir de um checklist salvo, permitindo
+// que _irasAvaliarBundle saiba quais bundles tinham dispositivo presente naquele turno.
+// Para checklists antigos sem o snapshot `dispositivosPresentes`, a postura é
+// CONSERVADORA: assume que o dispositivo estava presente em todos os bundles
+// (assim, "tudo N/A" continua sendo penalizado como nao_aderente, em vez de
+// ser silenciosamente ignorado).
+// ────────────────────────────────────────────────────────────────────────────
+function _irasReconstruirContextoCk(ck){
+  const dispositivos = ck && ck.dispositivosPresentes;
+  return {
+    __irasShim: true,
+    __dispositivos: dispositivos || null
+  };
+  // OBS: a função `bundle.condicao(d)` recebe esse objeto e o lê via __dispositivos.
+  // As condições originais leem campos como d.dial_l, d.avc_l etc., então usamos
+  // o helper _irasShimCondicao abaixo para fazer o roteamento.
+}
+
+// Override das condicoes para aceitar tanto a evolução completa quanto o shim.
+// Implementação: envelopa cada condicao original numa nova função que detecta
+// o shim e consulta __dispositivos[bundleId].
+(function _irasInstalarShimCondicoes(){
+  IRAS_BUNDLES.forEach(b => {
+    const orig = b.condicao;
+    b.condicao = function(d){
+      if(d && d.__irasShim){
+        if(d.__dispositivos == null) return true;       // postura conservadora
+        return !!d.__dispositivos[b.id];
+      }
+      return orig(d);
+    };
+  });
+})();
 
 // ────────────────────────────────────────────────────────────────────────────
 // Avalia se um item é aderente conforme seu critério.
@@ -5994,14 +6035,22 @@ function _irasAvaliarItem(item, respostas){
 }
 
 // Avalia o bundle inteiro com critério "tudo ou nada".
-// Retorna { status: 'aderente' | 'nao_aderente' | 'incompleto' | 'na', itensAderentes, itensTotais, itensNA, itensNaoAderentes, itensSemResposta }
-function _irasAvaliarBundle(bundle, respostas){
-  // Caso especial: todas as respostas existem e são N/A literais → bundle não aplicável.
-  // (Paciente sem o dispositivo; auto-marcado pela rotina de abertura do checklist.)
+// `dadosEvolucao` (opcional): objeto da evolução; se passado, permite distinguir
+// entre "paciente sem o dispositivo (legitimamente N/A)" e "paciente COM o dispositivo
+// mas profissional marcou tudo N/A (= falha de preenchimento → não aderente)".
+// Retorna { status, aderentes, naoAderentes, na, semResposta, total }
+function _irasAvaliarBundle(bundle, respostas, dadosEvolucao){
   const respostasItens = bundle.itens.map(it => respostas[it.id]);
   const todosRespondidos = respostasItens.every(r => !!r);
   const todosNA = respostasItens.every(r => r === 'na' || r === 'n_a');
+
   if(todosRespondidos && todosNA){
+    // Caso 1: temos contexto da evolução E o dispositivo está presente
+    //   → profissional marcou tudo N/A indevidamente → não aderente
+    if(dadosEvolucao && bundle.condicao(dadosEvolucao)){
+      return { status:'nao_aderente', aderentes:0, naoAderentes:bundle.itens.length, na:0, semResposta:0, total:bundle.itens.length };
+    }
+    // Caso 2: sem contexto OU dispositivo ausente → bundle não aplicável
     return { status:'na', aderentes:0, naoAderentes:0, na:bundle.itens.length, semResposta:0, total:bundle.itens.length };
   }
 
@@ -6015,7 +6064,7 @@ function _irasAvaliarBundle(bundle, respostas){
   });
   const total = bundle.itens.length;
   let status;
-  if(na === total)                                  status = 'na';            // todos N/A
+  if(na === total)                                  status = 'na';            // todos N/A (raro chegar aqui)
   else if(semResposta > 0)                          status = 'incompleto';    // há item não respondido
   else if(naoAderentes === 0)                       status = 'aderente';      // todos os não-N/A são aderentes
   else                                              status = 'nao_aderente'; // pelo menos um item falhou
@@ -6028,6 +6077,9 @@ async function abrirIRAS(){
 
   document.getElementById('iras-pac-info').textContent =
     `Leito ${pad(d.leito)} · ${d.pac||'—'} · ${d.data?d.data.split('-').reverse().join('/'):''}  |  Turno ${d.turno}`;
+
+  // Guarda contexto da evolução para uso em todas as funções de avaliação do modal
+  _irasEvolucaoAtual = d;
 
   const outroTurno  = d.turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
   const chaveAtual  = `uti_iras_${d.leito}_${d.turno}_${d.data}`;
@@ -6126,7 +6178,7 @@ function _renderIRAS(d){
   IRAS_BUNDLES.forEach(bundle => {
     const ativo = bundle.condicao(d);
     const itens = bundle.itens;
-    const av = _irasAvaliarBundle(bundle, _irasRespostas);
+    const av = _irasAvaliarBundle(bundle, _irasRespostas, d);
     const { badgeText, barWidth, barClass } = _irasBadgeInfo(av);
 
     html += `<div class="iras-bundle" id="bundle-${bundle.id}">
@@ -6251,7 +6303,7 @@ function _irasAtualizarClasseItem(itemEl, itemId){
 function _atualizarBadgeBundle(bundleId){
   const bundle = IRAS_BUNDLES.find(b=>b.id===bundleId);
   if(!bundle) return;
-  const av = _irasAvaliarBundle(bundle, _irasRespostas);
+  const av = _irasAvaliarBundle(bundle, _irasRespostas, _irasEvolucaoAtual);
   const { badgeText, barWidth, barClass } = _irasBadgeInfo(av);
   const badge = document.getElementById('badge-'+bundleId);
   const bar   = document.getElementById('bar-'+bundleId);
@@ -6266,8 +6318,8 @@ function _atualizarBadgeBundle(bundleId){
 function _atualizarScoreIRAS(){
   let bundlesAvaliados = 0, bundlesAderentes = 0, bundlesIncompletos = 0;
   IRAS_BUNDLES.forEach(b => {
-    const av = _irasAvaliarBundle(b, _irasRespostas);
-    if(av.status === 'na') return;            // bundle ignorado (sem dispositivo)
+    const av = _irasAvaliarBundle(b, _irasRespostas, _irasEvolucaoAtual);
+    if(av.status === 'na') return;            // bundle ignorado (sem dispositivo, todos N/A)
     bundlesAvaliados++;
     if(av.status === 'aderente') bundlesAderentes++;
     if(av.status === 'incompleto') bundlesIncompletos++;
@@ -6277,7 +6329,7 @@ function _atualizarScoreIRAS(){
   if(el){
     const cor = pct >= 95 ? '#155724' : pct >= 80 ? '#856404' : '#721c24';
     if(bundlesAvaliados === 0){
-      el.innerHTML = `<span style="color:#6c757d;">Nenhum bundle aplicável (todos N/A).</span>`;
+      el.innerHTML = `<span style="color:#6c757d;">Nenhum bundle aplicável (paciente sem dispositivos).</span>`;
     } else {
       el.innerHTML = `<span style="color:${cor};">Adesão (tudo ou nada): <strong>${pct}%</strong> (${bundlesAderentes}/${bundlesAvaliados} bundles)</span>` +
         (bundlesIncompletos>0 ? ` · <span style="color:#856404;">${bundlesIncompletos} pendente${bundlesIncompletos>1?'s':''}</span>` : '');
@@ -6294,8 +6346,13 @@ async function salvarIRAS(){
   // Mantém também os campos antigos (sim/respondidos) para retrocompatibilidade
   // com checklists já salvos e o módulo de exportação.
   const scores = {};
+  // Snapshot dos bundles aplicáveis ao paciente naquele turno — usado para
+  // distinguir, na reavaliação histórica, "tudo N/A com dispositivo presente"
+  // (não aderente) de "tudo N/A sem dispositivo" (não aplicável).
+  const dispositivosPresentes = {};
   IRAS_BUNDLES.forEach(b => {
-    const av = _irasAvaliarBundle(b, _irasRespostas);
+    dispositivosPresentes[b.id] = !!b.condicao(d);
+    const av = _irasAvaliarBundle(b, _irasRespostas, d);
     const resp = b.itens.map(it => _irasRespostas[it.id]).filter(Boolean);
     const sim  = resp.filter(r=>r==='sim').length;
     scores[b.id] = {
@@ -6308,13 +6365,15 @@ async function salvarIRAS(){
       itensAderentes: av.aderentes,
       itensNaoAderentes: av.naoAderentes,
       itensNA: av.na,
-      itensSemResposta: av.semResposta
+      itensSemResposta: av.semResposta,
+      dispositivoPresente: dispositivosPresentes[b.id]
     };
   });
 
   const payload = {
     leito: d.leito, turno: d.turno, data: d.data,
     pac: d.pac, respostas: _irasRespostas, scores,
+    dispositivosPresentes,
     salvoEm: new Date().toISOString(), autor: usuarioEmail
   };
 
