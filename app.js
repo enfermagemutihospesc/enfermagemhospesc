@@ -2479,8 +2479,9 @@ function _indIRAS(periodo){
     b.itens.forEach(it => { itemStats[it.id] = { texto: it.texto, ad: 0, naoAd: 0, na: 0, sr: 0 }; });
     checklists.forEach(ck => {
       if(!ck.respostas) return;
+      const ctx = _irasReconstruirContextoCk(ck);
       b.itens.forEach(it => {
-        const av = _irasAvaliarItem(it, ck.respostas);
+        const av = _irasAvaliarItem(it, ck.respostas, ctx);
         if(av === 'aderente')         itemStats[it.id].ad++;
         else if(av === 'nao_aderente') itemStats[it.id].naoAd++;
         else if(av === 'na')           itemStats[it.id].na++;
@@ -5878,12 +5879,23 @@ function _kpisParaPDF(sec, d){
 // ────────────────────────────────────────────────────────────────────────────
 // IRAS / BUNDLES
 // Critérios de aderência por item (metodologia "tudo ou nada" - IHI):
-//   - 'sim'        → aderente apenas se a resposta for SIM
-//   - 'nao'        → aderente apenas se a resposta for NÃO
-//   - 'sim_ou_nao' → aderente se for SIM ou NÃO (não pode ser N/A) -- usado p/ "precisa ser trocado?"
-//   - 'gaze_ou_filme' → opções customizadas: aderente se GAZE ou FILME (não N/A)
-//   - 'condicional_curativo' → aderente conforme tipo de curativo (gaze=SIM, filme=NÃO)
-// N/A em qualquer item = item fora do cálculo (mas se TODOS forem N/A, bundle inteiro fica N/A)
+//
+//   Todos os critérios abaixo tratam N/A da mesma forma quando o dispositivo
+//   está AUSENTE: excluído do cálculo (retorna 'na'). N/A só vira falha quando
+//   o dispositivo está PRESENTE na evolução.
+//
+//   - 'gaze_ou_filme_disp' → aderente: GAZE ou FILME
+//                            não aderente: N/A com dispositivo presente
+//                            excluído: N/A sem dispositivo
+//   - 'sim_disp'           → aderente: SIM
+//                            não aderente: NÃO ou N/A com dispositivo presente
+//                            excluído: N/A sem dispositivo
+//   - 'nao_disp'           → aderente: NÃO
+//                            não aderente: SIM ou N/A com dispositivo presente
+//                            excluído: N/A sem dispositivo
+//   - 'sim_ou_nao_disp'    → aderente: SIM ou NÃO
+//                            não aderente: N/A com dispositivo presente
+//                            excluído: N/A sem dispositivo
 // ────────────────────────────────────────────────────────────────────────────
 const IRAS_BUNDLES = [
   {
@@ -5892,13 +5904,13 @@ const IRAS_BUNDLES = [
     icone: '🩸',
     condicao: (d) => !!(d.dial_l || d.dial_d || d.avc_l || d.avc_d),
     itens: [
-      { id:'cdl_curativo_tipo',   texto:'Qual curativo utilizado?', opcoes:['GAZE','FILME','N/A'], criterio:'gaze_ou_filme' },
-      { id:'cdl_curativo_data',   texto:'Curativo com data da realização?', criterio:'sim' },
-      { id:'cdl_curativo_troca',  texto:'Curativo precisa ser trocado?', criterio:'condicional_curativo' },
-      { id:'cdl_sem_sangue',      texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?', criterio:'sim' },
-      { id:'cdl_equipo_data',     texto:'Equipos e dispositivos com data da instalação?', criterio:'sim' },
-      { id:'cdl_equipo_troca',    texto:'Equipos e dispositivos precisam ser trocados?', criterio:'sim_ou_nao' },
-      { id:'cdl_alcool',          texto:'Realizada orientação sobre desinfecção das conexões com álcool 70% antes de equipos ou seringas?', criterio:'sim' },
+      { id:'cdl_curativo_tipo',  texto:'Qual curativo utilizado?', opcoes:['GAZE','FILME','N/A'], criterio:'gaze_ou_filme_disp' },
+      { id:'cdl_curativo_data',  texto:'Curativo com data da realização?',                                              criterio:'sim_disp' },
+      { id:'cdl_curativo_troca', texto:'Curativo precisa ser trocado?',                                                 criterio:'sim_ou_nao_disp' },
+      { id:'cdl_sem_sangue',     texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?',               criterio:'sim_disp' },
+      { id:'cdl_equipo_data',    texto:'Equipos e dispositivos com data da instalação?',                                criterio:'sim_disp' },
+      { id:'cdl_equipo_troca',   texto:'Equipos e dispositivos precisam ser trocados?',                                 criterio:'sim_ou_nao_disp' },
+      { id:'cdl_alcool',         texto:'Realizada orientação sobre desinfecção das conexões com álcool 70% antes de equipos ou seringas?', criterio:'sim_disp' },
     ]
   },
   {
@@ -5907,12 +5919,12 @@ const IRAS_BUNDLES = [
     icone: '💉',
     condicao: (d) => !!(d.avps && d.avps.some(a=>a.local)),
     itens: [
-      { id:'avp_curativo_limpo',  texto:'Curativo limpo e seco?', criterio:'sim' },
-      { id:'avp_dor_edema',       texto:'Paciente refere dor, ou apresenta edema, hiperemia?', criterio:'nao' },
-      { id:'avp_data_puncao',     texto:'Acesso com data que foi realizada a punção?', criterio:'sim' },
-      { id:'avp_sem_sangue',      texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?', criterio:'sim' },
-      { id:'avp_equipo_data',     texto:'Equipos com data da instalação?', criterio:'sim' },
-      { id:'avp_equipo_troca',    texto:'Equipos precisam ser trocados?', criterio:'sim_ou_nao' },
+      { id:'avp_curativo_limpo', texto:'Curativo limpo e seco?',                                                        criterio:'sim_disp' },
+      { id:'avp_dor_edema',      texto:'Paciente refere dor, ou apresenta edema, hiperemia?',                           criterio:'nao_disp' },
+      { id:'avp_data_puncao',    texto:'Acesso com data que foi realizada a punção?',                                   criterio:'sim_disp' },
+      { id:'avp_sem_sangue',     texto:'Dispositivos (dânula, polifix, conector) sem resíduo de sangue?',               criterio:'sim_disp' },
+      { id:'avp_equipo_data',    texto:'Equipos com data da instalação?',                                               criterio:'sim_disp' },
+      { id:'avp_equipo_troca',   texto:'Equipos precisam ser trocados?',                                                criterio:'sim_ou_nao_disp' },
     ]
   },
   {
@@ -5921,12 +5933,12 @@ const IRAS_BUNDLES = [
     icone: '🫘',
     condicao: (d) => !!(d.svd_n || d.svd_d),
     itens: [
-      { id:'svd_data',            texto:'Possui identificação da data da instalação?', criterio:'sim' },
-      { id:'svd_fixacao',         texto:'Sonda fixada corretamente no paciente?', criterio:'sim' },
-      { id:'svd_higiene',         texto:'Realizada higiene do meato urinário?', criterio:'sim' },
-      { id:'svd_dobras',          texto:'Apresenta dobras no sistema?', criterio:'nao' },
-      { id:'svd_bolsa_nivel',     texto:'Bolsa coletora está abaixo do nível da bexiga e sem contato com o chão?', criterio:'sim' },
-      { id:'svd_bolsa_volume',    texto:'Bolsa coletora com volume até 2/3 da sua capacidade?', criterio:'sim' },
+      { id:'svd_data',           texto:'Possui identificação da data da instalação?',                                   criterio:'sim_disp' },
+      { id:'svd_fixacao',        texto:'Sonda fixada corretamente no paciente?',                                        criterio:'sim_disp' },
+      { id:'svd_higiene',        texto:'Realizada higiene do meato urinário?',                                          criterio:'sim_disp' },
+      { id:'svd_dobras',         texto:'Apresenta dobras no sistema?',                                                  criterio:'nao_disp' },
+      { id:'svd_bolsa_nivel',    texto:'Bolsa coletora está abaixo do nível da bexiga e sem contato com o chão?',       criterio:'sim_disp' },
+      { id:'svd_bolsa_volume',   texto:'Bolsa coletora com volume até 2/3 da sua capacidade?',                          criterio:'sim_disp' },
     ]
   },
   {
@@ -5935,12 +5947,12 @@ const IRAS_BUNDLES = [
     icone: '🫁',
     condicao: (d) => !!(d.vent && (d.vent.includes('VMI') || d.vent.includes('TOT') || d.vent.includes('TQT'))),
     itens: [
-      { id:'pav_higiene_oral',    texto:'Realizada HIGIENE ORAL?', criterio:'sim' },
-      { id:'pav_cabeceira',       texto:'Cabeceira elevada (30-45°)?', criterio:'sim' },
-      { id:'pav_fixacao',         texto:'TOT ou TQT com fixação adequada?', criterio:'sim' },
-      { id:'pav_sne',             texto:'Sonda Nasoenteral com fixação adequada?', criterio:'sim' },
-      { id:'pav_aspiracao',       texto:'Sistema de aspiração fechado dentro do prazo de validade?', criterio:'sim' },
-      { id:'pav_latex',           texto:'Realizada troca do látex e vacuômetro conforme rotina?', criterio:'sim' },
+      { id:'pav_higiene_oral',   texto:'Realizada HIGIENE ORAL?',                                                       criterio:'sim_disp' },
+      { id:'pav_cabeceira',      texto:'Cabeceira elevada (30-45°)?',                                                   criterio:'sim_disp' },
+      { id:'pav_fixacao',        texto:'TOT ou TQT com fixação adequada?',                                              criterio:'sim_disp' },
+      { id:'pav_sne',            texto:'Sonda Nasoenteral com fixação adequada?',                                       criterio:'sim_disp' },
+      { id:'pav_aspiracao',      texto:'Sistema de aspiração fechado dentro do prazo de validade?',                     criterio:'sim_disp' },
+      { id:'pav_latex',          texto:'Realizada troca do látex e vacuômetro conforme rotina?',                        criterio:'sim_disp' },
     ]
   }
 ];
@@ -5985,51 +5997,60 @@ function _irasReconstruirContextoCk(ck){
 
 // ────────────────────────────────────────────────────────────────────────────
 // Avalia se um item é aderente conforme seu critério.
+// `dadosEvolucao` (opcional): usado pelos critérios *_disp para saber se o
+//   dispositivo do bundle está presente. Se não passado, N/A é tratado como
+//   excluído (postura permissiva — usado na conformidade por item nos indicadores
+//   quando não se tem o contexto da evolução).
 // Retorna: 'aderente' | 'nao_aderente' | 'na' | 'sem_resposta'
-// Observações:
-//  - 'sim_ou_nao': N/A é resposta INVÁLIDA (item não aceita N/A); marca como nao_aderente.
-//  - 'condicional_curativo': se o tipo de curativo for 'n_a', este item depende dele
-//    e fica como nao_aderente (porque o item-pai já falhou).
-//  - Para os demais critérios, N/A → 'na' (item retirado do cálculo do bundle).
 // ────────────────────────────────────────────────────────────────────────────
-function _irasAvaliarItem(item, respostas){
+function _irasAvaliarItem(item, respostas, dadosEvolucao){
   const r = respostas[item.id];
   if(!r) return 'sem_resposta';
   const isNA = (r === 'na' || r === 'n_a');
 
+  // Descobre se o dispositivo do bundle deste item está presente na evolução.
+  // Procura o bundle pai do item para chamar bundle.condicao(d).
+  const _dispositivoPresente = () => {
+    if(!dadosEvolucao) return false;   // sem contexto → trata N/A como excluído
+    const b = IRAS_BUNDLES.find(b => b.itens.some(it => it.id === item.id));
+    return b ? !!b.condicao(dadosEvolucao) : false;
+  };
+
   switch(item.criterio){
-    case 'sim':
-      if(isNA) return 'na';
-      return r === 'sim' ? 'aderente' : 'nao_aderente';
 
-    case 'nao':
-      if(isNA) return 'na';
-      return r === 'nao' ? 'aderente' : 'nao_aderente';
-
-    case 'sim_ou_nao':
-      // N/A não é aceito neste item → conta como falha
-      if(isNA) return 'nao_aderente';
-      return (r === 'sim' || r === 'nao') ? 'aderente' : 'nao_aderente';
-
-    case 'gaze_ou_filme':
-      // GAZE/FILME = aderente; N/A = não aderente (CDL sem curativo válido = falha)
-      if(isNA) return 'nao_aderente';
+    // ── Todos dependem do dispositivo — N/A sem dispositivo = excluído ───
+    case 'gaze_ou_filme_disp':
+      // Aderente: GAZE ou FILME
+      // Não aderente: N/A com dispositivo presente
+      // Excluído: N/A sem dispositivo
+      if(isNA) return _dispositivoPresente() ? 'nao_aderente' : 'na';
       return (r === 'gaze' || r === 'filme') ? 'aderente' : 'nao_aderente';
 
+    case 'sim_disp':
+      if(isNA) return _dispositivoPresente() ? 'nao_aderente' : 'na';
+      return r === 'sim' ? 'aderente' : 'nao_aderente';
+
+    case 'nao_disp':
+      if(isNA) return _dispositivoPresente() ? 'nao_aderente' : 'na';
+      return r === 'nao' ? 'aderente' : 'nao_aderente';
+
+    case 'sim_ou_nao_disp':
+      if(isNA) return _dispositivoPresente() ? 'nao_aderente' : 'na';
+      return (r === 'sim' || r === 'nao') ? 'aderente' : 'nao_aderente';
+
     case 'condicional_curativo': {
+      // Mantido para compatibilidade com checklists antigos.
       const tipo = respostas['cdl_curativo_tipo'];
-      // Se o tipo de curativo é N/A, este item-filho herda a falha
-      if(tipo === 'n_a') return 'nao_aderente';
-      // Sem tipo escolhido ainda → pendente
+      if(tipo === 'n_a') return _dispositivoPresente() ? 'nao_aderente' : 'na';
       if(!tipo) return 'sem_resposta';
-      if(isNA) return 'na';  // marcou N/A aqui mas tipo definido (raro) → tira do cálculo
+      if(isNA) return _dispositivoPresente() ? 'nao_aderente' : 'na';
       if(tipo === 'gaze')  return r === 'sim' ? 'aderente' : 'nao_aderente';
       if(tipo === 'filme') return r === 'nao' ? 'aderente' : 'nao_aderente';
       return 'sem_resposta';
     }
 
     default:
-      if(isNA) return 'na';
+      if(isNA) return _dispositivoPresente() ? 'nao_aderente' : 'na';
       return r === 'sim' ? 'aderente' : 'nao_aderente';
   }
 }
@@ -6056,7 +6077,7 @@ function _irasAvaliarBundle(bundle, respostas, dadosEvolucao){
 
   let aderentes = 0, naoAderentes = 0, na = 0, semResposta = 0;
   bundle.itens.forEach(it => {
-    const v = _irasAvaliarItem(it, respostas);
+    const v = _irasAvaliarItem(it, respostas, dadosEvolucao);
     if(v === 'aderente')         aderentes++;
     else if(v === 'nao_aderente') naoAderentes++;
     else if(v === 'na')           na++;
@@ -6196,7 +6217,7 @@ function _renderIRAS(d){
     itens.forEach(item => {
       const resp = _irasRespostas[item.id] || '';
       const usaOpcoes = item.opcoes;
-      const itemAv = _irasAvaliarItem(item, _irasRespostas);
+      const itemAv = _irasAvaliarItem(item, _irasRespostas, _irasEvolucaoAtual);
       const itemCls = itemAv === 'aderente' ? ' aderente'
                     : itemAv === 'nao_aderente' ? ' nao-aderente'
                     : itemAv === 'na' ? ' item-na' : '';
@@ -6293,7 +6314,7 @@ function _irasAtualizarClasseItem(itemEl, itemId){
     if(it){ bundle = b; item = it; break; }
   }
   if(!item) return;
-  const av = _irasAvaliarItem(item, _irasRespostas);
+  const av = _irasAvaliarItem(item, _irasRespostas, _irasEvolucaoAtual);
   itemEl.classList.remove('aderente','nao-aderente','item-na');
   if(av === 'aderente')         itemEl.classList.add('aderente');
   else if(av === 'nao_aderente') itemEl.classList.add('nao-aderente');
