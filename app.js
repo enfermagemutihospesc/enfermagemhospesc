@@ -2884,8 +2884,19 @@ async function renderLeitos() {
         ${l.ocupado && evHoje ? _bradenBadge(evHoje.bradScore) : ''}
         ${l.ocupado && evHoje ? _morseBadge(evHoje.morseScore) : ''}
         ${l.ocupado ? _nasBadge(nasHoje) : ''}
-      </div>`;
+      </div>
+      ${l.ocupado ? `<button class="leito-iras-btn" data-leito="${i}" title="Abrir Checklist IRAS deste leito">📋 IRAS</button>` : ''}`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
+    // Listener separado para o botão IRAS — para de propagar para o card
+    if(l.ocupado){
+      const irasBtn = card.querySelector('.leito-iras-btn');
+      if(irasBtn){
+        irasBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          abrirIRAS(i);
+        });
+      }
+    }
   }
 }
 
@@ -3668,7 +3679,15 @@ async function gerarPreview() {
   const btn = document.getElementById('btn-gerar');
   btn.disabled = true; btn.textContent = 'Salvando...';
   const d = coletarDados();
-  await dbSet('uti_ev_'+d.leito+'_'+d.turno+'_'+d.data, d);
+
+  // Verifica se já existe SAE salva para este turno (para decidir se auto-gera depois)
+  const evKey = 'uti_ev_'+d.leito+'_'+d.turno+'_'+d.data;
+  const evExistente = await dbGet(evKey);
+  const jaTemSAE = !!(evExistente && evExistente.sae && evExistente.sae.diagnosticos && evExistente.sae.diagnosticos.length);
+  // Preserva a SAE existente ao salvar (para não sobrescrever)
+  if(jaTemSAE && !d.sae) d.sae = evExistente.sae;
+
+  await dbSet(evKey, d);
 
   // Sincroniza dados de identificação com o cadastro do leito
   // (assim admHosp, alergia, diag, etc. ficam disponíveis em evoluções futuras)
@@ -3694,6 +3713,57 @@ async function gerarPreview() {
   window.scrollTo(0,0);
   btn.disabled = false; btn.textContent = 'Gerar Impressão →';
   toast('✓ Evolução salva'+(modoOffline?' localmente':' na nuvem'));
+
+  // Auto-geração da SAE: só dispara se ainda não existir uma para este turno
+  // e se houver dados mínimos (paciente preenchido).
+  if(!jaTemSAE && d.pac){
+    _autoGerarSAE(d).catch(err => console.warn('[SAE auto]', err));
+  }
+}
+
+// Gera SAE em background sem abrir o modal. Atualiza o preview e o botão SAE
+// quando termina. Falhas são silenciosas (apenas log no console) — o usuário
+// pode tentar manualmente pelo botão.
+async function _autoGerarSAE(d){
+  // Indicador visual discreto
+  const status = document.getElementById('pdf-status');
+  if(status){
+    status.style.color = '#0d47a1';
+    status.textContent = '🤖 Gerando SAE em segundo plano...';
+  }
+  try {
+    const diagnosticos = await _chamarAPISAE(d);
+    if(!diagnosticos.length) throw new Error('SAE retornou vazia');
+    // Salva junto com a evolução
+    const evKey = 'uti_ev_'+d.leito+'_'+d.turno+'_'+d.data;
+    const evSalva = await dbGet(evKey);
+    if(evSalva){
+      evSalva.sae = { diagnosticos, geradoEm: new Date().toISOString() };
+      await dbSet(evKey, evSalva);
+      // Re-renderiza o preview com a SAE incluída (se ainda estiver na tela do preview)
+      if(document.getElementById('t-prev').classList.contains('ativa')){
+        renderPreview(evSalva);
+      }
+      // Atualiza botão SAE no formulário
+      const btnSAE = document.getElementById('btn-sae');
+      if(btnSAE){
+        btnSAE.textContent = '🩺 Ver SAE / NANDA salva';
+        btnSAE.style.background = '#0f5132';
+      }
+    }
+    if(status){
+      status.style.color = '#1a6b3a';
+      status.textContent = '✓ SAE gerada e incluída na impressão.';
+      setTimeout(() => { if(status.textContent.startsWith('✓ SAE')) status.textContent = ''; }, 4000);
+    }
+  } catch(err){
+    console.warn('[SAE auto] falha:', err);
+    if(status){
+      status.style.color = '#856404';
+      status.textContent = '⚠ SAE automática indisponível — use o botão "Gerar SAE" se desejar.';
+      setTimeout(() => { if(status.textContent.startsWith('⚠ SAE')) status.textContent = ''; }, 6000);
+    }
+  }
 }
 
 // ── RENDER PREVIEW HTML ────────────────────────────────────────────────────────
@@ -3765,9 +3835,16 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
   h+=st('Escalas de Risco');
   h+=`<div class="pr"><span class="pl">BRADEN</span><span class="pv">${d.bradScore} pts – ${d.bradRisco||'–'}</span><span class="pl" style="margin-left:1rem;">MORSE</span><span class="pv">${d.morseScore} pts – ${d.morseRisco||'–'}</span></div>`;
   h+=st('Observações / Intercorrências / Informações Complementares');
-  h+=`<div class="obs-box" style="min-height:100px;">${d.obs||''}</div>`;
+  // Min-height reduzido se há SAE para imprimir junto (espaço precisa caber em 2 págs)
+  const temSAE = d.sae && d.sae.diagnosticos && d.sae.diagnosticos.length;
+  h+=`<div class="obs-box" style="min-height:${temSAE?'40px':'100px'};">${d.obs||''}</div>`;
+  // SAE compacta: vai antes da assinatura
+  if(temSAE){
+    h += _renderizarSAECompacta(d.sae.diagnosticos);
+  }
   h+=st('Assinatura / Carimbo');
-  h+=`<div style="display:flex;justify-content:center;padding:2.5rem 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:300px;border-top:1px solid #000;padding-top:6px;">Enfermeiro${d.autor?' – '+d.autor:''}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
+  // Padding-top da assinatura também é menor quando há SAE
+  h+=`<div style="display:flex;justify-content:center;padding:${temSAE?'1rem':'2.5rem'} 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:300px;border-top:1px solid #000;padding-top:6px;">Enfermeiro${d.autor?' – '+d.autor:''}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
   h+=`</div><div class="pfoot"><span>Turno: ${d.turno}</span><span>Leito ${pad(d.leito)} – UTI Geral</span><span>${fmtD(d.data)}</span></div>`;
   document.getElementById('preview-area').innerHTML = h;
 }
@@ -4090,9 +4167,12 @@ async function _gerarPDFdaArea(area, d){
   }
   const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
 
-  // Localiza quebra preferencial (início de Antimicrobianos)
+  // Localiza quebra preferencial. Se há SAE no preview, prefere quebrar no início
+  // dela (página 1 = evolução; página 2 = SAE). Caso contrário, usa o ponto antigo
+  // (início de Antimicrobianos).
   let breakPx = null;
-  const breakEl = area.querySelector('#pdf-break-point');
+  const saeBreak = area.querySelector('#sae-cmp-break');
+  const breakEl = saeBreak || area.querySelector('#pdf-break-point');
   if (breakEl) {
     const areaTop = area.getBoundingClientRect().top;
     const breakTop = breakEl.getBoundingClientRect().top;
@@ -4747,6 +4827,33 @@ function _mostrarSAESalva(ev){
   modal.classList.add('show');
 }
 
+// Função utilitária: chama a API SAE e retorna apenas os diagnósticos.
+// Não mexe em UI. Usada tanto pelo gerarSAE() (modal) quanto pela auto-geração
+// disparada em gerarPreview().
+async function _chamarAPISAE(d){
+  const resumo = _resumoClinicoParaSAE(d);
+  const resp = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'sae',
+      resumo: resumo,
+      // ⚠ ANONIMIZAÇÃO: nome do paciente NÃO é enviado à IA.
+      paciente: '[anonimizado]',
+      leito: d.leito,
+      turno: d.turno
+    })
+  });
+  const rawText = await resp.text();
+  console.log('[SAE] resposta bruta do Apps Script:', rawText.substring(0, 500));
+  let data;
+  try { data = JSON.parse(rawText); }
+  catch(e) { throw new Error('Resposta do servidor não é JSON válido: ' + rawText.substring(0, 200)); }
+  if(data.error) throw new Error(data.error);
+  if(data.status === 'erro') throw new Error(data.msg || 'Erro no servidor');
+  return data.diagnosticos || [];
+}
+
 async function gerarSAE(){
   if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
   const d = coletarDados();
@@ -4763,35 +4870,8 @@ async function gerarSAE(){
     </div>`;
   modal.classList.add('show');
 
-  const resumo = _resumoClinicoParaSAE(d);
-
   try {
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'sae',
-        resumo: resumo,
-        // ⚠ ANONIMIZAÇÃO: nome do paciente NÃO é enviado à IA.
-        // O nome real fica apenas localmente para exibição no modal.
-        paciente: '[anonimizado]',
-        leito: d.leito,
-        turno: d.turno
-      })
-    });
-
-    // Apps Script retorna sempre 200 mesmo com erro interno; lê como texto e parseia
-    const rawText = await resp.text();
-    console.log('[SAE] resposta bruta do Apps Script:', rawText.substring(0, 500));
-
-    let data;
-    try { data = JSON.parse(rawText); }
-    catch(e) { throw new Error('Resposta do servidor não é JSON válido: ' + rawText.substring(0, 200)); }
-
-    if(data.error) throw new Error(data.error);
-    if(data.status === 'erro') throw new Error(data.msg || 'Erro no servidor');
-
-    const diagnosticos = data.diagnosticos || [];
+    const diagnosticos = await _chamarAPISAE(d);
     info.textContent = `Leito ${pad(d.leito)} · ${d.pac} · ${diagnosticos.length} diagnósticos`;
     conteudo.innerHTML = _renderizarSAE(d, diagnosticos);
     // Salva a SAE junto com a evolução
@@ -4868,6 +4948,42 @@ function _renderizarSAE(dados, diagnosticos){
       </div>
     `).join('')}
   `;
+}
+
+// Versão ULTRA-COMPACTA da SAE para imprimir junto com a evolução.
+// Layout denso: tabela tipo "linha por diagnóstico" com características/fatores/NOC/NIC
+// em texto corrido separado por separadores. Sem chips coloridos, sem caixas grandes.
+function _renderizarSAECompacta(diagnosticos){
+  if(!diagnosticos || !diagnosticos.length) return '';
+  const linhas = diagnosticos.map(dx => {
+    const titulo = (dx.titulo_nanda||'—').toUpperCase();
+    const meta = [dx.codigo_nanda, dx.tipo].filter(Boolean).join(' · ');
+    const dominio = [dx.dominio, dx.classe].filter(Boolean).join(' › ');
+    const cd = (dx.caracteristicas_definidoras||[]).join(' · ');
+    const fr = (dx.fatores_relacionados||[]).join(' · ');
+    const noc = dx.noc ? (
+      [dx.noc.titulo, dx.noc.codigo ? '('+dx.noc.codigo+')' : ''].filter(Boolean).join(' ') +
+      ((dx.noc.indicadores||[]).length ? ' — ' + dx.noc.indicadores.join(' · ') : '')
+    ) : '';
+    const nic = dx.nic ? (
+      [dx.nic.titulo, dx.nic.codigo ? '('+dx.nic.codigo+')' : ''].filter(Boolean).join(' ') +
+      ((dx.nic.atividades||[]).length ? ' — ' + dx.nic.atividades.join(' · ') : '')
+    ) : '';
+    return `
+      <div class="sae-cmp-dx">
+        <div class="sae-cmp-tit"><strong>${dx.numero||'?'}. ${titulo}</strong>${meta?` <span class="sae-cmp-meta">[${meta}]</span>`:''}${dominio?` <span class="sae-cmp-dom">${dominio}</span>`:''}</div>
+        ${cd  ? `<div class="sae-cmp-li"><span class="sae-cmp-lab">CD:</span> ${cd}</div>` : ''}
+        ${fr  ? `<div class="sae-cmp-li"><span class="sae-cmp-lab">FR:</span> ${fr}</div>` : ''}
+        ${noc ? `<div class="sae-cmp-li"><span class="sae-cmp-lab">NOC:</span> ${noc}</div>` : ''}
+        ${nic ? `<div class="sae-cmp-li"><span class="sae-cmp-lab">NIC:</span> ${nic}</div>` : ''}
+      </div>`;
+  }).join('');
+  return `
+    <div class="sae-cmp-bloco" id="sae-cmp-break">
+      <div class="pst sae-cmp-header">Sistematização da Assistência de Enfermagem (SAE) — diagnósticos NANDA / NOC / NIC</div>
+      <div class="sae-cmp-aviso">⚠ Gerada por IA — requer validação do enfermeiro. CD: características definidoras · FR: fatores relacionados/risco.</div>
+      ${linhas}
+    </div>`;
 }
 
 function fecharSAE(){
@@ -5184,6 +5300,38 @@ function abrirModalExportarRelatorio(){
 }
 
 // Coleta KPIs de todos os indicadores selecionados como objeto JSON puro
+// ────────────────────────────────────────────────────────────────────────────
+// Sanitiza recursivamente um objeto/array de dados para envio ao Apps Script,
+// substituindo null/undefined/'' por '—' (em propriedades) ou removendo (em arrays).
+// O Apps Script lança "The object has no text" quando faz setText() em placeholders
+// do Slides recebendo null. Esta normalização evita o erro server-side.
+// ────────────────────────────────────────────────────────────────────────────
+function _sanitizarDadosRelatorio(obj){
+  const PLACEHOLDER = '—';
+  function _walk(v){
+    if(v === null || v === undefined) return PLACEHOLDER;
+    if(typeof v === 'string'){
+      const s = v.trim();
+      return s === '' ? PLACEHOLDER : s;
+    }
+    if(typeof v === 'number'){
+      return Number.isFinite(v) ? v : PLACEHOLDER;
+    }
+    if(typeof v === 'boolean') return v;
+    if(Array.isArray(v)){
+      // Em arrays, mantém estrutura: cada elemento é sanitizado
+      return v.map(_walk);
+    }
+    if(typeof v === 'object'){
+      const out = {};
+      for(const k of Object.keys(v)) out[k] = _walk(v[k]);
+      return out;
+    }
+    return v;
+  }
+  return _walk(obj);
+}
+
 function _coletarDadosRelatorio(periodo, secoes){
   const { admissoes, altas, dispLog, evolucoes, nas } = _indCache;
   const dados = { periodo: periodo.rotulo, secoes: {} };
@@ -5552,6 +5700,11 @@ async function executarExportacao(){
   try {
     const dados = _coletarDadosRelatorio(periodo, secoesSel);
 
+    // Sanitização defensiva: o Apps Script às vezes lança "The object has no text"
+    // quando recebe null/undefined em placeholders dos Slides. Substitui esses
+    // valores por '—' antes de enviar (string vazia também pode quebrar templates).
+    const dadosSanitizados = _sanitizarDadosRelatorio(dados);
+
     // 1. Envia para Apps Script: gera narrativa (Groq) + cria Slides
     const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
@@ -5559,7 +5712,7 @@ async function executarExportacao(){
       body: JSON.stringify({
         action: 'exportar_relatorio',
         titulo,
-        dados,
+        dados: dadosSanitizados,
         hospital: 'Hospital dos Pescadores · UTI Adulto'
       })
     });
@@ -5568,6 +5721,20 @@ async function executarExportacao(){
     const result = JSON.parse(raw);
 
     if(result.error) throw new Error(result.error);
+    if(result.status === 'erro'){
+      // Erro do servidor: provável incompatibilidade do template do Slides com
+      // os dados enviados. Continua para o PDF local de qualquer forma se houver narrativa.
+      console.warn('[Exportar] Apps Script reportou erro:', result.msg);
+      if(result.narrativa){
+        status.textContent = '⚠️ Slides não pôde ser gerado, mas o PDF local será criado.';
+        _gerarPDFRelatorio(titulo, dados, result.narrativa, periodo.rotulo);
+        status.innerHTML = `⚠️ <strong>Slides não disponível</strong> (${(result.msg||'erro do servidor').substring(0,80)})<br>
+          <span style="color:#1a6b3a;">✓ PDF local foi gerado e baixado.</span>`;
+        btn.disabled = false; btn.textContent = '📊 Gerar Relatório';
+        return;
+      }
+      throw new Error(result.msg || 'Erro do servidor de exportação');
+    }
 
     status.textContent = '✅ Slides gerado! Gerando PDF local...';
 
@@ -6092,9 +6259,56 @@ function _irasAvaliarBundle(bundle, respostas, dadosEvolucao){
   return { status, aderentes, naoAderentes, na, semResposta, total };
 }
 
-async function abrirIRAS(){
-  if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
-  const d = coletarDados();
+async function abrirIRAS(leitoArg){
+  // Pode ser chamado de dois lugares:
+  //   1) Da página de leitos (com `leitoArg` = número do leito): busca a evolução do turno no banco
+  //   2) De dentro do formulário de evolução (sem argumento): usa coletarDados() do form
+  let d;
+  if(leitoArg){
+    // Modo "leitos": monta um objeto similar ao de coletarDados a partir
+    // da evolução salva mais recente do paciente naquele leito.
+    const dataAtual = dataDoTurno();
+    const evChave = `uti_ev_${leitoArg}_${turno}_${dataAtual}`;
+    let ev = await dbGet(evChave);
+    let dataUsada = dataAtual;
+    let turnoUsado = turno;
+
+    // Fallback: se não tem evolução do turno atual, busca a do outro turno do dia
+    if(!ev){
+      const outro = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
+      ev = await dbGet(`uti_ev_${leitoArg}_${outro}_${dataAtual}`);
+      if(ev) turnoUsado = outro;
+    }
+    // Fallback adicional: ontem
+    if(!ev){
+      const ontemKey = ontem();
+      ev = await dbGet(`uti_ev_${leitoArg}_${turno}_${ontemKey}`);
+      if(ev) dataUsada = ontemKey;
+    }
+
+    // Pega dados do leito para o nome do paciente, mesmo que não tenha evolução
+    const leitos = await leitosData();
+    const lInfo = leitos[leitoArg] || {};
+
+    // Monta o objeto d com os campos que abrirIRAS/IRAS_BUNDLES precisam
+    if(ev){
+      d = { ...ev, leito: leitoArg, turno: turnoUsado, data: dataUsada,
+            pac: ev.pac || lInfo.pac || '' };
+    } else {
+      // Sem nenhuma evolução: usuário está fazendo o checklist sem ter evoluído ainda
+      // Cria um d "vazio" — todos os bundles serão considerados sem dispositivo
+      d = {
+        leito: leitoArg, turno: turnoUsado, data: dataUsada,
+        pac: lInfo.pac || '',
+        dial_l: '', dial_d: '', avc_l: '', avc_d: '',
+        avps: [], svd_n: '', svd_d: '', vent: ''
+      };
+    }
+    leitoAtual = leitoArg;
+  } else {
+    if(!leitoAtual){ toast('Abra uma evolução primeiro.', true); return; }
+    d = coletarDados();
+  }
 
   document.getElementById('iras-pac-info').textContent =
     `Leito ${pad(d.leito)} · ${d.pac||'—'} · ${d.data?d.data.split('-').reverse().join('/'):''}  |  Turno ${d.turno}`;
@@ -6359,8 +6573,8 @@ function _atualizarScoreIRAS(){
 }
 
 async function salvarIRAS(){
-  if(!leitoAtual) return;
-  const d = coletarDados();
+  if(!_irasEvolucaoAtual){ toast('Erro: contexto de evolução não inicializado', true); return; }
+  const d = _irasEvolucaoAtual;
   const chave = `uti_iras_${d.leito}_${d.turno}_${d.data}`;
 
   // Calcula scores por bundle para os indicadores ─ formato all-or-nothing.
