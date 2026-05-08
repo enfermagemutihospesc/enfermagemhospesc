@@ -2885,7 +2885,7 @@ async function renderLeitos() {
         ${l.ocupado && evHoje ? _morseBadge(evHoje.morseScore) : ''}
         ${l.ocupado ? _nasBadge(nasHoje) : ''}
       </div>
-      ${l.ocupado ? `<button class="leito-iras-btn" data-leito="${i}" title="Abrir Checklist IRAS deste leito">📋 IRAS</button>` : ''}`;
+      ${l.ocupado ? `<button class="leito-iras-btn" data-leito="${i}" title="Abrir Checklist de Bundles IRAS deste leito">📋 BUNDLES IRAS</button>` : ''}`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
     // Listener separado para o botão IRAS — para de propagar para o card
     if(l.ocupado){
