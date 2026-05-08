@@ -83,6 +83,9 @@ body{font-family:var(--fonte);background:#e0e8f2;color:var(--texto);min-height:1
 .lb-high{background:var(--vermelho-cl);color:var(--vermelho);}
 .leito-spinner{position:absolute;top:6px;right:8px;width:10px;height:10px;border:2px solid var(--borda);border-top-color:var(--azul-m);border-radius:50%;animation:spin .7s linear infinite;display:none;}
 .leito-card.loading .leito-spinner{display:block;}
+.leito-iras-btn{display:block;width:calc(100% - 16px);margin:0 8px 8px;padding:5px 8px;font-size:.7rem;font-weight:600;background:#e8f4fd;color:#0d47a1;border:1px solid #1565c0;border-radius:6px;cursor:pointer;transition:all .15s;}
+.leito-iras-btn:hover{background:#0d47a1;color:white;}
+.leito-iras-btn:active{transform:scale(.97);}
 
 /* ── NAS ── */
 .nas-card{border:1.5px solid var(--borda);border-radius:10px;overflow:hidden;margin-bottom:6px;}
@@ -232,6 +235,19 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:7px 
 .pv{font-weight:500;}
 .obs-box{border:1px solid #000;padding:5px;min-height:38px;font-size:.66rem;white-space:pre-wrap;word-break:break-word;}
 .pfoot{border-top:2px solid #000;padding:.35rem .6rem;display:flex;justify-content:space-between;font-size:.62rem;color:#555;}
+
+/* ── SAE COMPACTA (impressão junto da evolução) ── */
+.sae-cmp-bloco{margin-top:.4rem;}
+.sae-cmp-header{margin-top:.5rem !important;}
+.sae-cmp-aviso{font-size:.55rem;color:#666;font-style:italic;padding:1px 6px 3px;line-height:1.2;}
+.sae-cmp-dx{padding:2px 6px 3px;border-bottom:1px dotted #999;page-break-inside:avoid;}
+.sae-cmp-dx:last-child{border-bottom:none;}
+.sae-cmp-tit{font-size:.62rem;line-height:1.25;color:#000;margin-bottom:1px;}
+.sae-cmp-tit strong{font-weight:700;}
+.sae-cmp-meta{font-size:.55rem;color:#555;font-weight:500;margin-left:2px;}
+.sae-cmp-dom{font-size:.55rem;color:#0a3d6b;font-style:italic;display:block;}
+.sae-cmp-li{font-size:.58rem;line-height:1.3;color:#222;padding:0 0 0 8px;text-indent:-8px;margin-top:1px;word-break:break-word;}
+.sae-cmp-lab{font-weight:700;color:#0a3d6b;}
 
 /* ── MODAL ── */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:1rem;}
