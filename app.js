@@ -5699,18 +5699,15 @@ async function executarExportacao(){
 
   try {
     const dados = _coletarDadosRelatorio(periodo, secoesSel);
-
-    // Sanitização defensiva: o Apps Script às vezes lança "The object has no text"
-    // quando recebe null/undefined em placeholders dos Slides. Substitui esses
-    // valores por '—' antes de enviar (string vazia também pode quebrar templates).
     const dadosSanitizados = _sanitizarDadosRelatorio(dados);
 
-    // 1. Envia para Apps Script: gera narrativa (Groq) + cria Slides
+    // 1. Pede a narrativa textual ao Apps Script (Groq) — sem Slides.
+    status.textContent = '🤖 Gerando narrativa (Groq)…';
     const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
-        action: 'exportar_relatorio',
+        action: 'narrativa_relatorio',
         titulo,
         dados: dadosSanitizados,
         hospital: 'Hospital dos Pescadores · UTI Adulto'
@@ -5718,34 +5715,52 @@ async function executarExportacao(){
     });
     const raw = await resp.text();
     console.log('[Exportar]', raw.substring(0, 300));
-    const result = JSON.parse(raw);
+    let result;
+    try { result = JSON.parse(raw); }
+    catch(e){ throw new Error('Resposta inválida do servidor: ' + raw.substring(0, 120)); }
 
-    if(result.error) throw new Error(result.error);
-    if(result.status === 'erro'){
-      // Erro do servidor: provável incompatibilidade do template do Slides com
-      // os dados enviados. Continua para o PDF local de qualquer forma se houver narrativa.
-      console.warn('[Exportar] Apps Script reportou erro:', result.msg);
-      if(result.narrativa){
-        status.textContent = '⚠️ Slides não pôde ser gerado, mas o PDF local será criado.';
-        _gerarPDFRelatorio(titulo, dados, result.narrativa, periodo.rotulo);
-        status.innerHTML = `⚠️ <strong>Slides não disponível</strong> (${(result.msg||'erro do servidor').substring(0,80)})<br>
-          <span style="color:#1a6b3a;">✓ PDF local foi gerado e baixado.</span>`;
-        btn.disabled = false; btn.textContent = '📊 Gerar Relatório';
-        return;
+    // Aceita narrativa mesmo se vier marcada como erro (ex: timeout parcial)
+    let narrativa = result.narrativa || '';
+    if(!narrativa && (result.error || result.status === 'erro')){
+      throw new Error(result.msg || result.error || 'Servidor não retornou narrativa');
+    }
+    if(!narrativa){
+      narrativa = '(Narrativa indisponível — verifique a conexão com o servidor de IA.)';
+    }
+
+    // 2. Gera PDF localmente
+    status.textContent = '📄 Montando PDF…';
+    const pdfBase64 = _gerarPDFRelatorio(titulo, dados, narrativa, periodo.rotulo);
+
+    // 3. Envia o PDF para o Drive (pasta UTI – Relatórios)
+    if(pdfBase64 && !modoOffline){
+      status.textContent = '☁ Enviando ao Drive…';
+      try {
+        const respUp = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'salvar_pdf_relatorio',
+            titulo: titulo.replace(/\s+/g,'_'),
+            arquivoBase64: pdfBase64
+          })
+        });
+        const upRaw = await respUp.text();
+        const up = JSON.parse(upRaw);
+        if(up.status === 'ok' && up.url){
+          status.innerHTML = `✅ <strong>Relatório gerado!</strong><br>
+            <a href="${up.url}" target="_blank" style="color:#1a6b3a;font-weight:700;">🔗 Abrir no Drive</a>
+            <span style="color:#555;font-size:.75rem;margin-left:8px;">(PDF também foi baixado localmente)</span>`;
+        } else {
+          status.innerHTML = `⚠️ PDF gerado localmente, mas falha ao enviar ao Drive: <small>${up.msg||'erro desconhecido'}</small>`;
+        }
+      } catch(e){
+        console.warn('[Drive upload]', e);
+        status.innerHTML = `⚠️ PDF gerado localmente, mas houve erro ao enviar ao Drive.`;
       }
-      throw new Error(result.msg || 'Erro do servidor de exportação');
+    } else {
+      status.innerHTML = `✅ <strong>PDF gerado e baixado.</strong>` + (modoOffline ? ' (modo offline — não enviado ao Drive)' : '');
     }
-
-    status.textContent = '✅ Slides gerado! Gerando PDF local...';
-
-    // 2. Gera PDF local com jsPDF a partir da narrativa + dados
-    if(result.narrativa){
-      _gerarPDFRelatorio(titulo, dados, result.narrativa, periodo.rotulo);
-    }
-
-    status.innerHTML = `✅ Concluído!<br>
-      <a href="${result.url}" target="_blank" style="color:#1a6b3a;font-weight:700;">🔗 Abrir Google Slides</a>
-      <span style="color:#555;font-size:.75rem;margin-left:8px;">(PDF foi baixado automaticamente)</span>`;
     btn.textContent = '✓ Gerado';
 
   } catch(err){
@@ -5753,7 +5768,7 @@ async function executarExportacao(){
     status.style.color = '#dc3545';
     status.textContent = '❌ Erro: '+(err.message||'tente novamente');
     btn.disabled = false; btn.textContent = '📊 Gerar Relatório';
-    status.style.color = '#1a6b3a';
+    setTimeout(() => { status.style.color = '#1a6b3a'; }, 5000);
   }
 }
 
@@ -5761,65 +5776,190 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
-    const W = 210, M = 18, L = W - 2*M;
+    const W = 210, H = 297, M = 18, L = W - 2*M;
     let y = M;
+    let _secaoAtual = '';   // título da última seção iniciada (para mini-header em quebra de tabela)
 
-    const novaPagSe = (min=30) => { if(y > 297-min){ doc.addPage(); y = M; } };
+    // ── helpers ─────────────────────────────────────────────────────────────
+
+    // Transliteração: jsPDF com fontes built-in (helvetica) suporta Latin-1 mas
+    // falha com sub/sobrescritos e alguns caracteres tipográficos. Mapeia para
+    // equivalentes ASCII/Latin-1 seguros para evitar saída como `‚`, `\"d` etc.
+    const _trans = (s) => {
+      if(s === null || s === undefined) return '–';
+      let t = String(s);
+      const tabela = {
+        '₀':'0','₁':'1','₂':'2','₃':'3','₄':'4','₅':'5','₆':'6','₇':'7','₈':'8','₉':'9',
+        '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9',
+        '≤':'<=','≥':'>=','≠':'!=','≈':'~','±':'+/-',
+        '\u2022':'•','\u00b7':'·',          // bullets (mantém)
+        '\u2013':'–','\u2014':'—',          // dashes (mantém)
+        '\u2018':"'",'\u2019':"'",'\u201c':'"','\u201d':'"',
+        '\u00a0':' '                          // nbsp
+      };
+      // Primeiro substitui chars conhecidos
+      t = t.replace(/[\u2070-\u209f≤≥≠≈±\u2013\u2014\u2018\u2019\u201c\u201d\u00a0]/g, ch => tabela[ch] || ch);
+      return t;
+    };
+
+    // Mede a altura necessária de um texto longo após split, em mm
+    const _alturaTexto = (texto, larg, fontSize, leading=1.25) => {
+      doc.setFontSize(fontSize);
+      const linhas = doc.splitTextToSize(_trans(texto), larg);
+      const lhMm = (fontSize/72) * 25.4 * leading;
+      return { linhas, alturaMm: linhas.length * lhMm, lhMm };
+    };
+
+    // Reserva espaço — quebra de página se não couber `min` mm
+    const _reserva = (min) => { if(y + min > H - 14){ doc.addPage(); y = M; return true; } return false; };
+
+    // Trunca texto preservando legibilidade (com elipse) até caber em `larguraMm`
+    const _truncar = (texto, larguraMm, fontSize) => {
+      doc.setFontSize(fontSize);
+      const t = _trans(texto);
+      if(doc.getTextWidth(t) <= larguraMm) return t;
+      // binary-trim
+      let lo = 0, hi = t.length;
+      while(lo < hi){
+        const mid = (lo+hi+1) >> 1;
+        const candidato = t.substring(0, mid) + '…';
+        if(doc.getTextWidth(candidato) <= larguraMm) lo = mid;
+        else hi = mid - 1;
+      }
+      return t.substring(0, lo) + '…';
+    };
+
+    // ── título de seção ────────────────────────────────────────────────────
+    // Precisa caber título + 2 linhas de conteúdo no mínimo, senão pula página
     const secTitulo = (nome, cor=[13,71,161]) => {
-      novaPagSe(16);
+      _reserva(22);
       doc.setFillColor(...cor); doc.rect(M, y, L, 8, 'F');
       doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(255,255,255);
-      doc.text(nome, M+3, y+5.5); doc.setTextColor(0,0,0); y += 11;
+      doc.text(_trans(nome), M+3, y+5.5);
+      doc.setTextColor(0,0,0); y += 11;
+      _secaoAtual = nome;   // memoriza para mini-header em quebra de tabela
     };
+
+    // ── linha tipo "rótulo: valor" ─────────────────────────────────────────
     const linha = (label, valor, unidade='', destaque=false) => {
-      novaPagSe(7);
+      _reserva(7);
       doc.setFont('helvetica', destaque ? 'bold' : 'normal'); doc.setFontSize(8.5);
-      doc.setTextColor(80,80,80); doc.text(label+':', M+2, y);
-      doc.setFont('helvetica','bold'); doc.setTextColor(destaque ? 26:0, destaque ? 107:0, destaque ? 58:0);
-      doc.text(String(valor ?? '–')+(unidade?' '+unidade:''), M+70, y);
+      doc.setTextColor(80,80,80); doc.text(_trans(label)+':', M+2, y);
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(destaque ? 26:0, destaque ? 107:0, destaque ? 58:0);
+      const valorTxt = _trans(String(valor ?? '–') + (unidade ? ' '+unidade : ''));
+      // Trunca se passar do espaço disponível à direita
+      const espacoVal = M + L - (M+70) - 2;
+      doc.text(_truncar(valorTxt, espacoVal, 8.5), M+70, y);
       doc.setTextColor(0,0,0); y += 5.5;
     };
-    const tabela = (cabecalho, linhas, colunas) => {
-      novaPagSe(10);
-      const cw = colunas || [80, 35, 30];
-      // cabeçalho
-      doc.setFillColor(240,240,240); doc.rect(M, y, L, 6, 'F');
-      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(60,60,60);
-      let cx = M+2;
-      cabecalho.forEach((c,i)=>{ doc.text(c, cx, y+4); cx += cw[i]; });
-      doc.setTextColor(0,0,0); y += 7;
-      // linhas
-      linhas.forEach((row,ri)=>{
-        novaPagSe(7);
-        if(ri%2===0){ doc.setFillColor(250,250,250); doc.rect(M, y-4, L, 5.5, 'F'); }
-        doc.setFont('helvetica','normal'); doc.setFontSize(8); cx = M+2;
-        row.forEach((cell,i)=>{ doc.text(String(cell??'–').substring(0,38), cx, y); cx += cw[i]; });
-        y += 5.5;
+
+    // ── tabela com cabeçalho repetido em quebra ────────────────────────────
+    // larguras: array em mm (somatório <= L). Se omitido, distribui igual.
+    // Cada célula é truncada com elipse para caber na sua coluna.
+    // Se a tabela não couber inteira na página atual, empurra para a próxima
+    // (evita órfão sem contexto). Em quebras forçadas dentro da tabela, repete
+    // o cabeçalho automaticamente.
+    const tabela = (cabecalho, linhas, larguras) => {
+      const nCol = cabecalho.length;
+      let cw = larguras;
+      if(!cw || cw.length !== nCol){
+        cw = Array(nCol).fill(L/nCol);
+      } else {
+        const soma = cw.reduce((a,b)=>a+b, 0);
+        if(Math.abs(soma - L) > 1) cw = cw.map(w => w * L / soma);
+      }
+      const HCAB = 6.8;
+      const HROW = 5.6;
+      const alturaTotal = HCAB + 0.5 + linhas.length * HROW + 3;
+      const espacoDisponivel = (H - 14) - y;
+
+      // Se cabe inteira na página atual, não quebra — fica tudo junto.
+      // Se não cabe E há pouco espaço, joga inteira pra próxima página.
+      // Se não cabe E ainda tem espaço razoável, deixa quebrar com cabeçalho repetido.
+      if(alturaTotal > espacoDisponivel && espacoDisponivel < 50){
+        doc.addPage(); y = M;
+        // Mini-cabeçalho da seção (continuação)
+        if(_secaoAtual){
+          doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+          doc.text(_trans('(continuação) ' + _secaoAtual), M, y);
+          doc.setTextColor(0,0,0); y += 5;
+        }
+      }
+
+      const desenharCabecalho = () => {
+        doc.setFillColor(13,71,161); doc.rect(M, y, L, HCAB, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+        let cx = M;
+        cabecalho.forEach((c,i)=>{
+          doc.text(_truncar(c, cw[i]-3, 8), cx+1.5, y + HCAB - 2);
+          cx += cw[i];
+        });
+        doc.setTextColor(0,0,0);
+        y += HCAB + 0.5;
+      };
+      _reserva(HCAB + HROW*2 + 2);
+      desenharCabecalho();
+      linhas.forEach((row, ri) => {
+        if(_reserva(HROW + 1)){
+          // Em quebra dentro da tabela, opcionalmente mostra mini-header da seção
+          if(_secaoAtual){
+            doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+            doc.text(_trans('(continuação) ' + _secaoAtual), M, y);
+            doc.setTextColor(0,0,0); y += 5;
+          }
+          desenharCabecalho();
+        }
+        if(ri % 2 === 0){
+          doc.setFillColor(245,247,250);
+          doc.rect(M, y, L, HROW, 'F');
+        }
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(40,40,40);
+        let cx = M;
+        row.forEach((cell, i) => {
+          const txt = _truncar(String(cell ?? '–'), cw[i]-3, 8);
+          doc.text(txt, cx+1.5, y + HROW - 1.7);
+          cx += cw[i];
+        });
+        doc.setTextColor(0,0,0);
+        y += HROW;
       });
       y += 3;
+    };
+
+    // ── parágrafo de texto longo (narrativa) com quebra automática ─────────
+    const paragrafo = (texto, fontSize=9) => {
+      const { linhas, lhMm } = _alturaTexto(texto, L, fontSize);
+      doc.setFont('helvetica','normal'); doc.setFontSize(fontSize); doc.setTextColor(40,40,40);
+      linhas.forEach(l => {
+        _reserva(lhMm + 2);
+        doc.text(l, M, y);
+        y += lhMm;
+      });
+      doc.setTextColor(0,0,0);
+      y += 2;
     };
 
     // ── CAPA ─────────────────────────────────────────────────────────────────
     doc.setFillColor(26,107,58); doc.rect(0,0,W,32,'F');
     doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
-    doc.text(titulo, M, 13);
+    doc.text(_trans(titulo), M, 13);
     doc.setFont('helvetica','normal'); doc.setFontSize(9);
-    doc.text('Hospital dos Pescadores · UTI Adulto · '+periodoRotulo, M, 22);
-    doc.text('Gerado em '+new Date().toLocaleDateString('pt-BR')+' · Sistema UTI HOSPESC', M, 29);
+    doc.text(_trans('Hospital dos Pescadores · UTI Adulto · '+periodoRotulo), M, 22);
+    doc.text(_trans('Gerado em '+new Date().toLocaleDateString('pt-BR')+' · Sistema UTI HOSPESC'), M, 29);
     doc.setTextColor(0,0,0); y = 40;
 
     // ── AVISO IA ─────────────────────────────────────────────────────────────
     if(narrativa){
       doc.setFillColor(255,243,205); doc.rect(M, y, L, 7,'F');
       doc.setFontSize(7.5); doc.setTextColor(133,100,4);
-      doc.text('\u26A0 Narrativa gerada por IA (Groq/Llama). Revise antes do uso oficial.', M+2, y+4.5);
+      doc.text(_trans('! Narrativa gerada por IA (Groq/Llama). Revise antes do uso oficial.'), M+2, y+4.5);
       doc.setTextColor(0,0,0); y += 10;
 
       // ── NARRATIVA ────────────────────────────────────────────────────────────
       secTitulo('Análise Narrativa', [26,107,58]);
-      doc.setFont('helvetica','normal'); doc.setFontSize(9);
-      doc.splitTextToSize(narrativa, L).forEach(l=>{ novaPagSe(6); doc.text(l, M, y); y += 5; });
-      y += 4;
+      paragrafo(narrativa, 9);
+      y += 2;
     }
 
     const d = dados.secoes || {};
@@ -5919,7 +6059,7 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
           ['SNE', s.diasSNE, s.taxaSNE, '–'],
           ['TOT', s.diasTOT, s.taxaTOT, s.tempoMedioTOT ? s.tempoMedioTOT+'d' : '–'],
           ['TQT', s.diasTQT, s.taxaTQT, '–'],
-        ], [28,22,32,35]);
+        ], [50, 40, 44, 40]);
     }
 
     // ── INFUSÕES ─────────────────────────────────────────────────────────────
@@ -5994,7 +6134,7 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
       secTitulo('SAE / NANDA');
       linha('Evoluções totais', s.totalEvolucoes);
       linha('Com SAE preenchida', s.comSAE); linha('Taxa SAE', s.taxaSAE, '%', true);
-      if(s.top5?.length){ y+=2; tabela(['Diagnóstico NANDA','Freq.'],s.top5.map(({dx,n})=>[dx.substring(0,50),n]),[125,15]); }
+      if(s.top5?.length){ y+=2; tabela(['Diagnóstico NANDA','Freq.'],s.top5.map(({dx,n})=>[dx,n]),[140,34]); }
     }
 
     // ── DIAGNÓSTICOS / CID ────────────────────────────────────────────────────
@@ -6015,8 +6155,13 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
         y+=2;
         tabela(
           ['Bundle','Observados','Aderentes','Adesão (%)'],
-          s.bundles.map(b=>[b.titulo.substring(0,50), b.observados ?? 0, b.aderentes ?? 0, b.aderencia ?? '–']),
-          [95, 25, 25, 25]
+          s.bundles.map(b => {
+            // Encurta os títulos longos dos bundles para caber melhor; a função
+            // tabela() ainda aplica truncamento com elipse se ultrapassar a coluna.
+            const tituloCurto = (b.titulo||'').replace(/^Bundle de Prevenção de\s*/i, '');
+            return [tituloCurto, b.observados ?? 0, b.aderentes ?? 0, b.aderencia ?? '–'];
+          }),
+          [85, 28, 28, 33]
         );
       }
     }
@@ -6026,11 +6171,21 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
     for(let p=1;p<=totalPag;p++){
       doc.setPage(p);
       doc.setFontSize(7); doc.setTextColor(150,150,150);
-      doc.text(`Pág ${p}/${totalPag} · Gerado em ${new Date().toLocaleDateString('pt-BR')} · Sistema UTI HOSPESC`, M, 291);
+      doc.text(_trans(`Pág ${p}/${totalPag} · Gerado em ${new Date().toLocaleDateString('pt-BR')} · Sistema UTI HOSPESC`), M, 291);
     }
 
+    // Salva localmente (download automático)
     doc.save(titulo.replace(/\s+/g,'_')+'.pdf');
-  } catch(e){ console.warn('PDF relatório:', e); toast('PDF não gerado: '+e.message, true); }
+
+    // Retorna base64 (sem prefixo data:) para upload posterior ao Drive
+    const dataUri = doc.output('datauristring');
+    const base64  = dataUri.split(',')[1] || '';
+    return base64;
+  } catch(e){
+    console.warn('PDF relatório:', e);
+    toast('PDF não gerado: '+e.message, true);
+    return null;
+  }
 }
 
 function _kpisParaPDF(sec, d){
