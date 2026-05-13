@@ -3327,13 +3327,21 @@ async function _sugerirCID(idDiag, idCID){
     });
     const raw = await resp.text();
     const data = JSON.parse(raw);
-    if (data.cid) {
+    if (data.cid && data.cid.toUpperCase() !== 'Z00' && data.cid.toUpperCase() !== 'Z00.0') {
       cidEl.value = data.cid.toUpperCase();
       cidEl.dataset.sugerido = data.cid.toUpperCase();
       cidEl.dataset.ultimoDiag = diag;
       statEl.textContent = '✓ sugerido';
       statEl.style.color = '#1a6b3a';
+      statEl.title = data.descricao || '';
       setTimeout(() => { statEl.textContent = ''; }, 3000);
+    } else if (data.error) {
+      // Servidor não conseguiu mapear com confiança — não preenche o campo
+      cidEl.dataset.ultimoDiag = diag;   // evita re-tentar para o mesmo diagnóstico
+      statEl.textContent = '⚠ preencher manualmente';
+      statEl.style.color = '#856404';
+      statEl.title = data.error;
+      setTimeout(() => { statEl.textContent = ''; }, 5000);
     } else {
       statEl.textContent = '⚠ não encontrado';
       statEl.style.color = '#dc3545';
