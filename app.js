@@ -3326,10 +3326,29 @@ async function _sugerirCID(idDiag, idCID){
       body: JSON.stringify({ action: 'cid', diagnostico: diag })
     });
     const raw = await resp.text();
-    const data = JSON.parse(raw);
-    if (data.cid && data.cid.toUpperCase() !== 'Z00' && data.cid.toUpperCase() !== 'Z00.0') {
-      cidEl.value = data.cid.toUpperCase();
-      cidEl.dataset.sugerido = data.cid.toUpperCase();
+    console.log('[CID] diag="'+diag+'" → raw resposta:', raw);
+    let data;
+    try { data = JSON.parse(raw); }
+    catch(e){
+      console.warn('[CID] resposta não é JSON:', raw);
+      statEl.textContent = '⚠ resposta inválida';
+      statEl.style.color = '#dc3545';
+      statEl.title = raw.substring(0, 200);
+      setTimeout(() => { statEl.textContent = ''; }, 5000);
+      return;
+    }
+    console.log('[CID] parseado:', data);
+
+    // Normaliza o campo cid: a IA pode vir com "I50.9 - Descrição" ou similar
+    let cidNorm = '';
+    if(data.cid){
+      const m = String(data.cid).match(/[A-Z]\d{2}(?:\.\d+)?/i);
+      if(m) cidNorm = m[0].toUpperCase();
+    }
+
+    if (cidNorm && cidNorm !== 'Z00' && cidNorm !== 'Z00.0') {
+      cidEl.value = cidNorm;
+      cidEl.dataset.sugerido = cidNorm;
       cidEl.dataset.ultimoDiag = diag;
       statEl.textContent = '✓ sugerido';
       statEl.style.color = '#1a6b3a';
@@ -3340,11 +3359,14 @@ async function _sugerirCID(idDiag, idCID){
       cidEl.dataset.ultimoDiag = diag;   // evita re-tentar para o mesmo diagnóstico
       statEl.textContent = '⚠ preencher manualmente';
       statEl.style.color = '#856404';
-      statEl.title = data.error;
+      statEl.title = data.error + (data.raw ? '\n\nResposta bruta: ' + data.raw : '');
+      console.warn('[CID] servidor retornou erro:', data);
       setTimeout(() => { statEl.textContent = ''; }, 5000);
     } else {
       statEl.textContent = '⚠ não encontrado';
       statEl.style.color = '#dc3545';
+      statEl.title = 'Resposta: ' + JSON.stringify(data).substring(0, 200);
+      console.warn('[CID] resposta sem cid válido:', data);
       setTimeout(() => { statEl.textContent = ''; }, 3000);
     }
   } catch(e) {
