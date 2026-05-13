@@ -3317,6 +3317,38 @@ async function _sugerirCID(idDiag, idCID){
   // Se o diagnóstico não mudou desde a última sugestão, não busca de novo
   if (cidEl.dataset.ultimoDiag === diag) return;
 
+  // Cache local: mesma string de diagnóstico → resposta cacheada.
+  // Economiza tokens da IA e funciona offline. Chave normalizada (uppercase, sem
+  // espaços extras) para que "IC perfil B", "ic perfil b" e "IC  PERFIL B" caiam
+  // no mesmo cache.
+  const cacheKey = diag.toUpperCase().replace(/\s+/g, ' ').trim();
+  let cache = {};
+  try { cache = JSON.parse(localStorage.getItem('uti_cid_cache') || '{}'); } catch(_) {}
+
+  if (cache[cacheKey]) {
+    const cached = cache[cacheKey];
+    cidEl.value = cached.cid;
+    cidEl.dataset.sugerido = cached.cid;
+    cidEl.dataset.ultimoDiag = diag;
+    statEl.textContent = '✓ cache';
+    statEl.style.color = '#1a6b3a';
+    statEl.title = cached.descricao || '';
+    setTimeout(() => { statEl.textContent = ''; }, 2000);
+    return;
+  }
+
+  // Verifica se está em "modo offline temporário" por rate limit recente
+  const rateLimitUntil = parseInt(localStorage.getItem('uti_cid_rate_limit_until') || '0');
+  if (Date.now() < rateLimitUntil) {
+    cidEl.dataset.ultimoDiag = diag;
+    statEl.textContent = '⏸ limite IA – preencha manual';
+    statEl.style.color = '#856404';
+    const minutos = Math.ceil((rateLimitUntil - Date.now()) / 60000);
+    statEl.title = `Limite diário da IA atingido. Reseta em ~${minutos}min. Preencha o CID manualmente.`;
+    setTimeout(() => { statEl.textContent = ''; }, 4000);
+    return;
+  }
+
   statEl.textContent = '⏳ buscando...';
   statEl.style.color = '#856404';
   try {
@@ -3339,6 +3371,19 @@ async function _sugerirCID(idDiag, idCID){
     }
     console.log('[CID] parseado:', data);
 
+    // Tratamento específico para rate limit
+    if (data.error === 'rate_limit' || (data.error && /429|rate.?limit|tokens per day/i.test(data.error))) {
+      // Marca cliente como "rate limited" por 30min (evita spam de requisições)
+      localStorage.setItem('uti_cid_rate_limit_until', String(Date.now() + 30 * 60 * 1000));
+      cidEl.dataset.ultimoDiag = diag;
+      statEl.textContent = '⏸ limite IA atingido';
+      statEl.style.color = '#856404';
+      statEl.title = 'Limite diário do Groq atingido. O sistema vai pausar requisições por 30min. Preencha o CID manualmente — o limite reseta diariamente.';
+      console.warn('[CID] rate limit atingido:', data);
+      setTimeout(() => { statEl.textContent = ''; }, 6000);
+      return;
+    }
+
     // Normaliza o campo cid: a IA pode vir com "I50.9 - Descrição" ou similar
     let cidNorm = '';
     if(data.cid){
@@ -3353,6 +3398,18 @@ async function _sugerirCID(idDiag, idCID){
       statEl.textContent = '✓ sugerido';
       statEl.style.color = '#1a6b3a';
       statEl.title = data.descricao || '';
+
+      // Salva no cache local para próximas vezes
+      try {
+        cache[cacheKey] = { cid: cidNorm, descricao: data.descricao || '' };
+        // Mantém só os últimos 500 (LRU rudimentar)
+        const keys = Object.keys(cache);
+        if (keys.length > 500) {
+          for (let i = 0; i < keys.length - 500; i++) delete cache[keys[i]];
+        }
+        localStorage.setItem('uti_cid_cache', JSON.stringify(cache));
+      } catch(_) {}
+
       setTimeout(() => { statEl.textContent = ''; }, 3000);
     } else if (data.error) {
       // Servidor não conseguiu mapear com confiança — não preenche o campo
