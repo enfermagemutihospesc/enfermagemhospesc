@@ -561,6 +561,8 @@ function _resumirEvolucao(ev){
     spo2: ev.spo2 || ev.spo2av,
     glas: ev.glas, rass: ev.rass,
     isolamento: ev.isolamento, microorg: ev.microorg,
+    culturas: Array.isArray(ev.culturas) ? ev.culturas : [],
+    fenotipo: Array.isArray(ev.fenotipo) ? ev.fenotipo : [],
     pulseira: ev.pulseira,
     dieta: arr(ev.dieta), diu: arr(ev.diu),
     dvas: dvas, sedos: sedos,
@@ -1723,7 +1725,8 @@ async function renderIndicadores(){
     cruzamentos:   _indCruzamentos,
     sae_nanda:     _indSAENanda,
     diagnosticos:  _indDiagnosticos,
-    iras:          _indIRAS
+    iras:          _indIRAS,
+    ccih:          _indCCIH
   };
   const fn = renderers[_indCategoriaAtiva] || _indOcupacao;
   container.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px;">Período: <strong>${periodo.rotulo}</strong></div>` + fn(periodo);
@@ -2736,6 +2739,224 @@ function _indSAENanda(periodo){
   return h;
 }
 
+// ── 18. CCIH / CULTURAS ──────────────────────────────────────────────────────
+function _indCCIH(periodo){
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const total = evPer.length;
+
+  // Coleta culturas do array estruturado (novo) ou faz fallback para microorg legado
+  const moCount    = {};
+  const sitoCount  = {};
+  const sensCount  = {}; // "SENSÍVEL A MPM" etc.
+  const moSens     = {}; // microorg → lista de perfis de sensibilidade únicos
+  let comCultura   = 0;
+
+  evPer.forEach(e => {
+    // Prefer array estruturado; senão parseia microorg legado
+    const arr = (e.culturas && e.culturas.length)
+      ? e.culturas
+      : _parseMicroorgLegado(e.microorg || '');
+
+    if(!arr.length) return;
+    comCultura++;
+
+    arr.forEach(c => {
+      const mo   = (c.microorg||'').trim().toUpperCase();
+      const sito = (c.sito||'').trim() || 'Não especificado';
+      const sens = (c.sensibilidade||'').trim();
+
+      if(mo){
+        moCount[mo] = (moCount[mo]||0) + 1;
+        // Acumula perfis de sensibilidade por microrganismo
+        if(sens){
+          if(!moSens[mo]) moSens[mo] = new Set();
+          moSens[mo].add(sens);
+        }
+      }
+      if(sito) sitoCount[sito] = (sitoCount[sito]||0) + 1;
+      if(sens) sensCount[sens] = (sensCount[sens]||0) + 1;
+    });
+  });
+
+  // Fenótipos marcados manualmente
+  const fenotCount = {};
+  evPer.forEach(e => {
+    (e.fenotipo||[]).forEach(f => { fenotCount[f] = (fenotCount[f]||0)+1; });
+  });
+  const fenotRank = Object.entries(fenotCount).sort((a,b)=>b[1]-a[1]);
+
+  // Isolamentos
+  const isolContato = evPer.filter(e => e.isolamento === 'Contato').length;
+  const isolGot     = evPer.filter(e => e.isolamento === 'Gotículas').length;
+  const isolAer     = evPer.filter(e => e.isolamento === 'Aerossóis').length;
+  const isolVig     = evPer.filter(e => e.isolamento === 'Vigilância').length;
+  const totalIsol   = isolContato + isolGot + isolAer + isolVig;
+
+  // Antimicrobianos (carbapenêmicos em destaque)
+  const atbCount = {};
+  const carbaNames = ['meropenem','ertapenem','imipenem','doripenem'];
+  let comCarbapenem = 0;
+  evPer.forEach(e => {
+    const atbs = e.atbs || [];
+    let temCarba = false;
+    atbs.forEach(a => {
+      const n = (a||'').trim();
+      if(!n) return;
+      atbCount[n] = (atbCount[n]||0)+1;
+      if(carbaNames.some(c => n.toLowerCase().includes(c))) temCarba = true;
+    });
+    if(temCarba) comCarbapenem++;
+  });
+  const atbRank = Object.entries(atbCount).sort((a,b)=>b[1]-a[1]);
+
+  // ── HTML ──
+  let h = '';
+
+  // KPIs
+  h += '<div class="ind-grid">';
+  h += _cardInd('Evoluções com cultura+', comCultura, _pct(comCultura, total), comCultura > total*0.5 ? 'vermelho':'', 'ccih_cultpos');
+  h += _cardInd('Em isolamento', totalIsol, _pct(totalIsol, total), totalIsol > total*0.3 ? 'laranja':'', 'ccih_isol');
+  h += _cardInd('Uso de carbapenêmico', comCarbapenem, _pct(comCarbapenem, total), comCarbapenem > total*0.4 ? 'laranja':'', 'ccih_carba');
+  h += _cardInd('Fenótipos registrados', Object.values(fenotCount).reduce((s,v)=>s+v,0), `${fenotRank.length} tipos distintos`, fenotRank.length > 0 ? 'vermelho':'', 'ccih_fenotipo');
+  h += '</div>';
+
+  if(!comCultura && !fenotRank.length){
+    h += '<div class="ind-hint" style="margin-top:8px;">⚠️ Nenhuma cultura registrada no período. Use o botão <strong>"🔬 Buscar na planilha"</strong> ou <strong>"✏️ Adicionar manual"</strong> nas evoluções.</div>';
+    h += _ccihInfoBox();
+    return h;
+  }
+
+  // ── Ranking de microrganismos com perfil de sensibilidade ──
+  const moRank = Object.entries(moCount).sort((a,b)=>b[1]-a[1]);
+  if(moRank.length){
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">🦠 Microrganismos Isolados</div>';
+    h += '<div style="display:flex;flex-direction:column;gap:6px;">';
+    const maxMO = moRank[0][1];
+    moRank.slice(0,12).forEach(([mo, n]) => {
+      const pct  = Math.round(n/maxMO*100);
+      const cor  = _ccihCorMO(mo);
+      const sens = moSens[mo] ? Array.from(moSens[mo]).join(' | ') : '';
+      h += `<div style="border:1px solid var(--borda);border-radius:7px;padding:7px 10px;background:white;">
+        <div class="ind-bar" style="margin-bottom:${sens?'4':'0'}px;">
+          <span class="ind-bar-l" style="font-size:.74rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${mo}">${mo}</span>
+          <div class="ind-bar-bg"><div class="ind-bar-fill" style="width:${pct}%;background:${cor};"></div></div>
+          <span class="ind-bar-n">${n} <span style="font-weight:400;font-size:.65rem;color:var(--muted);">(${_pct(n, comCultura)})</span></span>
+        </div>
+        ${sens ? `<div style="font-size:.69rem;color:#555;font-style:italic;padding-left:2px;">🧫 ${sens}</div>` : ''}
+      </div>`;
+    });
+    h += '</div></div>';
+  }
+
+  // ── Perfis de sensibilidade agregados ──
+  const sensRank = Object.entries(sensCount).sort((a,b)=>b[1]-a[1]);
+  if(sensRank.length){
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">🧫 Perfis de Sensibilidade (da planilha)</div>';
+    h += '<div class="ind-bar-wrap">';
+    const maxS = sensRank[0][1];
+    sensRank.forEach(([label, n]) => {
+      const pct  = Math.round(n/maxS*100);
+      const eRes = /resist/i.test(label);
+      h += `<div class="ind-bar">
+        <span class="ind-bar-l" style="font-size:.72rem;${eRes?'color:var(--vermelho);font-weight:600;':''}">${label}</span>
+        <div class="ind-bar-bg"><div class="ind-bar-fill" style="width:${pct}%;background:${eRes?'#b71c1c':'var(--azul-m)'};"></div></div>
+        <span class="ind-bar-n">${n}</span>
+      </div>`;
+    });
+    h += '</div></div>';
+  }
+
+  // ── Sítios de coleta ──
+  const sitoRank = Object.entries(sitoCount).filter(([s]) => s !== 'Não especificado').sort((a,b)=>b[1]-a[1]);
+  if(sitoRank.length){
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">📍 Sítios de Coleta</div><div class="ind-grid">';
+    sitoRank.slice(0,6).forEach(([label, n]) => {
+      h += _cardInd(label, n, _pct(n, comCultura), '', 'ccih_sito');
+    });
+    h += '</div></div>';
+  }
+
+  // ── Fenótipos ──
+  if(fenotRank.length){
+    const grauCor = {
+      'NDM':'vermelho','KPC':'vermelho','CZA+ATM':'vermelho',
+      'MCIM':'laranja','VRE':'laranja','MRSA':'laranja',
+      'ESBL':'laranja','VIM':'laranja','OXA-48':'laranja',
+      'AmpC':'','MDR':'laranja','XDR':'vermelho'
+    };
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">⚠️ Fenótipos de Resistência</div><div class="ind-grid">';
+    fenotRank.forEach(([label, n]) => {
+      h += _cardInd(label, n, _pct(n, total), grauCor[label]||'', 'ccih_fen');
+    });
+    h += '</div>';
+    const criticos = fenotRank.filter(([f]) => ['NDM','KPC','XDR','CZA+ATM'].includes(f));
+    if(criticos.length){
+      h += `<div style="margin-top:8px;padding:9px 12px;background:var(--vermelho-cl);border:1px solid #e88;border-radius:6px;font-size:.78rem;color:var(--vermelho);line-height:1.55;">
+        🚨 <strong>Fenótipos críticos:</strong> ${criticos.map(([f,n])=>`${f} (${n})`).join(' · ')} — verificar precauções de contato e comunicar CCIH.
+      </div>`;
+    }
+    h += '</div>';
+  }
+
+  // ── Isolamentos ──
+  if(totalIsol){
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">🔒 Precauções de Isolamento</div><div class="ind-grid">';
+    if(isolContato) h += _cardInd('Contato',    isolContato, _pct(isolContato, total), 'laranja', 'ccih_isol_cont');
+    if(isolGot)     h += _cardInd('Gotículas',  isolGot,     _pct(isolGot,     total), '',        'ccih_isol_got');
+    if(isolAer)     h += _cardInd('Aerossóis',  isolAer,     _pct(isolAer,     total), 'vermelho','ccih_isol_aer');
+    if(isolVig)     h += _cardInd('Vigilância', isolVig,     _pct(isolVig,     total), '',        'ccih_isol_vig');
+    h += '</div></div>';
+  }
+
+  // ── Antimicrobianos ──
+  if(atbRank.length){
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">💊 Antimicrobianos em Uso</div><div class="ind-bar-wrap">';
+    const maxA = atbRank[0][1];
+    atbRank.slice(0,10).forEach(([label, n]) => {
+      const isCarba = carbaNames.some(c => label.toLowerCase().includes(c));
+      h += `<div class="ind-bar">
+        <span class="ind-bar-l" style="font-size:.73rem;">${label}${isCarba?' 🔴':''}</span>
+        <div class="ind-bar-bg"><div class="ind-bar-fill" style="width:${Math.round(n/maxA*100)}%;${isCarba?'background:#b71c1c;':''}"></div></div>
+        <span class="ind-bar-n">${n}</span>
+      </div>`;
+    });
+    h += '</div><div class="ind-hint">🔴 Carbapenêmico</div></div>';
+  }
+
+  h += _ccihInfoBox();
+  return h;
+}
+
+// Parseia microorg legado ("MRSA (Hemocultura); KPC (Urina)") para array
+function _parseMicroorgLegado(raw){
+  if(!raw) return [];
+  return raw.split(';').map(p => p.trim()).filter(Boolean).map(p => {
+    const m = p.match(/^(.+?)\s*\((.+)\)$/);
+    return m
+      ? { microorg: m[1].trim().toUpperCase(), sito: m[2].trim(), sensibilidade: '', data: '' }
+      : { microorg: p.toUpperCase(), sito: '', sensibilidade: '', data: '' };
+  });
+}
+
+// Cor da barra por organismo
+function _ccihCorMO(nome){
+  const n = nome.toUpperCase();
+  if(n.includes('KPC') || n.includes('NDM') || n.includes('XDR')) return '#b71c1c';
+  if(n.includes('MRSA') || n.includes('VRE') || n.includes('ESBL') || n.includes('BAUMANNII')) return '#e65100';
+  if(n.includes('KLEBSIELLA') || n.includes('PSEUDOMONAS')) return '#1565c0';
+  if(n.includes('CANDIDA') || n.includes('ASPERGILLUS')) return '#6a1b9a';
+  return 'var(--azul-m)';
+}
+
+// Box informativo
+function _ccihInfoBox(){
+  return `<div style="margin-top:12px;padding:10px 14px;background:var(--azul-xl);border:1px solid var(--azul-cl);border-radius:7px;font-size:.76rem;color:var(--azul);line-height:1.6;">
+    <strong>💡 Como alimentar estes indicadores:</strong> No formulário de evolução → <em>Segurança do Paciente</em> → use <strong>"🔬 Buscar na planilha"</strong> ou <strong>"✏️ Adicionar manual"</strong>.
+    A sensibilidade é carregada automaticamente da planilha junto com o resultado.
+  </div>`;
+}
+
 // Correlação de Pearson
 function _correlacao(xs, ys){
   const n = xs.length;
@@ -3625,9 +3846,12 @@ async function abrirForm(n) {
     if(fonte.morse){ ['m1','m2','m3','m4','m5','m6'].forEach((nm,i)=>{const r=document.querySelector('input[name="'+nm+'"][value="'+fonte.morse[i]+'"]');if(r)r.checked=true;}); calcM(); }
     if(fonte.pulseira)   setRadio('pulseira',   fonte.pulseira);
     if(fonte.isolamento) setRadio('isolamento', fonte.isolamento);
-    // Herda culturas: reconstrói chips a partir do valor salvo
-    if(fonte.microorg){
-      // Formato salvo: "MRSA (Hemocultura); KPC (Urina)" ou texto simples legado
+    if(fonte.fenotipo && fonte.fenotipo.length) setChecks('f-fenotipo', fonte.fenotipo);
+    // Herda culturas: usa array completo (com sensibilidade) se disponível,
+    // senão fallback para microorg legado (texto composto sem sensibilidade)
+    if(fonte.culturas && fonte.culturas.length){
+      fonte.culturas.forEach(c => _adicionarCultura(c.sito||'', c.microorg||'', c.sensibilidade||'', c.data||'', 'heranca', c.antibiograma||null));
+    } else if(fonte.microorg){
       const partes = fonte.microorg.split(';').map(p=>p.trim()).filter(Boolean);
       partes.forEach(p => {
         const m = p.match(/^(.+?)\s*\((.+)\)$/);
@@ -3726,6 +3950,8 @@ sexo:       gf('f-sexo'),
 pulseira:   gRadio('pulseira'),
 isolamento: gRadio('isolamento'),
 microorg:   gf('f-microorg'),
+culturas:   _getCulturasRegistradas(),
+fenotipo:   gChecked('f-fenotipo'),
 examesReal: gf('f-exames-real'),
 examesSolic:gf('f-exames-solic'),
     neuro:gChecked('f-neuro'), glas:gf('f-glas'), rass:gf('f-rass'), pup:gChecked('f-pup'),
@@ -5125,15 +5351,32 @@ function _getCulturasRegistradas(){
   const lista = document.getElementById('culturas-lista');
   if(!lista) return [];
   return Array.from(lista.querySelectorAll('.cultura-item')).map(el => ({
-    sito: el.dataset.sito || '',
-    microorg: el.dataset.microorg || '',
-    sensibilidade: el.dataset.sens || '',
-    data: el.dataset.data || ''
+    sito:         el.dataset.sito || '',
+    microorg:     el.dataset.microorg || '',
+    sensibilidade:el.dataset.sens || '',
+    data:         el.dataset.data || '',
+    antibiograma: el.dataset.atb ? JSON.parse(el.dataset.atb) : []
   }));
 }
 
+// Adiciona cultura com antibiograma estruturado (vindo do PDF)
+function _adicionarCulturaComAtb(sito, microorg, sensibilidade, data, atbJson){
+  // atbJson é string JSON ou null
+  let atb = null;
+  if(atbJson){
+    try { atb = typeof atbJson === 'string' ? JSON.parse(atbJson) : atbJson; } catch(_) {}
+  }
+  // Gera texto de sensibilidade a partir da tabela se não vier pronto
+  if(atb && atb.length && !sensibilidade){
+    const res = atb.filter(a => a.resultado === 'RESISTENTE').map(a => 'R:'+a.atb).join('; ');
+    const sen = atb.filter(a => a.resultado === 'SENSÍVEL').slice(0,3).map(a => 'S:'+a.atb).join('; ');
+    sensibilidade = [res, sen].filter(Boolean).join(' | ');
+  }
+  _adicionarCultura(sito, microorg, sensibilidade, data, 'modal', atb);
+}
+
 // Adiciona uma cultura à lista visual e ao campo f-microorg (texto composto)
-function _adicionarCultura(sito, microorg, sensibilidade, data, origem){
+function _adicionarCultura(sito, microorg, sensibilidade, data, origem, antibiograma){
   const lista = document.getElementById('culturas-lista');
   if(!lista) return;
   const m = (microorg||'').trim().toUpperCase();
@@ -5152,6 +5395,7 @@ function _adicionarCultura(sito, microorg, sensibilidade, data, origem){
   item.dataset.microorg = m;
   item.dataset.sens = sensibilidade || '';
   item.dataset.data = data || '';
+  item.dataset.atb  = (antibiograma && antibiograma.length) ? JSON.stringify(antibiograma) : '';
   item.style.cssText = 'display:flex;align-items:center;gap:6px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:5px 10px;margin-bottom:5px;flex-wrap:wrap;';
   item.innerHTML = `
     <span style="font-size:.8rem;font-weight:700;color:#991b1b;flex:1;">
@@ -5189,6 +5433,12 @@ function _sincronizarMicroorg(){
 }
 
 // Busca automática ao abrir o formulário
+// Remove acentos/diacríticos para comparação tolerante (João ↔ Joao)
+function _normalizarNome(s){
+  if(!s) return '';
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+}
+
 async function _buscarCulturasAuto(paciente, leito){
   const el = document.getElementById('culturas-auto');
   if(!el || !paciente) return;
@@ -5198,7 +5448,7 @@ async function _buscarCulturasAuto(paciente, leito){
     const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action:'culturas', paciente, leito, sheetId:CULTURAS_SHEET_ID })
+      body: JSON.stringify({ action:'culturas', paciente: _normalizarNome(paciente), leito, sheetId:CULTURAS_SHEET_ID })
     });
     const data = JSON.parse(await resp.text());
     const positivos = (data.resultados||[]).filter(r =>
@@ -5239,7 +5489,7 @@ async function buscarCulturas(){
     const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action:'culturas', paciente:pac, leito:leitoAtual, sheetId:CULTURAS_SHEET_ID })
+      body: JSON.stringify({ action:'culturas', paciente: _normalizarNome(pac), leito:leitoAtual, sheetId:CULTURAS_SHEET_ID })
     });
     const data = JSON.parse(await resp.text());
     if(data.error) throw new Error(data.error);
@@ -5271,6 +5521,38 @@ function _renderCulturas(resultados, pacienteEncontrado, semResultados){
       const mo   = (r.microorg||'').replace(/'/g,"\\'");
       const sens = (r.sensibilidade||'').replace(/'/g,"\\'");
       const dt   = r.dataResultado||r.dataRecebimento||'';
+      // Tabela de antibiograma estruturado (vinda do PDF via Groq)
+      let tabelaAtb = '';
+      if(r.antibiograma && r.antibiograma.length){
+        const linhas = r.antibiograma.map(a => {
+          const cor = a.resultado === 'RESISTENTE' ? '#7b0000'
+                    : a.resultado === 'INTERMEDIÁRIO' ? '#7a3a00' : '#1a5c2e';
+          const bg  = a.resultado === 'RESISTENTE' ? '#fff0f0'
+                    : a.resultado === 'INTERMEDIÁRIO' ? '#fffbe6' : '#f0fff4';
+          return `<tr style="background:${bg};">
+            <td style="padding:3px 8px;font-size:.72rem;border-bottom:1px solid #f0e0e0;">${a.atb}</td>
+            <td style="padding:3px 8px;font-size:.7rem;color:#555;text-align:center;border-bottom:1px solid #f0e0e0;font-family:monospace;">${a.mic||'—'}</td>
+            <td style="padding:3px 8px;font-size:.7rem;font-weight:700;color:${cor};text-align:right;border-bottom:1px solid #f0e0e0;">${a.resultado}</td>
+          </tr>`;
+        }).join('');
+        tabelaAtb = `<details style="margin-top:6px;">
+          <summary style="font-size:.72rem;color:#0d47a1;cursor:pointer;font-weight:600;">
+            📋 Antibiograma completo (${r.antibiograma.length} antibióticos)
+          </summary>
+          <table style="width:100%;border-collapse:collapse;margin-top:4px;border:1px solid #fca5a5;border-radius:4px;overflow:hidden;">
+            <thead>
+              <tr style="background:#991b1b;">
+                <th style="padding:4px 8px;font-size:.7rem;color:white;text-align:left;font-weight:600;">Antibiótico</th>
+                <th style="padding:4px 8px;font-size:.7rem;color:white;text-align:center;font-weight:600;">MIC µg/mL</th>
+                <th style="padding:4px 8px;font-size:.7rem;color:white;text-align:right;font-weight:600;">Resultado</th>
+              </tr>
+            </thead>
+            <tbody>${linhas}</tbody>
+          </table>
+        </details>`;
+      }
+      // Serializa antibiograma para passar ao _adicionarCultura via onclick
+      const atbJson = r.antibiograma ? JSON.stringify(r.antibiograma).replace(/'/g,"\\'").replace(/"/g,'&quot;') : '';
       return `<div style="margin:4px 16px;padding:10px 14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
           <div>
@@ -5278,13 +5560,14 @@ function _renderCulturas(resultados, pacienteEncontrado, semResultados){
             <span style="font-size:.74rem;color:var(--muted);margin-left:6px;">${r.cultura||''}</span>
             ${dt?`<span style="font-size:.7rem;color:#888;margin-left:6px;">${dt}</span>`:''}
           </div>
-          <button onclick="_adicionarCultura('${sito}','${mo}','${sens}','${dt}','modal');document.getElementById('modal-culturas').classList.remove('show')"
+          <button onclick="_adicionarCulturaComAtb('${sito}','${mo}','${sens}','${dt}',${atbJson ? `'${atbJson}'` : 'null'});document.getElementById('modal-culturas').classList.remove('show')"
             class="btn btn-sm" style="font-size:.7rem;padding:3px 10px;background:#991b1b;color:white;">
             + Registrar
           </button>
         </div>
         ${r.resultado?`<div style="margin-top:4px;font-size:.8rem;color:#991b1b;font-weight:600;">${r.resultado}</div>`:''}
-        ${r.sensibilidade?`<div style="font-size:.74rem;color:#555;margin-top:3px;">Sensibilidade: ${r.sensibilidade}</div>`:''}
+        ${r.sensibilidade && !r.antibiograma ?`<div style="font-size:.74rem;color:#555;margin-top:3px;">Sensibilidade: ${r.sensibilidade}</div>`:''}
+        ${tabelaAtb}
       </div>`;
     }).join('');
   }
