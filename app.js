@@ -2739,8 +2739,115 @@ function _indSAENanda(periodo){
   return h;
 }
 
+// ── HELPERS CCIH: classes de antibióticos e classificação MDR/XDR ────────────
+// Magiorakos 2012 simplificado: cada antibiótico → classe.
+// MDR = resistente a ≥3 classes · XDR = resistente a ≥5 classes · PDR = todas
+const _CCIH_CLASSES_ATB = {
+  // Penicilinas
+  'amoxicilina': 'Penicilinas',
+  'amoxicilina/ácido clavulânico': 'β-lact/inibidor',
+  'amoxicilina/clavulanato': 'β-lact/inibidor',
+  'ampicilina': 'Penicilinas',
+  'ampicilina/sulbactam': 'β-lact/inibidor',
+  'piperacilina/tazobactam': 'β-lact/inibidor',
+  'oxacilina': 'Penicilinas anti-staph',
+  // Cefalosporinas
+  'cefazolina':     'Cefalosporinas 1ª',
+  'cefalotina':     'Cefalosporinas 1ª',
+  'cefuroxima':     'Cefalosporinas 2ª',
+  'ceftriaxona':    'Cefalosporinas 3ª',
+  'cefotaxima':     'Cefalosporinas 3ª',
+  'ceftazidima':    'Cefalosporinas 3ª',
+  'cefepima':       'Cefalosporinas 4ª',
+  'ceftazidima/avibactam':    'Cefalosporinas+inib',
+  'ceftolozane/tazobactam':   'Cefalosporinas+inib',
+  // Monobactâmicos
+  'aztreonam': 'Monobactâmicos',
+  // Carbapenêmicos
+  'meropenem':  'Carbapenêmicos',
+  'ertapenem':  'Carbapenêmicos',
+  'imipenem':   'Carbapenêmicos',
+  'doripenem':  'Carbapenêmicos',
+  // Aminoglicosídeos
+  'amicacina':   'Aminoglicosídeos',
+  'gentamicina': 'Aminoglicosídeos',
+  'tobramicina': 'Aminoglicosídeos',
+  // Fluoroquinolonas
+  'ciprofloxacina':  'Fluoroquinolonas',
+  'levofloxacina':   'Fluoroquinolonas',
+  'norfloxacina':    'Fluoroquinolonas',
+  'moxifloxacina':   'Fluoroquinolonas',
+  // Outros
+  'sulfametoxazol/trimetoprima': 'Sulfas',
+  'bactrim':                     'Sulfas',
+  'tigeciclina':                 'Glicilciclinas',
+  'colistina':                   'Polimixinas',
+  'polimixina b':                'Polimixinas',
+  'nitrofurantoína':             'Nitrofuranos',
+  'fosfomicina':                 'Fosfomicinas',
+  'vancomicina':                 'Glicopeptídeos',
+  'teicoplanina':                'Glicopeptídeos',
+  'linezolida':                  'Oxazolidinonas',
+  'daptomicina':                 'Lipopeptídeos',
+  'clindamicina':                'Lincosamidas',
+  'eritromicina':                'Macrolídeos',
+  'azitromicina':                'Macrolídeos'
+};
+
+// Normaliza nome de antibiótico para chave do dicionário
+function _ccihNomeAtbKey(nome){
+  return (nome||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/ácido/g,'acido')
+    .trim();
+}
+
+// Retorna a classe de um antibiótico (ou 'Outros' se não mapeado)
+function _ccihClasseAtb(nome){
+  const key = _ccihNomeAtbKey(nome).replace(/acido/g,'ácido');
+  // Tenta match exato, depois match parcial (substring)
+  if(_CCIH_CLASSES_ATB[key]) return _CCIH_CLASSES_ATB[key];
+  const k2 = _ccihNomeAtbKey(nome);
+  for(const chave in _CCIH_CLASSES_ATB){
+    const chaveNorm = chave.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(k2.includes(chaveNorm) || chaveNorm.includes(k2)) return _CCIH_CLASSES_ATB[chave];
+  }
+  return 'Outros';
+}
+
+// Classifica um isolado dado seu antibiograma → 'XDR' | 'MDR' | 'Suscetível' | 'Resistente'
+function _ccihClassificarMagiorakos(antibiograma){
+  if(!antibiograma || !antibiograma.length) return null;
+  const classesR = new Set();
+  const classesT = new Set();
+  antibiograma.forEach(a => {
+    const cls = _ccihClasseAtb(a.atb);
+    classesT.add(cls);
+    if(a.resultado === 'RESISTENTE') classesR.add(cls);
+  });
+  const nR = classesR.size;
+  const nT = classesT.size;
+  if(nR === 0) return 'Suscetível';
+  if(nR >= nT && nT >= 3) return 'PDR';     // resistente em tudo testado
+  if(nR >= 5) return 'XDR';
+  if(nR >= 3) return 'MDR';
+  return 'Resistente';
+}
+
+// Cache de dados agregados vindos do Apps Script
+let _ccihAgregadoCache = null;
+
 // ── 18. CCIH / CULTURAS ──────────────────────────────────────────────────────
 function _indCCIH(periodo){
+  // Se há agregado carregado, prefere-o sobre as evoluções locais
+  if(_ccihAgregadoCache && _ccihAgregadoCache.culturas){
+    return _renderCCIHAgregado(_ccihAgregadoCache);
+  }
+  return _renderCCIHLocal(periodo);
+}
+
+// Renderiza CCIH a partir das evoluções salvas no app (subset dos pacientes)
+function _renderCCIHLocal(periodo){
   const { evolucoes } = _indCache;
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
   const total = evPer.length;
@@ -2814,6 +2921,9 @@ function _indCCIH(periodo){
 
   // ── HTML ──
   let h = '';
+
+  // Cabeçalho com botão de carga do servidor
+  h += _ccihHeaderBotao('local', total, comCultura);
 
   // KPIs
   h += '<div class="ind-grid">';
@@ -2957,6 +3067,270 @@ function _ccihInfoBox(){
     <strong>💡 Como alimentar estes indicadores:</strong> No formulário de evolução → <em>Segurança do Paciente</em> → use <strong>"🔬 Buscar na planilha"</strong> ou <strong>"✏️ Adicionar manual"</strong>.
     A sensibilidade é carregada automaticamente da planilha junto com o resultado.
   </div>`;
+}
+
+// Cabeçalho com botão "Atualizar do servidor" / "Voltar"
+function _ccihHeaderBotao(modo, totalEv, comCult){
+  if(modo === 'agregado'){
+    const meta = _ccihAgregadoCache || {};
+    return `<div style="display:flex;align-items:center;justify-content:space-between;background:#0d47a1;color:white;padding:10px 14px;border-radius:8px;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-weight:700;font-size:.86rem;">🏥 Panorama institucional CCIH</div>
+        <div style="font-size:.72rem;opacity:.9;">${meta.totalCulturas||0} culturas · ${meta.pacientesAnalisados||0} pacientes · ${meta.pdfsExtraidos||0} antibiogramas lidos</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="_ccihCarregarAgregado(true)" class="btn" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);font-size:.72rem;padding:5px 12px;">🔄 Recarregar</button>
+        <button onclick="_ccihLimparAgregado()" class="btn" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);font-size:.72rem;padding:5px 12px;">← Voltar à UTI</button>
+      </div>
+    </div>`;
+  }
+  return `<div style="display:flex;align-items:center;justify-content:space-between;background:var(--cinza);border:1px solid var(--borda);padding:10px 14px;border-radius:8px;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-weight:700;font-size:.84rem;color:var(--azul);">📊 Indicadores da UTI (${totalEv} evoluções, ${comCult} com cultura+)</div>
+      <div style="font-size:.71rem;color:var(--muted);">Apenas pacientes evoluídos no app. Para panorama institucional completo →</div>
+    </div>
+    <button onclick="_ccihCarregarAgregado()" class="btn" style="background:#0d47a1;color:white;font-size:.74rem;padding:6px 14px;">
+      🏥 Atualizar do servidor
+    </button>
+  </div>`;
+}
+
+// Faz fetch agregado da planilha inteira (todas as culturas, não só dos evoluídos)
+async function _ccihCarregarAgregado(forceReload){
+  const conteudo = document.getElementById('ind-conteudo');
+  if(!conteudo) return;
+
+  // Mostra loading
+  conteudo.innerHTML = `
+    <div style="text-align:center;padding:60px 20px;">
+      <div class="sae-spinner" style="border-color:#c8d4e8;border-top-color:#0d47a1;margin:0 auto 16px;"></div>
+      <div style="font-weight:700;color:var(--azul);">🏥 Buscando culturas da planilha...</div>
+      <div style="font-size:.74rem;color:var(--muted);margin-top:6px;">Lendo todas as abas + extraindo antibiogramas dos PDFs.<br>Isso pode levar 30–60 segundos.</div>
+    </div>`;
+
+  try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'culturas_agregado',
+        sheetId: CULTURAS_SHEET_ID,
+        maxAbas: 3,
+        maxPDFs: 20
+      })
+    });
+    const data = JSON.parse(await resp.text());
+    if(data.error) throw new Error(data.error);
+
+    _ccihAgregadoCache = data;
+    renderIndicadores();   // re-renderiza com cache populado
+    toast(`✓ ${data.totalCulturas} culturas carregadas (${data.pdfsExtraidos} antibiogramas)`);
+  } catch(e){
+    console.error('[CCIH agregado]', e);
+    conteudo.innerHTML = `<div class="ind-hint" style="color:var(--vermelho);">❌ Erro: ${e.message}. <button onclick="_ccihCarregarAgregado()" class="btn btn-sm">Tentar novamente</button></div>`;
+  }
+}
+
+// Volta para os indicadores baseados em evoluções locais
+function _ccihLimparAgregado(){
+  _ccihAgregadoCache = null;
+  renderIndicadores();
+}
+
+// ── Renderização do panorama institucional (heatmap + MDR/XDR) ───────────────
+function _renderCCIHAgregado(dados){
+  const culturas = dados.culturas || [];
+  const positivas = culturas.filter(c => !c.negativa && c.microorg);
+  let h = _ccihHeaderBotao('agregado');
+
+  // ── KPIs principais ──
+  const taxaPos = _pct(dados.pacientesPositivos, dados.pacientesAnalisados);
+
+  // Classificação MDR/XDR (Magiorakos simplificado)
+  const classificacoes = positivas.map(c => _ccihClassificarMagiorakos(c.antibiograma));
+  const nXDR = classificacoes.filter(x => x === 'XDR').length;
+  const nMDR = classificacoes.filter(x => x === 'MDR').length;
+  const nPDR = classificacoes.filter(x => x === 'PDR').length;
+  const taxaXDR = _pct(nXDR + nPDR, positivas.length);
+
+  h += '<div class="ind-grid">';
+  h += _cardInd('Pacientes analisados', dados.pacientesAnalisados, '', '', 'ccih_a_pac');
+  h += _cardInd('Positividade', dados.pacientesPositivos + '/' + dados.pacientesAnalisados, taxaPos, dados.pacientesPositivos/Math.max(1,dados.pacientesAnalisados) > 0.7 ? 'laranja':'', 'ccih_a_pos');
+  h += _cardInd('Isolados positivos', positivas.length, dados.totalCulturas + ' total', '', 'ccih_a_iso');
+  h += _cardInd('Taxa XDR/PDR', (nXDR+nPDR), taxaXDR, (nXDR+nPDR) > 0 ? 'vermelho':'', 'ccih_a_xdr');
+  h += '</div>';
+
+  // ── Distribuição MDR / XDR / Suscetível ──
+  if(classificacoes.length){
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">⚠️ Classificação de Resistência (Magiorakos simplificado)</div>';
+    h += '<div class="ind-grid">';
+    h += _cardInd('PDR (Pan-resistente)',  nPDR,  _pct(nPDR, positivas.length), nPDR>0?'vermelho':'',   'ccih_a_pdr');
+    h += _cardInd('XDR (Extensiv. resist.)',nXDR,  _pct(nXDR, positivas.length), nXDR>0?'vermelho':'',   'ccih_a_xdr2');
+    h += _cardInd('MDR (Multirresistente)', nMDR,  _pct(nMDR, positivas.length), nMDR>0?'laranja':'',    'ccih_a_mdr');
+    const nSusc = classificacoes.filter(x => x === 'Suscetível').length;
+    h += _cardInd('Suscetível',             nSusc, _pct(nSusc, positivas.length), '',                   'ccih_a_susc');
+    h += '</div>';
+    h += '<div class="ind-hint" style="margin-top:6px;">⚠️ Versão simplificada: conta classes de antibióticos resistentes. ≥3 classes = MDR · ≥5 = XDR · todas testadas = PDR.</div>';
+    h += '</div>';
+  }
+
+  // ── Microrganismos isolados ──
+  const moCount = {};
+  positivas.forEach(c => {
+    const k = (c.microorg||'').trim().toUpperCase();
+    if(k) moCount[k] = (moCount[k]||0)+1;
+  });
+  const moRank = Object.entries(moCount).sort((a,b)=>b[1]-a[1]);
+  if(moRank.length){
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">🦠 Microrganismos Isolados</div><div class="ind-bar-wrap">';
+    const maxMO = moRank[0][1];
+    moRank.slice(0,15).forEach(([mo, n]) => {
+      h += `<div class="ind-bar">
+        <span class="ind-bar-l" style="font-size:.73rem;font-weight:600;">${mo}</span>
+        <div class="ind-bar-bg"><div class="ind-bar-fill" style="width:${Math.round(n/maxMO*100)}%;background:${_ccihCorMO(mo)};"></div></div>
+        <span class="ind-bar-n">${n} <span style="font-weight:400;font-size:.65rem;color:var(--muted);">(${_pct(n, positivas.length)})</span></span>
+      </div>`;
+    });
+    h += '</div></div>';
+  }
+
+  // ── HEATMAP espécie × antibiótico ──
+  h += _ccihHeatmapHTML(positivas);
+
+  // ── Sítios de coleta ──
+  const sitoCount = {};
+  positivas.forEach(c => {
+    const k = (c.cultura||'').trim() || 'Não especificado';
+    sitoCount[k] = (sitoCount[k]||0)+1;
+  });
+  const sitoRank = Object.entries(sitoCount).filter(([s])=>s!=='Não especificado').sort((a,b)=>b[1]-a[1]);
+  if(sitoRank.length){
+    h += '<div class="ind-grupo"><div class="ind-grupo-t">📍 Sítios de Coleta</div><div class="ind-grid">';
+    sitoRank.slice(0,8).forEach(([label, n]) => {
+      h += _cardInd(label, n, _pct(n, positivas.length), '', 'ccih_a_sito');
+    });
+    h += '</div></div>';
+  }
+
+  return h;
+}
+
+// Heatmap espécie × antibiótico — taxa de resistência por célula
+function _ccihHeatmapHTML(culturas){
+  // Agrupa culturas com antibiograma por espécie
+  const porEspecie = {};
+  culturas.forEach(c => {
+    if(!c.antibiograma || !c.antibiograma.length) return;
+    const esp = (c.microorg||'').toUpperCase().trim();
+    if(!esp) return;
+    if(!porEspecie[esp]) porEspecie[esp] = [];
+    porEspecie[esp].push(c.antibiograma);
+  });
+
+  // Conta espécies com pelo menos 1 antibiograma
+  const especies = Object.keys(porEspecie).sort((a,b) => porEspecie[b].length - porEspecie[a].length);
+  if(!especies.length){
+    return `<div class="ind-grupo"><div class="ind-grupo-t">🗺 Heatmap de Resistência</div>
+      <div class="ind-hint">⚠️ Heatmap requer antibiogramas extraídos dos PDFs.
+      Nenhum laudo foi processado ainda — verifique se a coluna L da planilha tem hiperlinks para os PDFs.</div>
+    </div>`;
+  }
+
+  // Coleta todos os antibióticos testados, ordenados por frequência
+  const atbFreq = {};
+  Object.values(porEspecie).flat().forEach(anti => {
+    anti.forEach(a => { atbFreq[a.atb] = (atbFreq[a.atb]||0)+1; });
+  });
+  const atbsOrdenados = Object.entries(atbFreq).sort((a,b)=>b[1]-a[1]).map(([atb])=>atb);
+
+  // Para cada (espécie, atb), calcula % resistência e contagem
+  // Retorna {pctR, n, classe} para a cor
+  function celula(esp, atb){
+    const antibis = porEspecie[esp];
+    let r = 0, total = 0;
+    antibis.forEach(anti => {
+      const linha = anti.find(a => a.atb === atb);
+      if(linha){
+        total++;
+        if(linha.resultado === 'RESISTENTE') r++;
+      }
+    });
+    if(total === 0) return { pct: null, n: 0, txt: '—' };
+    return { pct: Math.round(r/total*100), n: total, txt: Math.round(r/total*100) };
+  }
+
+  function corCelula(pct){
+    if(pct === null) return 'background:#f5f5f5;color:#aaa;';
+    if(pct === 0)    return 'background:#d4f0e0;color:#0d4f20;';
+    if(pct <= 15)    return 'background:#fffde7;color:#5a4000;';
+    if(pct <= 30)    return 'background:#ffe0b2;color:#5a2800;';
+    if(pct <= 50)    return 'background:#ffccbc;color:#6d1f00;';
+    if(pct <= 70)    return 'background:#ef9a9a;color:#7b0000;';
+    return 'background:#c62828;color:white;';
+  }
+
+  let h = '<div class="ind-grupo"><div class="ind-grupo-t">🗺 Heatmap de Resistência — Espécie × Antibiótico</div>';
+  h += '<div style="overflow-x:auto;border:1px solid var(--borda);border-radius:8px;">';
+  h += '<table style="border-collapse:collapse;width:100%;font-size:.7rem;min-width:600px;">';
+
+  // Cabeçalho
+  h += '<thead><tr><th style="background:#0d47a1;color:white;padding:6px 8px;text-align:left;position:sticky;left:0;z-index:2;">Espécie (n)</th>';
+  atbsOrdenados.forEach(atb => {
+    const sigla = _ccihSiglaAtb(atb);
+    h += `<th style="background:#0d47a1;color:white;padding:6px 4px;text-align:center;font-weight:600;writing-mode:vertical-rl;transform:rotate(180deg);min-width:32px;" title="${atb}">${sigla}</th>`;
+  });
+  h += '</tr></thead><tbody>';
+
+  // Linhas
+  especies.slice(0, 10).forEach(esp => {
+    const n = porEspecie[esp].length;
+    h += `<tr><td style="background:var(--cinza);font-style:italic;font-weight:700;color:var(--azul);padding:5px 8px;border:1px solid var(--borda);position:sticky;left:0;z-index:1;min-width:160px;">${esp} <span style="color:var(--muted);font-weight:400;font-style:normal;">(${n})</span></td>`;
+    atbsOrdenados.forEach(atb => {
+      const c = celula(esp, atb);
+      const style = corCelula(c.pct);
+      const title = c.pct !== null ? `${atb}: ${c.pct}% R (n=${c.n})` : `${atb}: não testado`;
+      h += `<td style="${style}border:1px solid #ddd;padding:5px 6px;text-align:center;font-weight:700;" title="${title}">${c.txt}</td>`;
+    });
+    h += '</tr>';
+  });
+
+  h += '</tbody></table></div>';
+
+  // Legenda
+  h += '<div class="ind-hint" style="margin-top:6px;">% resistência: ' +
+       '<span style="background:#d4f0e0;padding:1px 5px;border-radius:3px;">0%</span> ' +
+       '<span style="background:#fffde7;padding:1px 5px;border-radius:3px;">1–15</span> ' +
+       '<span style="background:#ffe0b2;padding:1px 5px;border-radius:3px;">16–30</span> ' +
+       '<span style="background:#ffccbc;padding:1px 5px;border-radius:3px;">31–50</span> ' +
+       '<span style="background:#ef9a9a;padding:1px 5px;border-radius:3px;color:white;">51–70</span> ' +
+       '<span style="background:#c62828;padding:1px 5px;border-radius:3px;color:white;">&gt;70</span> ' +
+       '<span style="background:#f5f5f5;padding:1px 5px;border-radius:3px;color:#aaa;">não testado</span>' +
+       '</div></div>';
+  return h;
+}
+
+// Sigla padrão para antibiótico (cabeçalho compacto do heatmap)
+function _ccihSiglaAtb(nome){
+  const mapa = {
+    'amicacina':'AMI','gentamicina':'GEN','tobramicina':'TOB',
+    'ciprofloxacina':'CIP','levofloxacina':'LEV','norfloxacina':'NOR',
+    'meropenem':'MER','ertapenem':'ETP','imipenem':'IMP',
+    'cefepima':'FEP','ceftriaxona':'CRO','ceftazidima':'CAZ','cefotaxima':'CTX',
+    'piperacilina/tazobactam':'PTZ','ampicilina':'AMP','amoxicilina':'AMX',
+    'amoxicilina/ácido clavulânico':'AMC','amoxicilina/clavulanato':'AMC',
+    'ampicilina/sulbactam':'SAM','aztreonam':'ATM',
+    'ceftazidima/avibactam':'CZA','ceftolozane/tazobactam':'C/T',
+    'oxacilina':'OXA','vancomicina':'VAN','teicoplanina':'TEC',
+    'linezolida':'LZD','daptomicina':'DAP','tigeciclina':'TGC',
+    'colistina':'CST','polimixina b':'POL','nitrofurantoína':'NIT',
+    'sulfametoxazol/trimetoprima':'SXT','bactrim':'SXT',
+    'clindamicina':'CLI','eritromicina':'ERI','azitromicina':'AZI',
+    'fosfomicina':'FOS'
+  };
+  const k = _ccihNomeAtbKey(nome);
+  if(mapa[k]) return mapa[k];
+  // Fallback: primeiras 3 letras
+  return nome.replace(/[^a-zA-Z]/g,'').substring(0,3).toUpperCase();
 }
 
 // Correlação de Pearson
