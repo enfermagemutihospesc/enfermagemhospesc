@@ -2801,7 +2801,9 @@ function _indCCIH(periodo){
     const atbs = e.atbs || [];
     let temCarba = false;
     atbs.forEach(a => {
-      const n = (a||'').trim();
+      // atbs pode ser array de objetos {nome, dose, inicio...} ou strings legadas
+      const nome = typeof a === 'string' ? a : (a && a.nome) || '';
+      const n = nome.trim();
       if(!n) return;
       atbCount[n] = (atbCount[n]||0)+1;
       if(carbaNames.some(c => n.toLowerCase().includes(c))) temCarba = true;
