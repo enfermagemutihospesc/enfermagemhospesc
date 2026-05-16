@@ -3073,14 +3073,26 @@ function _ccihInfoBox(){
 function _ccihHeaderBotao(modo, totalEv, comCult){
   if(modo === 'agregado'){
     const meta = _ccihAgregadoCache || {};
-    return `<div style="display:flex;align-items:center;justify-content:space-between;background:#0d47a1;color:white;padding:10px 14px;border-radius:8px;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-      <div>
-        <div style="font-weight:700;font-size:.86rem;">🏥 Panorama institucional CCIH</div>
-        <div style="font-size:.72rem;opacity:.9;">${meta.totalCulturas||0} culturas · ${meta.pacientesAnalisados||0} pacientes · ${meta.pdfsExtraidos||0} antibiogramas lidos</div>
-      </div>
-      <div style="display:flex;gap:6px;">
-        <button onclick="_ccihCarregarAgregado(true)" class="btn" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);font-size:.72rem;padding:5px 12px;">🔄 Recarregar</button>
-        <button onclick="_ccihLimparAgregado()" class="btn" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);font-size:.72rem;padding:5px 12px;">← Voltar à UTI</button>
+    const abas = meta._maxAbas || 3;
+    return `<div style="background:#0d47a1;color:white;padding:10px 14px;border-radius:8px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-weight:700;font-size:.86rem;">🏥 Panorama institucional CCIH</div>
+          <div style="font-size:.72rem;opacity:.9;">${meta.totalCulturas||0} culturas · ${meta.pacientesAnalisados||0} pacientes · ${meta.pdfsExtraidos||0} antibiogramas · ${abas === 99 ? "todas as abas" : abas + (abas===1?" mês":" meses")}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <select onchange="_ccihCarregarAgregado(true,+this.value)"
+            style="background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:4px 8px;font-size:.72rem;cursor:pointer;">
+            <option value="1" ${abas===1?'selected':''}>1 mês</option>
+            <option value="2" ${abas===2?'selected':''}>2 meses</option>
+            <option value="3" ${abas===3?'selected':''}>3 meses</option>
+            <option value="6" ${abas===6?'selected':''}>6 meses</option>
+            <option value="12" ${abas===12?'selected':''}>12 meses</option>
+            <option value="99" ${abas===99?'selected':''}>Todos</option>
+          </select>
+          <button onclick="_ccihCarregarAgregado(true)" class="btn" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);font-size:.72rem;padding:5px 12px;">🔄 Recarregar</button>
+          <button onclick="_ccihLimparAgregado()" class="btn" style="background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3);font-size:.72rem;padding:5px 12px;">← Voltar à UTI</button>
+        </div>
       </div>
     </div>`;
   }
@@ -3089,23 +3101,39 @@ function _ccihHeaderBotao(modo, totalEv, comCult){
       <div style="font-weight:700;font-size:.84rem;color:var(--azul);">📊 Indicadores da UTI (${totalEv} evoluções, ${comCult} com cultura+)</div>
       <div style="font-size:.71rem;color:var(--muted);">Apenas pacientes evoluídos no app. Para panorama institucional completo →</div>
     </div>
-    <button onclick="_ccihCarregarAgregado()" class="btn" style="background:#0d47a1;color:white;font-size:.74rem;padding:6px 14px;">
-      🏥 Atualizar do servidor
-    </button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select id="ccih-maxAbas-init"
+        style="border:1px solid var(--borda);border-radius:6px;padding:5px 8px;font-size:.73rem;color:var(--texto);background:white;cursor:pointer;">
+        <option value="1">1 mês</option>
+        <option value="2">2 meses</option>
+        <option value="3" selected>3 meses</option>
+        <option value="6">6 meses</option>
+        <option value="12">12 meses</option>
+        <option value="99">Todos</option>
+      </select>
+      <button onclick="_ccihCarregarAgregado(false,+document.getElementById('ccih-maxAbas-init').value)" class="btn" style="background:#0d47a1;color:white;font-size:.74rem;padding:6px 14px;">
+        🏥 Atualizar do servidor
+      </button>
+    </div>
   </div>`;
 }
 
 // Faz fetch agregado da planilha inteira (todas as culturas, não só dos evoluídos)
-async function _ccihCarregarAgregado(forceReload){
+async function _ccihCarregarAgregado(forceReload, maxAbas){
   const conteudo = document.getElementById('ind-conteudo');
   if(!conteudo) return;
 
-  // Mostra loading
+  const nAbas = maxAbas || (_ccihAgregadoCache && _ccihAgregadoCache._maxAbas) || 3;
+  const nPDFs = nAbas <= 1 ? 10 : nAbas <= 3 ? 20 : nAbas <= 6 ? 35 : 50;
+
   conteudo.innerHTML = `
     <div style="text-align:center;padding:60px 20px;">
       <div class="sae-spinner" style="border-color:#c8d4e8;border-top-color:#0d47a1;margin:0 auto 16px;"></div>
       <div style="font-weight:700;color:var(--azul);">🏥 Buscando culturas da planilha...</div>
-      <div style="font-size:.74rem;color:var(--muted);margin-top:6px;">Lendo todas as abas + extraindo antibiogramas dos PDFs.<br>Isso pode levar 30–60 segundos.</div>
+      <div style="font-size:.74rem;color:var(--muted);margin-top:6px;">
+        Lendo ${nAbas === 99 ? "todas as abas" : nAbas + (nAbas===1?" mês":" meses")} · até ${nPDFs} antibiogramas.<br>
+        Isso pode levar ${nAbas <= 3 ? "30–60" : "60–120"} segundos.
+      </div>
     </div>`;
 
   try {
@@ -3115,16 +3143,17 @@ async function _ccihCarregarAgregado(forceReload){
       body: JSON.stringify({
         action: 'culturas_agregado',
         sheetId: CULTURAS_SHEET_ID,
-        maxAbas: 3,
-        maxPDFs: 20
+        maxAbas: nAbas,
+        maxPDFs: nPDFs
       })
     });
     const data = JSON.parse(await resp.text());
     if(data.error) throw new Error(data.error);
 
+    data._maxAbas = nAbas;
     _ccihAgregadoCache = data;
-    renderIndicadores();   // re-renderiza com cache populado
-    toast(`✓ ${data.totalCulturas} culturas carregadas (${data.pdfsExtraidos} antibiogramas)`);
+    renderIndicadores();
+    toast(`✓ ${data.totalCulturas} culturas · ${data.pdfsExtraidos} antibiogramas (${nAbas === 99 ? "todas as abas" : nAbas + (nAbas===1?" mês":" meses")})`);
   } catch(e){
     console.error('[CCIH agregado]', e);
     conteudo.innerHTML = `<div class="ind-hint" style="color:var(--vermelho);">❌ Erro: ${e.message}. <button onclick="_ccihCarregarAgregado()" class="btn btn-sm">Tentar novamente</button></div>`;
@@ -3159,6 +3188,20 @@ function _renderCCIHAgregado(dados){
   h += _cardInd('Isolados positivos', positivas.length, dados.totalCulturas + ' total', '', 'ccih_a_iso');
   h += _cardInd('Taxa XDR/PDR', (nXDR+nPDR), taxaXDR, (nXDR+nPDR) > 0 ? 'vermelho':'', 'ccih_a_xdr');
   h += '</div>';
+
+  // Diagnóstico: alerta quando antibiogramas não foram extraídos dos PDFs
+  const comAntibiograma = positivas.filter(c => c.antibiograma && c.antibiograma.length).length;
+  if(positivas.length > 0 && comAntibiograma === 0){
+    h += `<div style="margin-top:10px;padding:11px 14px;background:#fff4e5;border:1px solid #ffb74d;border-radius:8px;font-size:.78rem;color:#6d3a00;line-height:1.55;">
+      ⚠️ <strong>Nenhum antibiograma foi extraído dos PDFs.</strong><br>
+      <strong>Causa provável:</strong> os arquivos PDF mencionados na coluna L não foram encontrados no Google Drive da conta do Apps Script. Verifique se a conta tem acesso aos PDFs.<br>
+      <strong>Diagnóstico:</strong> abra o editor do Apps Script, rode <code style="background:white;padding:1px 5px;border-radius:3px;">_testarColunaL</code> com o sheetId — se aparecer URL nas linhas de teste, o problema é outro; se ficar vazio, é acesso ao Drive.
+    </div>`;
+  } else if(positivas.length > 0 && comAntibiograma < positivas.length){
+    h += `<div style="margin-top:10px;padding:9px 14px;background:#e3f0ff;border:1px solid #90caf9;border-radius:8px;font-size:.76rem;color:#0a2e5a;">
+      ℹ️ ${comAntibiograma} de ${positivas.length} isolados positivos têm antibiograma extraído. Os outros não foram encontrados no Drive ou são culturas sem laudo.
+    </div>`;
+  }
 
   // ── Distribuição MDR / XDR / Suscetível ──
   if(classificacoes.length){
