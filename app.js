@@ -75,7 +75,7 @@ function initFirebase() {
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    console.log('Firebase conectado!');
+    console.log('Firebase conectado! [build login-fix v3]');
     return true;
   } catch (e) {
     console.error('Erro crítico no Firebase:', e);
@@ -3529,28 +3529,31 @@ async function fazerLogin() {
   }
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
-    // SESSION: a sessão encerra ao fechar a aba/janela (não entra sozinho depois).
-    // Não bloqueia o login: se setPersistence falhar/demorar, segue mesmo assim.
-    try {
-      await Promise.race([
-        auth.setPersistence(firebase.auth.Auth.Persistence.SESSION),
-        new Promise(res => setTimeout(res, 2500))
-      ]);
-    } catch(ePers) { console.warn('[Login] setPersistence:', ePers); }
+    // Define a persistência SESSION de forma best-effort, SEM await bloqueante.
+    // (Em alguns navegadores com storage restrito, await setPersistence trava.)
+    try { auth.setPersistence(firebase.auth.Auth.Persistence.SESSION); } catch(_) {}
 
-    await auth.signInWithEmailAndPassword(email, senha);
+    // Login com timeout: se não responder em 15s, libera o botão e avisa.
+    await Promise.race([
+      auth.signInWithEmailAndPassword(email, senha),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_login')), 15000))
+    ]);
     sessionStorage.setItem('uti_auth_ok', '1');
   } catch(e) {
     console.error('[Login] erro:', e && e.code, e && e.message);
-    const msgs = {
-      'auth/user-not-found':'Usuário não encontrado.',
-      'auth/wrong-password':'Senha incorreta.',
-      'auth/invalid-email':'E-mail inválido.',
-      'auth/invalid-credential':'E-mail ou senha incorretos.',
-      'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.',
-      'auth/network-request-failed':'Falha de conexão. Verifique a internet.',
-    };
-    errEl.textContent = msgs[e.code] || ('Erro ao entrar: ' + (e.code || e.message || 'desconhecido'));
+    if (e && e.message === 'timeout_login') {
+      errEl.textContent = 'O servidor demorou a responder. Verifique a conexão e tente de novo.';
+    } else {
+      const msgs = {
+        'auth/user-not-found':'Usuário não encontrado.',
+        'auth/wrong-password':'Senha incorreta.',
+        'auth/invalid-email':'E-mail inválido.',
+        'auth/invalid-credential':'E-mail ou senha incorretos.',
+        'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.',
+        'auth/network-request-failed':'Falha de conexão. Verifique a internet.',
+      };
+      errEl.textContent = msgs[e.code] || ('Erro ao entrar: ' + (e.code || e.message || 'desconhecido'));
+    }
     btn.disabled = false; btn.textContent = 'Entrar';
   }
 }
