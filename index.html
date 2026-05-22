@@ -77,6 +77,63 @@
     <span class="sync-dot" id="sync-dot"></span>
     <span id="sync-txt">verificando conexão...</span>
   </div>
+  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:1rem;">
+    <button class="btn btn-sec btn-sm" onclick="abrirTrocaSenhaVoluntaria()">🔑 Trocar minha senha</button>
+    <button class="btn btn-sec btn-sm" id="btn-gerenciar-usuarios" style="display:none;" onclick="abrirGerenciarUsuarios()">👥 Gerenciar usuários</button>
+    <button class="btn btn-sec btn-sm" onclick="fazerLogout()">🚪 Sair</button>
+  </div>
+</div>
+
+<!-- TELA TROCA DE SENHA (primeiro acesso ou voluntária) -->
+<div id="t-trocasenha" class="tela" style="display:none;padding:2rem;min-height:100vh;align-items:center;justify-content:center;">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="login-badge">SEGURANÇA</span>
+      <h1>Definir senha</h1>
+      <p id="ts-sub">Defina uma nova senha de acesso.</p>
+    </div>
+    <div class="login-field">
+      <label>Nova senha</label>
+      <input type="password" id="ts-nova" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+    </div>
+    <div class="login-field">
+      <label>Confirmar nova senha</label>
+      <input type="password" id="ts-conf" placeholder="repita a senha" autocomplete="new-password" onkeydown="if(event.key==='Enter') confirmarTrocaSenha()">
+    </div>
+    <button class="btn-login" id="btn-trocar-senha" onclick="confirmarTrocaSenha()">Salvar nova senha</button>
+    <button class="btn btn-sec btn-sm" id="btn-pular-troca" style="display:none;margin-top:8px;width:100%;" onclick="irTelaTurno(true);mostrarTela('t-turno');">Cancelar</button>
+    <div class="login-err" id="ts-err"></div>
+  </div>
+</div>
+
+<!-- TELA GERENCIAR USUÁRIOS (admin) -->
+<div id="t-usuarios" class="tela" style="display:none;">
+  <div class="app-header" style="border-radius:var(--r);">
+    <div><h2>👥 Gerenciar Usuários</h2><small>Adicionar, ativar/desativar e remover acessos</small></div>
+    <div class="header-right">
+      <span class="badge-user" onclick="irTelaTurno(true);mostrarTela('t-turno');">← Voltar</span>
+    </div>
+  </div>
+  <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;">
+    <div class="secao" style="margin-bottom:1rem;">
+      <div class="secao-t">Adicionar novo usuário</div>
+      <div class="secao-c">
+        <div class="fl"><label>Nome completo</label><input type="text" id="add-nome" placeholder="Ex: MARIA DA SILVA SANTOS"></div>
+        <div class="dc">
+          <div class="fl"><label>E-mail institucional</label><input type="email" id="add-email" placeholder="nome.s@hospesc.com"></div>
+          <div class="fl"><label>COREN</label><input type="text" id="add-coren" placeholder="000.000"></div>
+        </div>
+        <div class="fl"><label>Senha provisória</label><input type="text" id="add-senha" placeholder="mínimo 6 caracteres (o usuário troca no 1º acesso)" value="hospesc123"></div>
+        <button class="btn btn-pri" id="btn-add-user" onclick="adicionarUsuario()" style="margin-top:8px;">+ Criar usuário</button>
+        <div class="login-err" id="add-err" style="margin-top:6px;"></div>
+        <p style="font-size:.7rem;color:var(--muted);margin-top:6px;">O usuário entrará com a senha provisória e será obrigado a defini-la no primeiro acesso.</p>
+      </div>
+    </div>
+    <div class="secao">
+      <div class="secao-t">Usuários cadastrados</div>
+      <div class="secao-c"><div id="usuarios-lista"></div></div>
+    </div>
+  </div>
 </div>
 
 <!-- TELA LEITOS -->
