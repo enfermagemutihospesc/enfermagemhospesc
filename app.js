@@ -3522,21 +3522,35 @@ async function fazerLogin() {
   const btn   = document.getElementById('btn-entrar');
   errEl.textContent = '';
   if (!email || !senha) { errEl.textContent = 'Preencha e-mail e senha.'; return; }
+  if (!auth) {
+    errEl.textContent = 'Conexão com o servidor não iniciada. Recarregue a página (F5).';
+    console.error('[Login] auth indefinido — initFirebase falhou?');
+    return;
+  }
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
-    // SESSION: a sessão encerra ao fechar a aba/janela (não entra sozinho depois)
-    await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+    // SESSION: a sessão encerra ao fechar a aba/janela (não entra sozinho depois).
+    // Não bloqueia o login: se setPersistence falhar/demorar, segue mesmo assim.
+    try {
+      await Promise.race([
+        auth.setPersistence(firebase.auth.Auth.Persistence.SESSION),
+        new Promise(res => setTimeout(res, 2500))
+      ]);
+    } catch(ePers) { console.warn('[Login] setPersistence:', ePers); }
+
     await auth.signInWithEmailAndPassword(email, senha);
     sessionStorage.setItem('uti_auth_ok', '1');
   } catch(e) {
+    console.error('[Login] erro:', e && e.code, e && e.message);
     const msgs = {
       'auth/user-not-found':'Usuário não encontrado.',
       'auth/wrong-password':'Senha incorreta.',
       'auth/invalid-email':'E-mail inválido.',
       'auth/invalid-credential':'E-mail ou senha incorretos.',
       'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.',
+      'auth/network-request-failed':'Falha de conexão. Verifique a internet.',
     };
-    errEl.textContent = msgs[e.code] || 'Erro ao entrar. Tente novamente.';
+    errEl.textContent = msgs[e.code] || ('Erro ao entrar: ' + (e.code || e.message || 'desconhecido'));
     btn.disabled = false; btn.textContent = 'Entrar';
   }
 }
@@ -5661,7 +5675,12 @@ window.addEventListener('load', () => {
     if (user) {
       try {
         // Garante persistência SESSION e bloqueia sessões LOCAL antigas
-        try { await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION); } catch(_) {}
+        try {
+          await Promise.race([
+            auth.setPersistence(firebase.auth.Auth.Persistence.SESSION),
+            new Promise(res => setTimeout(res, 2500))
+          ]);
+        } catch(_) {}
         if (!sessionStorage.getItem('uti_auth_ok')) {
           await auth.signOut();
           mostrarTela('t-login');
