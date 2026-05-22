@@ -75,7 +75,7 @@ function initFirebase() {
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    console.log('Firebase conectado! [build login-fix v3]');
+    console.log('Firebase conectado! [build login-fix v4]');
     return true;
   } catch (e) {
     console.error('Erro crítico no Firebase:', e);
@@ -3530,16 +3530,19 @@ async function fazerLogin() {
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
     // Define a persistência SESSION de forma best-effort, SEM await bloqueante.
-    // (Em alguns navegadores com storage restrito, await setPersistence trava.)
     try { auth.setPersistence(firebase.auth.Auth.Persistence.SESSION); } catch(_) {}
 
-    // Login com timeout: se não responder em 15s, libera o botão e avisa.
+    // IMPORTANTE: marca a sessão ANTES do login. O onAuthStateChanged dispara
+    // assim que o Firebase autentica — se a flag só fosse definida depois do
+    // await, haveria uma condição de corrida que deslogava o usuário na hora.
+    sessionStorage.setItem('uti_auth_ok', '1');
+
     await Promise.race([
       auth.signInWithEmailAndPassword(email, senha),
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_login')), 15000))
     ]);
-    sessionStorage.setItem('uti_auth_ok', '1');
   } catch(e) {
+    sessionStorage.removeItem('uti_auth_ok');   // login falhou — limpa a flag
     console.error('[Login] erro:', e && e.code, e && e.message);
     if (e && e.message === 'timeout_login') {
       errEl.textContent = 'O servidor demorou a responder. Verifique a conexão e tente de novo.';
@@ -5677,18 +5680,15 @@ window.addEventListener('load', () => {
   auth.onAuthStateChanged(async user => {
     if (user) {
       try {
-        // Garante persistência SESSION e bloqueia sessões LOCAL antigas
+        // Persistência SESSION: a sessão já morre sozinha ao fechar a aba/janela,
+        // então não é preciso verificação manual de "sessão nova" aqui (isso
+        // causava uma condição de corrida que deslogava o usuário no login).
         try {
           await Promise.race([
             auth.setPersistence(firebase.auth.Auth.Persistence.SESSION),
             new Promise(res => setTimeout(res, 2500))
           ]);
         } catch(_) {}
-        if (!sessionStorage.getItem('uti_auth_ok')) {
-          await auth.signOut();
-          mostrarTela('t-login');
-          return;
-        }
 
         usuarioEmail = user.email;
 
