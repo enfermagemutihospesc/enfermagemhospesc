@@ -3402,7 +3402,11 @@ async function fazerLogin() {
   if (!email || !senha) { errEl.textContent = 'Preencha e-mail e senha.'; return; }
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
+    // SESSION: sessão encerra ao fechar a aba/janela — não persiste entre visitas
+    await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
     await auth.signInWithEmailAndPassword(email, senha);
+    // Marca que este login foi feito nesta sessão de aba (não herdado do localStorage)
+    sessionStorage.setItem('uti_auth_ok', '1');
   } catch(e) {
     const msgs = {
       'auth/user-not-found':'Usuário não encontrado.',
@@ -4091,39 +4095,6 @@ async function _sugerirCID(idDiag, idCID){
     _bindFC('Normocárdico','f-fc-norm');
     _bindFC('Taquicárdico','f-fc-taqui');
     _bindFC('Bradicárdico','f-fc-bradi');
-  }
-})();
-
-// Infusões (DVA + Sedoanalgesia) – limpa ml/h ao desselecionar o checkbox
-// Usa event delegation nos containers para cobrir linhas fixas E dinâmicas
-(function _initInfusaoListeners(){
-  function _bindContainer(id){
-    const container = document.getElementById(id);
-    if(!container) return;
-    container.addEventListener('change', e => {
-      const cb = e.target;
-      if(!cb.classList.contains('dc-cb')) return;
-      if(!cb.checked){
-        // Encontra o .dc-v irmão dentro da mesma linha .dva-r
-        const row = cb.closest('.dva-r');
-        if(row){
-          const input = row.querySelector('.dc-v');
-          if(input) input.value = '';
-        }
-      }
-    });
-  }
-  function _init(){
-    _bindContainer('dva-l');
-    _bindContainer('sedo-l');
-    // Containers dinâmicos também recebem delegation ao serem criados no DOM
-    _bindContainer('dva-outros');
-    _bindContainer('sedo-outros');
-  }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', _init);
-  } else {
-    _init();
   }
 })();
 
@@ -5349,14 +5320,32 @@ window.addEventListener('load', () => {
   mostrarTela('t-login');
   document.getElementById('t-login').classList.add('ativa');
 
-  auth.onAuthStateChanged(user => {
+  auth.onAuthStateChanged(async user => {
     if (user) {
+      // Garante que a persistência desta sessão é SESSION (não LOCAL).
+      // Usuários que já tinham sessão LOCAL salva de versões anteriores
+      // são desconectados e redirecionados para o login.
+      try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+      } catch(_) {}
+
+      // Se o token veio do localStorage (persistência LOCAL antiga),
+      // o Firebase não diferencia — então verificamos se esta visita
+      // já passou pelo login da sessão atual via sessionStorage.
+      if (!sessionStorage.getItem('uti_auth_ok')) {
+        // Sessão antiga (localStorage): desconecta e pede login
+        await auth.signOut();
+        mostrarTela('t-login');
+        return;
+      }
+
       usuarioEmail = user.email;
       irTelaTurno(true);
       mostrarTela('t-turno');
       // Dispara limpeza automática (1x ao dia, em background)
       executarLimpezaSeNecessario().catch(e => console.warn('Limpeza:', e));
     } else {
+      sessionStorage.removeItem('uti_auth_ok');
       mostrarTela('t-login');
     }
   });
