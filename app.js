@@ -1,39 +1,6 @@
 // ── ESTADO ──────────────────────────────────────────────────────────────────
 let turno = '', leitoAtual = 0, usuarioEmail = '';
 let db = null, auth = null, modoOffline = false;
-
-// ── CONTROLE DE ACESSO – CAMPOS DE ADMISSÃO ──────────────────────────────────
-const ADM_ADMIN_EMAIL = 'tercio@hospesc.com.br';
-
-function _aplicarBloqueioAdmissao() {
-  const isAdmin = usuarioEmail.trim().toLowerCase() === ADM_ADMIN_EMAIL.toLowerCase();
-  const btnEditar = document.getElementById('btn-editar-admissao');
-  const campos = document.querySelectorAll('[data-adm-field]');
-
-  // Botão "Editar Admissão": visível só para o admin
-  if (btnEditar) btnEditar.style.display = isAdmin ? '' : 'none';
-
-  campos.forEach(el => {
-    if (isAdmin) {
-      el.removeAttribute('readonly');
-      el.removeAttribute('disabled');
-      el.style.background    = '';
-      el.style.color         = '';
-      el.style.cursor        = '';
-      el.style.pointerEvents = '';
-    } else {
-      if (el.tagName === 'SELECT') {
-        el.setAttribute('disabled', true);
-      } else {
-        el.setAttribute('readonly', true);
-      }
-      el.style.background    = '#f0f4fa';
-      el.style.color         = '#5a6a85';
-      el.style.cursor        = 'not-allowed';
-      el.style.pointerEvents = 'none';
-    }
-  });
-}
 const TOTAL = 10;
 
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
@@ -732,7 +699,16 @@ async function _executarLimpezaCore(){
 async function _backupJsonNoDrive(dados){
   try {
     const titulo = 'backup_uti_' + dados.limite + '_' + Date.now();
-    await _apsFetch({ action: 'backup_json', titulo, json: JSON.stringify(dados) }, true);
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'backup_json',
+        titulo: titulo,
+        json: JSON.stringify(dados)
+      }),
+      mode: 'no-cors'
+    });
     return true;
   } catch(e){
     console.warn('Backup falhou:', e);
@@ -3161,7 +3137,17 @@ async function _ccihCarregarAgregado(forceReload, maxAbas){
     </div>`;
 
   try {
-    const data = await _apsFetch({ action: 'culturas_agregado', sheetId: CULTURAS_SHEET_ID, maxAbas: nAbas, maxPDFs: nPDFs });
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'culturas_agregado',
+        sheetId: CULTURAS_SHEET_ID,
+        maxAbas: nAbas,
+        maxPDFs: nPDFs
+      })
+    });
+    const data = JSON.parse(await resp.text());
     if(data.error) throw new Error(data.error);
 
     data._maxAbas = nAbas;
@@ -4006,18 +3992,24 @@ async function _sugerirCID(idDiag, idCID){
   statEl.textContent = '⏳ buscando...';
   statEl.style.color = '#856404';
   try {
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'cid', diagnostico: diag })
+    });
+    const raw = await resp.text();
+    console.log('[CID] diag="'+diag+'" → raw resposta:', raw);
     let data;
-    try {
-      data = await _apsFetch({ action: 'cid', diagnostico: diag });
-      console.log('[CID] diag="'+diag+'" → parseado:', data);
-    } catch(e){
-      console.warn('[CID] resposta inválida:', e.message);
+    try { data = JSON.parse(raw); }
+    catch(e){
+      console.warn('[CID] resposta não é JSON:', raw);
       statEl.textContent = '⚠ resposta inválida';
       statEl.style.color = '#dc3545';
-      statEl.title = e.message.substring(0, 200);
+      statEl.title = raw.substring(0, 200);
       setTimeout(() => { statEl.textContent = ''; }, 5000);
       return;
     }
+    console.log('[CID] parseado:', data);
 
     // Tratamento específico para rate limit
     if (data.error === 'rate_limit' || (data.error && /429|rate.?limit|tokens per day/i.test(data.error))) {
@@ -4099,6 +4091,39 @@ async function _sugerirCID(idDiag, idCID){
     _bindFC('Normocárdico','f-fc-norm');
     _bindFC('Taquicárdico','f-fc-taqui');
     _bindFC('Bradicárdico','f-fc-bradi');
+  }
+})();
+
+// Infusões (DVA + Sedoanalgesia) – limpa ml/h ao desselecionar o checkbox
+// Usa event delegation nos containers para cobrir linhas fixas E dinâmicas
+(function _initInfusaoListeners(){
+  function _bindContainer(id){
+    const container = document.getElementById(id);
+    if(!container) return;
+    container.addEventListener('change', e => {
+      const cb = e.target;
+      if(!cb.classList.contains('dc-cb')) return;
+      if(!cb.checked){
+        // Encontra o .dc-v irmão dentro da mesma linha .dva-r
+        const row = cb.closest('.dva-r');
+        if(row){
+          const input = row.querySelector('.dc-v');
+          if(input) input.value = '';
+        }
+      }
+    });
+  }
+  function _init(){
+    _bindContainer('dva-l');
+    _bindContainer('sedo-l');
+    // Containers dinâmicos também recebem delegation ao serem criados no DOM
+    _bindContainer('dva-outros');
+    _bindContainer('sedo-outros');
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', _init);
+  } else {
+    _init();
   }
 })();
 
@@ -4352,7 +4377,6 @@ async function abrirForm(n) {
   hideLoading();
   mostrarTela('t-form');
   _ativarCaixaAlta();
-  _aplicarBloqueioAdmissao();
   window.scrollTo(0,0);
 
   // Busca automática de culturas em background (não bloqueia abertura do form)
@@ -4593,28 +4617,6 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
 // ── URL DO APPS SCRIPT ────────────────────────────────────────────────────────
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec';
 
-// ── WRAPPER CORS-SAFE PARA O APPS SCRIPT ─────────────────────────────────────
-async function _apsFetch(payload, fireAndForget = false) {
-  const body = JSON.stringify(payload);
-  if (fireAndForget) {
-    return fetch(APPS_SCRIPT_URL, {
-      method:  'POST',
-      mode:    'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body
-    });
-  }
-  const resp = await fetch(APPS_SCRIPT_URL, {
-    method:   'POST',
-    redirect: 'follow',
-    headers:  { 'Content-Type': 'text/plain;charset=utf-8' },
-    body
-  });
-  const text = await resp.text();
-  try { return JSON.parse(text); }
-  catch(e) { throw new Error('Resposta inválida do servidor: ' + text.substring(0, 300)); }
-}
-
 // ── GERAR PDF COM jsPDF E ENVIAR BASE64 AO APPS SCRIPT ───────────────────────
 async function gerarPDF(){
   const btn=document.getElementById('btn-pdf'), status=document.getElementById('pdf-status');
@@ -4743,7 +4745,12 @@ async function gerarPDF(){
     const base64  = dataUri.split(',')[1];
 
     status.textContent = 'Enviando para o Drive...'; status.style.color = 'var(--muted)';
-    await _apsFetch({ titulo, arquivoBase64: base64, pasta: pastaNome }, true);
+    await fetch(APPS_SCRIPT_URL, {
+      method:  'POST',
+      mode:    'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: pastaNome })
+    });
     status.textContent = `✓ PDF salvo em "UTI – Evoluções de Enfermagem / ${pastaNome}"!`;
     status.style.color = 'var(--verde)';
     toast('✓ PDF salvo no Google Drive');
@@ -4980,7 +4987,12 @@ async function _gerarPDFdaArea(area, d){
   const dataUri = pdf.output('datauristring');
   const base64  = dataUri.split(',')[1];
 
-  await _apsFetch({ titulo, arquivoBase64: base64, pasta: pastaNome }, true);
+  await fetch(APPS_SCRIPT_URL, {
+    method:  'POST',
+    mode:    'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
+    body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: pastaNome })
+  });
 }
 
 // ── FUNÇÃO DE ALTA (modal com tipo de alta, data, hora) ──────────────────────
@@ -5585,11 +5597,23 @@ function _mostrarSAESalva(ev){
 // disparada em gerarPreview().
 async function _chamarAPISAE(d){
   const resumo = _resumoClinicoParaSAE(d);
-  const data = await _apsFetch({
-    action: 'sae', resumo,
-    paciente: '[anonimizado]', leito: d.leito, turno: d.turno
+  const resp = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'sae',
+      resumo: resumo,
+      // ⚠ ANONIMIZAÇÃO: nome do paciente NÃO é enviado à IA.
+      paciente: '[anonimizado]',
+      leito: d.leito,
+      turno: d.turno
+    })
   });
-  console.log('[SAE] resposta:', JSON.stringify(data).substring(0, 500));
+  const rawText = await resp.text();
+  console.log('[SAE] resposta bruta do Apps Script:', rawText.substring(0, 500));
+  let data;
+  try { data = JSON.parse(rawText); }
+  catch(e) { throw new Error('Resposta do servidor não é JSON válido: ' + rawText.substring(0, 200)); }
   if(data.error) throw new Error(data.error);
   if(data.status === 'erro') throw new Error(data.msg || 'Erro no servidor');
   return data.diagnosticos || [];
@@ -5873,7 +5897,12 @@ async function _buscarCulturasAuto(paciente, leito){
   el.style.display = 'block';
   el.innerHTML = `<span style="font-size:.72rem;color:var(--muted);">🔬 Buscando culturas...</span>`;
   try {
-    const data = await _apsFetch({ action:'culturas', paciente: _normalizarNome(paciente), leito, sheetId:CULTURAS_SHEET_ID });
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'culturas', paciente: _normalizarNome(paciente), leito, sheetId:CULTURAS_SHEET_ID })
+    });
+    const data = JSON.parse(await resp.text());
     const positivos = (data.resultados||[]).filter(r =>
       r.microorg && !/negativ|contaminad|pendente/i.test(r.resultado||'')
     );
@@ -5909,7 +5938,12 @@ async function buscarCulturas(){
   modal.classList.add('show');
 
   try {
-    const data = await _apsFetch({ action:'culturas', paciente: _normalizarNome(pac), leito:leitoAtual, sheetId:CULTURAS_SHEET_ID });
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'culturas', paciente: _normalizarNome(pac), leito:leitoAtual, sheetId:CULTURAS_SHEET_ID })
+    });
+    const data = JSON.parse(await resp.text());
     if(data.error) throw new Error(data.error);
     conteudo.innerHTML = _renderCulturas(data.resultados||[], data.pacienteEncontrado, !data.resultados||!data.resultados.length);
   } catch(err){
@@ -6491,11 +6525,21 @@ async function executarExportacao(){
 
     // 1. Pede a narrativa textual ao Apps Script (Groq) — sem Slides.
     status.textContent = '🤖 Gerando narrativa (Groq)…';
+    const resp = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'narrativa_relatorio',
+        titulo,
+        dados: dadosSanitizados,
+        hospital: 'Hospital dos Pescadores · UTI Adulto'
+      })
+    });
+    const raw = await resp.text();
+    console.log('[Exportar]', raw.substring(0, 300));
     let result;
-    try {
-      result = await _apsFetch({ action: 'narrativa_relatorio', titulo, dados: dadosSanitizados, hospital: 'Hospital dos Pescadores · UTI Adulto' });
-      console.log('[Exportar]', JSON.stringify(result).substring(0, 300));
-    } catch(e){ throw new Error('Resposta inválida do servidor: ' + e.message.substring(0, 120)); }
+    try { result = JSON.parse(raw); }
+    catch(e){ throw new Error('Resposta inválida do servidor: ' + raw.substring(0, 120)); }
 
     // Aceita narrativa mesmo se vier marcada como erro (ex: timeout parcial)
     let narrativa = result.narrativa || '';
@@ -6514,7 +6558,17 @@ async function executarExportacao(){
     if(pdfBase64 && !modoOffline){
       status.textContent = '☁ Enviando ao Drive…';
       try {
-        const up = await _apsFetch({ action: 'salvar_pdf_relatorio', titulo: titulo.replace(/\s+/g,'_'), arquivoBase64: pdfBase64 });
+        const respUp = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'salvar_pdf_relatorio',
+            titulo: titulo.replace(/\s+/g,'_'),
+            arquivoBase64: pdfBase64
+          })
+        });
+        const upRaw = await respUp.text();
+        const up = JSON.parse(upRaw);
         if(up.status === 'ok' && up.url){
           status.innerHTML = `✅ <strong>Relatório gerado!</strong><br>
             <a href="${up.url}" target="_blank" style="color:#1a6b3a;font-weight:700;">🔗 Abrir no Drive</a>
