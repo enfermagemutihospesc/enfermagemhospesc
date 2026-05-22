@@ -1,6 +1,39 @@
 // ── ESTADO ──────────────────────────────────────────────────────────────────
 let turno = '', leitoAtual = 0, usuarioEmail = '';
 let db = null, auth = null, modoOffline = false;
+
+// ── CONTROLE DE ACESSO – CAMPOS DE ADMISSÃO ──────────────────────────────────
+const ADM_ADMIN_EMAIL = 'tercio@hospesc.com.br';
+
+function _aplicarBloqueioAdmissao() {
+  const isAdmin = usuarioEmail.trim().toLowerCase() === ADM_ADMIN_EMAIL.toLowerCase();
+  const btnEditar = document.getElementById('btn-editar-admissao');
+  const campos = document.querySelectorAll('[data-adm-field]');
+
+  // Botão "Editar Admissão": visível só para o admin
+  if (btnEditar) btnEditar.style.display = isAdmin ? '' : 'none';
+
+  campos.forEach(el => {
+    if (isAdmin) {
+      el.removeAttribute('readonly');
+      el.removeAttribute('disabled');
+      el.style.background    = '';
+      el.style.color         = '';
+      el.style.cursor        = '';
+      el.style.pointerEvents = '';
+    } else {
+      if (el.tagName === 'SELECT') {
+        el.setAttribute('disabled', true);
+      } else {
+        el.setAttribute('readonly', true);
+      }
+      el.style.background    = '#f0f4fa';
+      el.style.color         = '#5a6a85';
+      el.style.cursor        = 'not-allowed';
+      el.style.pointerEvents = 'none';
+    }
+  });
+}
 const TOTAL = 10;
 
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
@@ -4319,6 +4352,7 @@ async function abrirForm(n) {
   hideLoading();
   mostrarTela('t-form');
   _ativarCaixaAlta();
+  _aplicarBloqueioAdmissao();
   window.scrollTo(0,0);
 
   // Busca automática de culturas em background (não bloqueia abertura do form)
@@ -4560,20 +4594,13 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec';
 
 // ── WRAPPER CORS-SAFE PARA O APPS SCRIPT ─────────────────────────────────────
-// O Apps Script redireciona o POST para script.googleusercontent.com, que tem
-// os headers CORS corretos. Sem redirect:'follow' alguns browsers bloqueiam.
-// Usar Content-Type:'text/plain' evita o preflight OPTIONS (que o GAS não trata).
-//
-// Modos:
-//   fireAndForget=false (padrão) → espera resposta JSON (culturas, SAE, CID, relatório)
-//   fireAndForget=true           → mode:'no-cors', ignora resposta (PDF, backup)
 async function _apsFetch(payload, fireAndForget = false) {
   const body = JSON.stringify(payload);
   if (fireAndForget) {
     return fetch(APPS_SCRIPT_URL, {
-      method:   'POST',
-      mode:     'no-cors',
-      headers:  { 'Content-Type': 'text/plain' },
+      method:  'POST',
+      mode:    'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
       body
     });
   }
@@ -5559,14 +5586,10 @@ function _mostrarSAESalva(ev){
 async function _chamarAPISAE(d){
   const resumo = _resumoClinicoParaSAE(d);
   const data = await _apsFetch({
-    action: 'sae',
-    resumo: resumo,
-    // ⚠ ANONIMIZAÇÃO: nome do paciente NÃO é enviado à IA.
-    paciente: '[anonimizado]',
-    leito: d.leito,
-    turno: d.turno
+    action: 'sae', resumo,
+    paciente: '[anonimizado]', leito: d.leito, turno: d.turno
   });
-  console.log('[SAE] resposta do Apps Script:', JSON.stringify(data).substring(0, 500));
+  console.log('[SAE] resposta:', JSON.stringify(data).substring(0, 500));
   if(data.error) throw new Error(data.error);
   if(data.status === 'erro') throw new Error(data.msg || 'Erro no servidor');
   return data.diagnosticos || [];
