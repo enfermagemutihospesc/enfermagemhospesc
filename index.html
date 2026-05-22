@@ -187,7 +187,7 @@
   <div class="app-header">
     <div><h2 id="form-titulo">Evolução – Leito 01</h2><small id="form-sub">Hospital dos Pescadores · UTI</small></div>
     <div class="header-right">
-      <button class="btn" style="font-size:.72rem;padding:4px 10px;" onclick="abrirModalAdmissao()">✏ Editar Admissão</button>
+      <button class="btn" id="btn-editar-admissao" style="font-size:.72rem;padding:4px 10px;" onclick="abrirModalAdmissao()">✏ Editar Admissão</button>
       <span class="badge" id="badge-form"></span>
     </div>
   </div>
@@ -195,7 +195,7 @@
 
     <!-- IDENTIFICAÇÃO -->
     <div class="secao">
-      <div class="secao-t">Identificação do Paciente <span class="herd-tag" id="herd-tag" style="display:none;">↻ dados herdados</span><span class="cloud-tag" id="cloud-tag" style="display:none;">☁ nuvem</span><span id="adm-lock-badge" style="display:none;margin-left:8px;font-size:.7rem;background:#b45309;color:white;padding:2px 8px;border-radius:10px;font-weight:600;cursor:default;" title="Campos de admissão bloqueados. Somente o administrador pode editar.">🔒 Admissão bloqueada</span></div>
+      <div class="secao-t">Identificação do Paciente <span class="herd-tag" id="herd-tag" style="display:none;">↻ dados herdados</span><span class="cloud-tag" id="cloud-tag" style="display:none;">☁ nuvem</span></div>
       <div class="secao-c">
         <div class="fl"><label>Paciente</label><input type="text" id="f-pac" placeholder="Nome completo" data-adm-field></div>
         <div class="dc">
