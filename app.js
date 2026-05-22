@@ -3,6 +3,55 @@ let turno = '', leitoAtual = 0, usuarioEmail = '';
 let db = null, auth = null, modoOffline = false;
 const TOTAL = 10;
 
+// ── CONTROLE DE ACESSO ───────────────────────────────────────────────────────
+// E-mails com poder de administrador (gerenciar usuários, editar admissão).
+const ADMIN_EMAILS = ['tercio@hospesc.com.br', 'karoline.c@hospesc.com'];
+
+// Perfil do usuário logado, carregado do Firestore (nome completo + COREN + role).
+let perfilUsuario = null;   // { nome, coren, email, role, ativo, senhaTrocada }
+
+function _isAdmin() {
+  return ADMIN_EMAILS.includes((usuarioEmail||'').trim().toLowerCase());
+}
+
+function _aplicarBloqueioAdmissao() {
+  const isAdmin = _isAdmin();
+  const btnEditar = document.getElementById('btn-editar-admissao');
+  const campos = document.querySelectorAll('[data-adm-field]');
+  if (btnEditar) btnEditar.style.display = isAdmin ? '' : 'none';
+  campos.forEach(el => {
+    if (isAdmin) {
+      el.removeAttribute('readonly');
+      el.removeAttribute('disabled');
+      el.style.background = ''; el.style.color = '';
+      el.style.cursor = ''; el.style.pointerEvents = '';
+    } else {
+      if (el.tagName === 'SELECT') el.setAttribute('disabled', true);
+      else el.setAttribute('readonly', true);
+      el.style.background = '#f0f4fa'; el.style.color = '#5a6a85';
+      el.style.cursor = 'not-allowed'; el.style.pointerEvents = 'none';
+    }
+  });
+}
+
+// Perfil padrão (seed) — usado para popular o Firestore na 1ª execução e como
+// fallback caso o documento do usuário ainda não exista. Chave = e-mail.
+const PERFIS_SEED = {
+  'marcio.l@hospesc.com':   { nome:'MARCIO LEANDRO GONÇALVES DE LIMA',         coren:'521.737' },
+  'hallyson.l@hospesc.com': { nome:'HALLYSON LENO LUCAS DA SILVA',             coren:'478.900' },
+  'karla.d@hospesc.com':    { nome:'KARLA DANIELLE DA SILVA FERNANDES',        coren:'382.513' },
+  'shayane.a@hospesc.com':  { nome:'AUREA SHAYANE BARBOSA DA SILVA',           coren:'511.041' },
+  'andressa.m@hospesc.com': { nome:'ANDRESSSA MÔNICA GOMES FERNANDES',         coren:'289.378' },
+  'larissa.g@hospesc.com':  { nome:'LARISSA GERMANO DA SILVA',                 coren:'640.577' },
+  'marinne.t@hospesc.com':  { nome:'MARINNE TRINDADE DE MIRANDA PERRUCI',      coren:'275.733' },
+  'hitley.f@hospesc.com':   { nome:'HITLEY FRANKLIN XAVIER',                   coren:'342.330' },
+  'amanda.a@hospesc.com':   { nome:'AMANDA ARAUJO CASTRO',                     coren:'427.647' },
+  'alana.m@hospesc.com':    { nome:'ALANA MOREIRA CARNEIRO DE SOUSA',          coren:'531.613' },
+  'andrea.c@hospesc.com':   { nome:'ANDRÉA CARIELO DA SILVA',                  coren:'156.622' },
+  'tercio@hospesc.com.br':  { nome:'TERCIO SANTINO DE OLIVEIRA NETO',          coren:'330.638' },
+  'karoline.c@hospesc.com': { nome:'KAROLINE CAVALCANTE FONSECA DE OLIVEIRA',  coren:'219.060' }
+};
+
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
 
 function initFirebase() {
@@ -32,6 +81,85 @@ function initFirebase() {
     console.error('Erro crítico no Firebase:', e);
     return false;
   }
+}
+
+// ── PERFIS DE USUÁRIO (Firestore: coleção 'usuarios', docId = e-mail) ─────────
+// Carrega o perfil do usuário logado. Se não existir e houver seed, cria.
+async function _carregarPerfil(email) {
+  email = (email||'').trim().toLowerCase();
+  if (!db || !email) return null;
+  try {
+    const ref  = db.collection('usuarios').doc(email);
+    const snap = await ref.get();
+    if (snap.exists) {
+      return { email, ...snap.data() };
+    }
+    // Não existe — cria a partir do seed (migração da 1ª vez)
+    const seed = PERFIS_SEED[email];
+    const novo = {
+      nome: seed ? seed.nome : email.split('@')[0].toUpperCase(),
+      coren: seed ? seed.coren : '',
+      role: ADMIN_EMAILS.includes(email) ? 'admin' : 'enfermeiro',
+      ativo: true,
+      senhaTrocada: false,
+      criadoEm: new Date().toISOString()
+    };
+    await ref.set(novo);
+    return { email, ...novo };
+  } catch (e) {
+    console.warn('[Perfil] erro ao carregar:', e);
+    // Fallback offline: usa seed em memória
+    const seed = PERFIS_SEED[email];
+    return { email, nome: seed ? seed.nome : email.split('@')[0].toUpperCase(),
+             coren: seed ? seed.coren : '', role: ADMIN_EMAILS.includes(email)?'admin':'enfermeiro',
+             ativo: true, senhaTrocada: true };
+  }
+}
+
+// Marca que o usuário já trocou a senha do primeiro acesso
+async function _marcarSenhaTrocada(email) {
+  email = (email||'').trim().toLowerCase();
+  if (!db || !email) return;
+  try { await db.collection('usuarios').doc(email).update({ senhaTrocada: true }); }
+  catch(e){ console.warn('[Perfil] senhaTrocada:', e); }
+}
+
+// Lista todos os perfis (para a tela de admin)
+async function _listarUsuarios() {
+  if (!db) return [];
+  try {
+    const snap = await db.collection('usuarios').orderBy('nome').get();
+    return snap.docs.map(d => ({ email: d.id, ...d.data() }));
+  } catch (e) {
+    // orderBy pode falhar se algum doc não tiver 'nome' — refaz sem ordenar
+    try {
+      const snap = await db.collection('usuarios').get();
+      return snap.docs.map(d => ({ email: d.id, ...d.data() }))
+                      .sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+    } catch(e2){ console.warn('[Usuarios] listar:', e2); return []; }
+  }
+}
+
+// Cache email→{nome,coren} para a assinatura da impressão (acesso síncrono).
+// Populado no login (perfil do usuário) e ao abrir a tela de admin (todos).
+let _cachePerfis = {};
+
+function _registrarCachePerfil(p) {
+  if (p && p.email) _cachePerfis[p.email.toLowerCase()] = { nome: p.nome, coren: p.coren };
+}
+
+// Monta o texto da assinatura: "NOME COMPLETO – COREN-RN 000.000"
+// Aceita o e-mail (autor da evolução) ou um nome já resolvido.
+function _assinaturaTexto(autor) {
+  if (!autor) return 'Enfermeiro(a)';
+  const email = autor.toLowerCase();
+  const perfil = _cachePerfis[email] || PERFIS_SEED[email];
+  if (perfil && perfil.nome) {
+    const coren = perfil.coren ? ` – COREN-RN ${perfil.coren}` : '';
+    return `${perfil.nome}${coren}`;
+  }
+  // autor não é e-mail conhecido — usa como veio (compatível com dados antigos)
+  return autor.includes('@') ? 'Enf. ' + autor.split('@')[0] : autor;
 }
   
 // ── HELPERS GERAIS ────────────────────────────────────────────────────────────
@@ -699,16 +827,7 @@ async function _executarLimpezaCore(){
 async function _backupJsonNoDrive(dados){
   try {
     const titulo = 'backup_uti_' + dados.limite + '_' + Date.now();
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'backup_json',
-        titulo: titulo,
-        json: JSON.stringify(dados)
-      }),
-      mode: 'no-cors'
-    });
+    await _apsFetch({ action: 'backup_json', titulo, json: JSON.stringify(dados) }, true);
     return true;
   } catch(e){
     console.warn('Backup falhou:', e);
@@ -3137,17 +3256,7 @@ async function _ccihCarregarAgregado(forceReload, maxAbas){
     </div>`;
 
   try {
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'culturas_agregado',
-        sheetId: CULTURAS_SHEET_ID,
-        maxAbas: nAbas,
-        maxPDFs: nPDFs
-      })
-    });
-    const data = JSON.parse(await resp.text());
+    const data = await _apsFetch({ action: 'culturas_agregado', sheetId: CULTURAS_SHEET_ID, maxAbas: nAbas, maxPDFs: nPDFs });
     if(data.error) throw new Error(data.error);
 
     data._maxAbas = nAbas;
@@ -3402,16 +3511,16 @@ async function fazerLogin() {
   if (!email || !senha) { errEl.textContent = 'Preencha e-mail e senha.'; return; }
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
-    // SESSION: sessão encerra ao fechar a aba/janela — não persiste entre visitas
+    // SESSION: a sessão encerra ao fechar a aba/janela (não entra sozinho depois)
     await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
     await auth.signInWithEmailAndPassword(email, senha);
-    // Marca que este login foi feito nesta sessão de aba (não herdado do localStorage)
     sessionStorage.setItem('uti_auth_ok', '1');
   } catch(e) {
     const msgs = {
       'auth/user-not-found':'Usuário não encontrado.',
       'auth/wrong-password':'Senha incorreta.',
       'auth/invalid-email':'E-mail inválido.',
+      'auth/invalid-credential':'E-mail ou senha incorretos.',
       'auth/too-many-requests':'Muitas tentativas. Tente mais tarde.',
     };
     errEl.textContent = msgs[e.code] || 'Erro ao entrar. Tente novamente.';
@@ -3421,8 +3530,54 @@ async function fazerLogin() {
 
 function fazerLogout() {
   if (!confirm('Sair do sistema?')) return;
+  sessionStorage.removeItem('uti_auth_ok');
+  perfilUsuario = null;
   if (auth) auth.signOut();
   else { irTelaTurno(false); }
+}
+
+// ── TROCA DE SENHA (primeiro acesso ou voluntária) ───────────────────────────
+async function confirmarTrocaSenha() {
+  const nova  = gf('ts-nova');
+  const conf  = gf('ts-conf');
+  const errEl = document.getElementById('ts-err');
+  const btn   = document.getElementById('btn-trocar-senha');
+  errEl.textContent = '';
+  if (!nova || nova.length < 6) { errEl.textContent = 'A senha deve ter ao menos 6 caracteres.'; return; }
+  if (nova !== conf)            { errEl.textContent = 'As senhas não coincidem.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error('Sessão expirada. Entre novamente.');
+    await user.updatePassword(nova);
+    await _marcarSenhaTrocada(user.email);
+    if (perfilUsuario) perfilUsuario.senhaTrocada = true;
+    toast('✓ Senha alterada com sucesso!');
+    document.getElementById('ts-nova').value = '';
+    document.getElementById('ts-conf').value = '';
+    // Vai para a tela de turno normalmente
+    irTelaTurno(true);
+    mostrarTela('t-turno');
+  } catch(e) {
+    if (e.code === 'auth/requires-recent-login') {
+      errEl.textContent = 'Por segurança, saia e entre novamente para trocar a senha.';
+    } else if (e.code === 'auth/weak-password') {
+      errEl.textContent = 'Senha muito fraca. Use ao menos 6 caracteres.';
+    } else {
+      errEl.textContent = e.message || 'Erro ao trocar senha.';
+    }
+    btn.disabled = false; btn.textContent = 'Salvar nova senha';
+  }
+}
+
+// Permite ao usuário trocar a senha voluntariamente (a partir do menu)
+function abrirTrocaSenhaVoluntaria() {
+  const sub = document.getElementById('ts-sub');
+  if (sub) sub.textContent = 'Defina uma nova senha de acesso.';
+  const btnPular = document.getElementById('btn-pular-troca');
+  if (btnPular) btnPular.style.display = 'inline-block';
+  mostrarTela('t-trocasenha');
 }
 
 function usarOffline() {
@@ -3433,7 +3588,7 @@ function usarOffline() {
 // ── NAVEGAÇÃO ─────────────────────────────────────────────────────────────────
 function mostrarTela(id) {
   document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
-  ['t-login','t-turno','t-config'].forEach(tid => {
+  ['t-login','t-turno','t-config','t-trocasenha','t-usuarios'].forEach(tid => {
     const el = document.getElementById(tid);
     if (el) el.style.display = 'none';
   });
@@ -3442,6 +3597,8 @@ function mostrarTela(id) {
   if (id === 't-login') { el.style.display = 'flex'; }
   else if (id === 't-turno') { el.style.display = 'flex'; }
   else if (id === 't-config') { el.style.display = 'flex'; }
+  else if (id === 't-trocasenha') { el.style.display = 'flex'; }
+  else if (id === 't-usuarios') { el.style.display = 'block'; el.classList.add('ativa'); }
   else { el.classList.add('ativa'); }
 }
 
@@ -3469,8 +3626,25 @@ async function escolherTurno(t) {
   const b = document.getElementById('badge-leitos');
   b.textContent = t==='DIURNO' ? '☀ DIURNO' : '☽ NOTURNO';
   b.className = 'badge '+(t==='DIURNO'?'badge-d':'badge-n');
-  document.getElementById('badge-user').textContent = usuarioEmail ? '👤 '+usuarioEmail.split('@')[0] + ' · Sair' : 'Sair';
+  _atualizarBadgeUser();
   await renderLeitos();
+}
+
+// Atualiza o badge de usuário (nome curto) em todas as telas que o tiverem
+function _atualizarBadgeUser() {
+  const nomeCurto = (() => {
+    if (perfilUsuario && perfilUsuario.nome) {
+      const partes = perfilUsuario.nome.trim().split(/\s+/);
+      return partes[0] + (partes[1] ? ' ' + partes[1] : '');  // dois primeiros nomes
+    }
+    return usuarioEmail ? usuarioEmail.split('@')[0] : '';
+  })();
+  document.querySelectorAll('#badge-user').forEach(el => {
+    el.textContent = nomeCurto ? '👤 ' + nomeCurto + ' · Sair' : 'Sair';
+  });
+  // Botão de gerenciar usuários: só para admin
+  const btnGerenciar = document.getElementById('btn-gerenciar-usuarios');
+  if (btnGerenciar) btnGerenciar.style.display = _isAdmin() ? 'inline-block' : 'none';
 }
 
 // ── LEITOS ────────────────────────────────────────────────────────────────────
@@ -3996,24 +4170,18 @@ async function _sugerirCID(idDiag, idCID){
   statEl.textContent = '⏳ buscando...';
   statEl.style.color = '#856404';
   try {
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'cid', diagnostico: diag })
-    });
-    const raw = await resp.text();
-    console.log('[CID] diag="'+diag+'" → raw resposta:', raw);
     let data;
-    try { data = JSON.parse(raw); }
-    catch(e){
-      console.warn('[CID] resposta não é JSON:', raw);
+    try {
+      data = await _apsFetch({ action: 'cid', diagnostico: diag });
+      console.log('[CID] diag="'+diag+'" → parseado:', data);
+    } catch(e){
+      console.warn('[CID] resposta inválida:', e.message);
       statEl.textContent = '⚠ resposta inválida';
       statEl.style.color = '#dc3545';
-      statEl.title = raw.substring(0, 200);
+      statEl.title = e.message.substring(0, 200);
       setTimeout(() => { statEl.textContent = ''; }, 5000);
       return;
     }
-    console.log('[CID] parseado:', data);
 
     // Tratamento específico para rate limit
     if (data.error === 'rate_limit' || (data.error && /429|rate.?limit|tokens per day/i.test(data.error))) {
@@ -4096,6 +4264,28 @@ async function _sugerirCID(idDiag, idCID){
     _bindFC('Taquicárdico','f-fc-taqui');
     _bindFC('Bradicárdico','f-fc-bradi');
   }
+})();
+
+// Infusões (DVA + Sedoanalgesia) – limpa ml/h ao desselecionar o checkbox
+(function _initInfusaoListeners(){
+  function _bindContainer(id){
+    const container = document.getElementById(id);
+    if(!container) return;
+    container.addEventListener('change', e => {
+      const cb = e.target;
+      if(!cb.classList || !cb.classList.contains('dc-cb')) return;
+      if(!cb.checked){
+        const row = cb.closest('.dva-r');
+        if(row){ const input = row.querySelector('.dc-v'); if(input) input.value = ''; }
+      }
+    });
+  }
+  function _init(){
+    _bindContainer('dva-l'); _bindContainer('sedo-l');
+    _bindContainer('dva-outros'); _bindContainer('sedo-outros');
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _init);
+  else _init();
 })();
 
 // ── ELIMINAÇÕES INTESTINAIS – rastreamento de dias sem evacuar ────────────────
@@ -4348,6 +4538,7 @@ async function abrirForm(n) {
   hideLoading();
   mostrarTela('t-form');
   _ativarCaixaAlta();
+  _aplicarBloqueioAdmissao();
   window.scrollTo(0,0);
 
   // Busca automática de culturas em background (não bloqueia abertura do form)
@@ -4580,13 +4771,35 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
   }
   h+=st('Assinatura / Carimbo');
   // Padding-top da assinatura também é menor quando há SAE
-  h+=`<div style="display:flex;justify-content:center;padding:${temSAE?'1rem':'2.5rem'} 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:300px;border-top:1px solid #000;padding-top:6px;">Enfermeiro${d.autor?' – '+d.autor:''}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
+  h+=`<div style="display:flex;justify-content:center;padding:${temSAE?'1rem':'2.5rem'} 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:320px;border-top:1px solid #000;padding-top:6px;">${_assinaturaTexto(d.autor)}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
   h+=`</div><div class="pfoot"><span>Turno: ${d.turno}</span><span>Leito ${pad(d.leito)} – UTI Geral</span><span>${fmtD(d.data)}</span></div>`;
   document.getElementById('preview-area').innerHTML = h;
 }
 
 // ── URL DO APPS SCRIPT ────────────────────────────────────────────────────────
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec';
+
+// ── WRAPPER CORS-SAFE PARA O APPS SCRIPT ─────────────────────────────────────
+async function _apsFetch(payload, fireAndForget = false) {
+  const body = JSON.stringify(payload);
+  if (fireAndForget) {
+    return fetch(APPS_SCRIPT_URL, {
+      method:  'POST',
+      mode:    'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body
+    });
+  }
+  const resp = await fetch(APPS_SCRIPT_URL, {
+    method:   'POST',
+    redirect: 'follow',
+    headers:  { 'Content-Type': 'text/plain;charset=utf-8' },
+    body
+  });
+  const text = await resp.text();
+  try { return JSON.parse(text); }
+  catch(e) { throw new Error('Resposta inválida do servidor: ' + text.substring(0, 300)); }
+}
 
 // ── GERAR PDF COM jsPDF E ENVIAR BASE64 AO APPS SCRIPT ───────────────────────
 async function gerarPDF(){
@@ -4716,12 +4929,7 @@ async function gerarPDF(){
     const base64  = dataUri.split(',')[1];
 
     status.textContent = 'Enviando para o Drive...'; status.style.color = 'var(--muted)';
-    await fetch(APPS_SCRIPT_URL, {
-      method:  'POST',
-      mode:    'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: pastaNome })
-    });
+    await _apsFetch({ titulo, arquivoBase64: base64, pasta: pastaNome }, true);
     status.textContent = `✓ PDF salvo em "UTI – Evoluções de Enfermagem / ${pastaNome}"!`;
     status.style.color = 'var(--verde)';
     toast('✓ PDF salvo no Google Drive');
@@ -4958,12 +5166,7 @@ async function _gerarPDFdaArea(area, d){
   const dataUri = pdf.output('datauristring');
   const base64  = dataUri.split(',')[1];
 
-  await fetch(APPS_SCRIPT_URL, {
-    method:  'POST',
-    mode:    'no-cors',
-    headers: { 'Content-Type': 'text/plain' },
-    body:    JSON.stringify({ titulo, arquivoBase64: base64, pasta: pastaNome })
-  });
+  await _apsFetch({ titulo, arquivoBase64: base64, pasta: pastaNome }, true);
 }
 
 // ── FUNÇÃO DE ALTA (modal com tipo de alta, data, hora) ──────────────────────
@@ -5305,10 +5508,131 @@ function toast(msg, err=false) {
   setTimeout(()=>t.classList.remove('show'), 3000);
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// GERENCIAMENTO DE USUÁRIOS (apenas admin: Tercio e Karoline)
+// ════════════════════════════════════════════════════════════════════════════
+async function abrirGerenciarUsuarios() {
+  if (!_isAdmin()) { toast('Acesso restrito ao administrador.', true); return; }
+  mostrarTela('t-usuarios');
+  await renderListaUsuarios();
+}
+
+async function renderListaUsuarios() {
+  const wrap = document.getElementById('usuarios-lista');
+  if (!wrap) return;
+  wrap.innerHTML = '<p style="color:var(--muted);padding:1rem;">Carregando...</p>';
+
+  const usuarios = await _listarUsuarios();
+  // Atualiza cache de perfis para a assinatura
+  usuarios.forEach(_registrarCachePerfil);
+
+  if (!usuarios.length) {
+    wrap.innerHTML = '<p style="color:var(--muted);padding:1rem;">Nenhum usuário cadastrado ainda.</p>';
+    return;
+  }
+
+  wrap.innerHTML = usuarios.map(u => {
+    const isAdm = ADMIN_EMAILS.includes(u.email);
+    const ativo = u.ativo !== false;
+    const badge = isAdm ? '<span style="background:#1a6b3a;color:white;font-size:.6rem;padding:1px 6px;border-radius:8px;margin-left:6px;">ADMIN</span>' : '';
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--borda);border-radius:8px;margin-bottom:6px;background:${ativo?'white':'#f3f4f6'};">
+      <div style="min-width:0;flex:1;">
+        <div style="font-weight:600;font-size:.82rem;color:var(--azul);">${u.nome||'(sem nome)'}${badge}</div>
+        <div style="font-size:.72rem;color:var(--muted);">${u.email}${u.coren?' · COREN '+u.coren:''}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-sm" style="background:${ativo?'#e0e7ff':'#fef3c7'};color:#374151;font-size:.68rem;padding:4px 8px;"
+                onclick="toggleAtivoUsuario('${u.email}', ${!ativo})" ${isAdm?'disabled title="Admin sempre ativo"':''}>
+          ${ativo?'Ativo':'Inativo'}
+        </button>
+        ${isAdm ? '' : `<button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;font-size:.68rem;padding:4px 8px;"
+                onclick="removerUsuarioPerfil('${u.email}')" title="Remover acesso">🗑</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Ativar/desativar acesso (bloqueio imediato no login)
+async function toggleAtivoUsuario(email, novoAtivo) {
+  email = (email||'').toLowerCase();
+  if (ADMIN_EMAILS.includes(email)) { toast('Admin não pode ser desativado.', true); return; }
+  try {
+    await db.collection('usuarios').doc(email).update({ ativo: novoAtivo });
+    toast(novoAtivo ? '✓ Acesso reativado' : '✓ Acesso desativado');
+    await renderListaUsuarios();
+  } catch(e) { toast('Erro: ' + e.message, true); }
+}
+
+// Remover usuário: exclui a conta de Auth (via Service Account no backend) + perfil Firestore
+async function removerUsuarioPerfil(email) {
+  email = (email||'').toLowerCase();
+  if (ADMIN_EMAILS.includes(email)) { toast('Admin não pode ser removido.', true); return; }
+  if (!confirm(`Excluir definitivamente o usuário ${email}?\n\nA conta de login e o perfil serão removidos. Esta ação não pode ser desfeita.`)) return;
+  try {
+    // 1. Exclui a conta de autenticação no Firebase (backend com Service Account)
+    const r = await _apsFetch({ action: 'excluir_usuario', email });
+    if (r.status !== 'ok' && !r.naoExiste) {
+      throw new Error(r.msg || 'Falha ao excluir conta de login.');
+    }
+    // 2. Remove o perfil do Firestore
+    await db.collection('usuarios').doc(email).delete();
+    delete _cachePerfis[email];
+    toast('✓ Usuário excluído definitivamente');
+    await renderListaUsuarios();
+  } catch(e) {
+    toast('Erro: ' + e.message, true);
+  }
+}
+
+// Adicionar novo usuário (cria conta via Apps Script + perfil no Firestore)
+async function adicionarUsuario() {
+  const nome  = gf('add-nome').trim();
+  const email = gf('add-email').trim().toLowerCase();
+  const coren = gf('add-coren').trim();
+  const senha = gf('add-senha').trim();
+  const errEl = document.getElementById('add-err');
+  const btn   = document.getElementById('btn-add-user');
+  errEl.textContent = '';
+
+  if (!nome || !email)            { errEl.textContent = 'Preencha nome e e-mail.'; return; }
+  if (!/\S+@\S+\.\S+/.test(email)){ errEl.textContent = 'E-mail inválido.'; return; }
+  if (!senha || senha.length < 6) { errEl.textContent = 'Senha provisória precisa de ao menos 6 caracteres.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Criando...';
+  try {
+    // 1. Cria a conta de autenticação via Apps Script (não desloga o admin)
+    const r = await _apsFetch({ action: 'criar_usuario', email, senha });
+    if (r.status !== 'ok' && !r.jaExiste) {
+      throw new Error(r.msg || 'Falha ao criar conta de login.');
+    }
+    // 2. Grava o perfil no Firestore (nome/COREN/role/ativo/senhaTrocada=false)
+    await db.collection('usuarios').doc(email).set({
+      nome: nome.toUpperCase(),
+      coren,
+      role: 'enfermeiro',
+      ativo: true,
+      senhaTrocada: false,   // força troca no 1º acesso
+      criadoEm: new Date().toISOString(),
+      criadoPor: usuarioEmail
+    });
+    _registrarCachePerfil({ email, nome: nome.toUpperCase(), coren });
+    toast(r.jaExiste ? '✓ Perfil atualizado (conta já existia)' : '✓ Usuário criado com sucesso!');
+    document.getElementById('add-nome').value  = '';
+    document.getElementById('add-email').value = '';
+    document.getElementById('add-coren').value = '';
+    document.getElementById('add-senha').value = '';
+    await renderListaUsuarios();
+  } catch(e) {
+    errEl.textContent = e.message || 'Erro ao criar usuário.';
+  } finally {
+    btn.disabled = false; btn.textContent = '+ Criar usuário';
+  }
+}
+
 // ── INICIALIZAÇÃO ──────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
   const firebaseOk = initFirebase();
-
   const telaConfig = document.getElementById('t-config');
   if (telaConfig) telaConfig.style.display = 'none';
 
@@ -5322,30 +5646,50 @@ window.addEventListener('load', () => {
 
   auth.onAuthStateChanged(async user => {
     if (user) {
-      // Garante que a persistência desta sessão é SESSION (não LOCAL).
-      // Usuários que já tinham sessão LOCAL salva de versões anteriores
-      // são desconectados e redirecionados para o login.
-      try {
-        await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-      } catch(_) {}
-
-      // Se o token veio do localStorage (persistência LOCAL antiga),
-      // o Firebase não diferencia — então verificamos se esta visita
-      // já passou pelo login da sessão atual via sessionStorage.
+      // Garante persistência SESSION e bloqueia sessões LOCAL antigas
+      try { await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION); } catch(_) {}
       if (!sessionStorage.getItem('uti_auth_ok')) {
-        // Sessão antiga (localStorage): desconecta e pede login
         await auth.signOut();
         mostrarTela('t-login');
         return;
       }
 
       usuarioEmail = user.email;
+
+      // Carrega o perfil (nome/COREN/role/ativo/senhaTrocada) do Firestore
+      showLoading('Carregando perfil...');
+      perfilUsuario = await _carregarPerfil(user.email);
+      _registrarCachePerfil(perfilUsuario);
+      hideLoading();
+
+      // Acesso revogado?
+      if (perfilUsuario && perfilUsuario.ativo === false) {
+        toast('Seu acesso foi desativado. Contate o administrador.', true);
+        sessionStorage.removeItem('uti_auth_ok');
+        await auth.signOut();
+        mostrarTela('t-login');
+        return;
+      }
+
+      // Atualiza saudação no cabeçalho
+      _atualizarBadgeUser();
+
+      // Primeiro acesso: força troca de senha
+      if (perfilUsuario && perfilUsuario.senhaTrocada === false) {
+        const sub = document.getElementById('ts-sub');
+        if (sub) sub.textContent = 'Este é seu primeiro acesso. Defina uma senha pessoal para continuar.';
+        const btnPular = document.getElementById('btn-pular-troca');
+        if (btnPular) btnPular.style.display = 'none';   // não pode pular no 1º acesso
+        mostrarTela('t-trocasenha');
+        return;
+      }
+
       irTelaTurno(true);
       mostrarTela('t-turno');
-      // Dispara limpeza automática (1x ao dia, em background)
       executarLimpezaSeNecessario().catch(e => console.warn('Limpeza:', e));
     } else {
       sessionStorage.removeItem('uti_auth_ok');
+      perfilUsuario = null;
       mostrarTela('t-login');
     }
   });
@@ -5586,23 +5930,8 @@ function _mostrarSAESalva(ev){
 // disparada em gerarPreview().
 async function _chamarAPISAE(d){
   const resumo = _resumoClinicoParaSAE(d);
-  const resp = await fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action: 'sae',
-      resumo: resumo,
-      // ⚠ ANONIMIZAÇÃO: nome do paciente NÃO é enviado à IA.
-      paciente: '[anonimizado]',
-      leito: d.leito,
-      turno: d.turno
-    })
-  });
-  const rawText = await resp.text();
-  console.log('[SAE] resposta bruta do Apps Script:', rawText.substring(0, 500));
-  let data;
-  try { data = JSON.parse(rawText); }
-  catch(e) { throw new Error('Resposta do servidor não é JSON válido: ' + rawText.substring(0, 200)); }
+  const data = await _apsFetch({ action: 'sae', resumo, paciente: '[anonimizado]', leito: d.leito, turno: d.turno });
+  console.log('[SAE] resposta:', JSON.stringify(data).substring(0, 500));
   if(data.error) throw new Error(data.error);
   if(data.status === 'erro') throw new Error(data.msg || 'Erro no servidor');
   return data.diagnosticos || [];
@@ -5886,12 +6215,7 @@ async function _buscarCulturasAuto(paciente, leito){
   el.style.display = 'block';
   el.innerHTML = `<span style="font-size:.72rem;color:var(--muted);">🔬 Buscando culturas...</span>`;
   try {
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action:'culturas', paciente: _normalizarNome(paciente), leito, sheetId:CULTURAS_SHEET_ID })
-    });
-    const data = JSON.parse(await resp.text());
+    const data = await _apsFetch({ action:'culturas', paciente: _normalizarNome(paciente), leito, sheetId:CULTURAS_SHEET_ID });
     const positivos = (data.resultados||[]).filter(r =>
       r.microorg && !/negativ|contaminad|pendente/i.test(r.resultado||'')
     );
@@ -5927,12 +6251,7 @@ async function buscarCulturas(){
   modal.classList.add('show');
 
   try {
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action:'culturas', paciente: _normalizarNome(pac), leito:leitoAtual, sheetId:CULTURAS_SHEET_ID })
-    });
-    const data = JSON.parse(await resp.text());
+    const data = await _apsFetch({ action:'culturas', paciente: _normalizarNome(pac), leito:leitoAtual, sheetId:CULTURAS_SHEET_ID });
     if(data.error) throw new Error(data.error);
     conteudo.innerHTML = _renderCulturas(data.resultados||[], data.pacienteEncontrado, !data.resultados||!data.resultados.length);
   } catch(err){
@@ -6514,21 +6833,11 @@ async function executarExportacao(){
 
     // 1. Pede a narrativa textual ao Apps Script (Groq) — sem Slides.
     status.textContent = '🤖 Gerando narrativa (Groq)…';
-    const resp = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'narrativa_relatorio',
-        titulo,
-        dados: dadosSanitizados,
-        hospital: 'Hospital dos Pescadores · UTI Adulto'
-      })
-    });
-    const raw = await resp.text();
-    console.log('[Exportar]', raw.substring(0, 300));
     let result;
-    try { result = JSON.parse(raw); }
-    catch(e){ throw new Error('Resposta inválida do servidor: ' + raw.substring(0, 120)); }
+    try {
+      result = await _apsFetch({ action: 'narrativa_relatorio', titulo, dados: dadosSanitizados, hospital: 'Hospital dos Pescadores · UTI Adulto' });
+      console.log('[Exportar]', JSON.stringify(result).substring(0, 300));
+    } catch(e){ throw new Error('Resposta inválida do servidor: ' + e.message.substring(0, 120)); }
 
     // Aceita narrativa mesmo se vier marcada como erro (ex: timeout parcial)
     let narrativa = result.narrativa || '';
@@ -6547,17 +6856,7 @@ async function executarExportacao(){
     if(pdfBase64 && !modoOffline){
       status.textContent = '☁ Enviando ao Drive…';
       try {
-        const respUp = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'salvar_pdf_relatorio',
-            titulo: titulo.replace(/\s+/g,'_'),
-            arquivoBase64: pdfBase64
-          })
-        });
-        const upRaw = await respUp.text();
-        const up = JSON.parse(upRaw);
+        const up = await _apsFetch({ action: 'salvar_pdf_relatorio', titulo: titulo.replace(/\s+/g,'_'), arquivoBase64: pdfBase64 });
         if(up.status === 'ok' && up.url){
           status.innerHTML = `✅ <strong>Relatório gerado!</strong><br>
             <a href="${up.url}" target="_blank" style="color:#1a6b3a;font-weight:700;">🔗 Abrir no Drive</a>
