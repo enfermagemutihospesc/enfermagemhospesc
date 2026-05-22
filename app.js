@@ -1,6 +1,46 @@
 // ── ESTADO ──────────────────────────────────────────────────────────────────
 let turno = '', leitoAtual = 0, usuarioEmail = '';
 let db = null, auth = null, modoOffline = false;
+
+// ── CONTROLE DE ACESSO – CAMPOS DE ADMISSÃO ──────────────────────────────────
+// Apenas este e-mail pode editar os campos marcados com data-adm-field.
+// Todos os outros usuários veem os campos como readonly (fundo cinza + cadeado).
+const ADM_ADMIN_EMAIL = 'tercio@hospesc.com.br';
+
+function _aplicarBloqueioAdmissao() {
+  const isAdmin = usuarioEmail.trim().toLowerCase() === ADM_ADMIN_EMAIL.toLowerCase();
+  const badge   = document.getElementById('adm-lock-badge');
+  const campos  = document.querySelectorAll('[data-adm-field]');
+
+  campos.forEach(el => {
+    if (isAdmin) {
+      // Administrador: campos editáveis normalmente
+      el.removeAttribute('readonly');
+      el.removeAttribute('disabled');
+      el.style.background  = '';
+      el.style.color       = '';
+      el.style.cursor      = '';
+      el.style.pointerEvents = '';
+    } else {
+      // Outros usuários: readonly visual + bloqueio funcional
+      if (el.tagName === 'SELECT') {
+        // <select> não suporta readonly — usa disabled mas garante que o valor
+        // continue sendo lido por gf() via value (não é enviado em form nativo)
+        el.setAttribute('disabled', true);
+      } else {
+        el.setAttribute('readonly', true);
+      }
+      el.style.background    = '#f0f4fa';
+      el.style.color         = '#5a6a85';
+      el.style.cursor        = 'not-allowed';
+      el.style.pointerEvents = 'none';
+    }
+  });
+
+  // Cadeado no cabeçalho da seção
+  if (badge) badge.style.display = isAdmin ? 'none' : 'inline';
+}
+
 const TOTAL = 10;
 
 // ── FIREBASE INIT ────────────────────────────────────────────────────────────
@@ -4344,6 +4384,7 @@ async function abrirForm(n) {
   hideLoading();
   mostrarTela('t-form');
   _ativarCaixaAlta();
+  _aplicarBloqueioAdmissao();
   window.scrollTo(0,0);
 
   // Busca automática de culturas em background (não bloqueia abertura do form)
