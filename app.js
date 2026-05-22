@@ -84,35 +84,48 @@ function initFirebase() {
 }
 
 // ── PERFIS DE USUÁRIO (Firestore: coleção 'usuarios', docId = e-mail) ─────────
-// Carrega o perfil do usuário logado. Se não existir e houver seed, cria.
+// Carrega o perfil do usuário logado. Nunca trava o login: se o Firestore
+// demorar ou falhar, cai no seed em memória e segue normalmente.
+function _perfilSeed(email) {
+  const seed = PERFIS_SEED[email];
+  return {
+    email,
+    nome: seed ? seed.nome : email.split('@')[0].toUpperCase(),
+    coren: seed ? seed.coren : '',
+    role: ADMIN_EMAILS.includes(email) ? 'admin' : 'enfermeiro',
+    ativo: true,
+    senhaTrocada: true   // seed nunca força troca (evita travar usuários já existentes)
+  };
+}
+
 async function _carregarPerfil(email) {
   email = (email||'').trim().toLowerCase();
-  if (!db || !email) return null;
+  if (!email) return null;
+  if (!db) return _perfilSeed(email);
+
+  // Timeout de segurança: se o Firestore não responder em 8s, usa o seed
+  const comTimeout = (promessa, ms) => Promise.race([
+    promessa,
+    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
+  ]);
+
   try {
     const ref  = db.collection('usuarios').doc(email);
-    const snap = await ref.get();
+    const snap = await comTimeout(ref.get(), 8000);
     if (snap.exists) {
       return { email, ...snap.data() };
     }
-    // Não existe — cria a partir do seed (migração da 1ª vez)
-    const seed = PERFIS_SEED[email];
-    const novo = {
-      nome: seed ? seed.nome : email.split('@')[0].toUpperCase(),
-      coren: seed ? seed.coren : '',
-      role: ADMIN_EMAILS.includes(email) ? 'admin' : 'enfermeiro',
-      ativo: true,
-      senhaTrocada: false,
-      criadoEm: new Date().toISOString()
-    };
-    await ref.set(novo);
-    return { email, ...novo };
+    // Documento não existe: cria em BACKGROUND (não bloqueia o login).
+    // Se a regra do Firestore negar escrita, o login segue mesmo assim.
+    const novo = _perfilSeed(email);
+    ref.set({
+      nome: novo.nome, coren: novo.coren, role: novo.role,
+      ativo: true, senhaTrocada: true, criadoEm: new Date().toISOString()
+    }).catch(e => console.warn('[Perfil] não foi possível gravar seed:', e && e.code));
+    return novo;
   } catch (e) {
-    console.warn('[Perfil] erro ao carregar:', e);
-    // Fallback offline: usa seed em memória
-    const seed = PERFIS_SEED[email];
-    return { email, nome: seed ? seed.nome : email.split('@')[0].toUpperCase(),
-             coren: seed ? seed.coren : '', role: ADMIN_EMAILS.includes(email)?'admin':'enfermeiro',
-             ativo: true, senhaTrocada: true };
+    console.warn('[Perfil] leitura falhou, usando seed:', e && (e.code || e.message));
+    return _perfilSeed(email);
   }
 }
 
@@ -5646,47 +5659,56 @@ window.addEventListener('load', () => {
 
   auth.onAuthStateChanged(async user => {
     if (user) {
-      // Garante persistência SESSION e bloqueia sessões LOCAL antigas
-      try { await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION); } catch(_) {}
-      if (!sessionStorage.getItem('uti_auth_ok')) {
-        await auth.signOut();
-        mostrarTela('t-login');
-        return;
+      try {
+        // Garante persistência SESSION e bloqueia sessões LOCAL antigas
+        try { await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION); } catch(_) {}
+        if (!sessionStorage.getItem('uti_auth_ok')) {
+          await auth.signOut();
+          mostrarTela('t-login');
+          return;
+        }
+
+        usuarioEmail = user.email;
+
+        // Carrega o perfil (nunca trava: tem timeout + fallback de seed)
+        showLoading('Carregando perfil...');
+        perfilUsuario = await _carregarPerfil(user.email);
+        _registrarCachePerfil(perfilUsuario);
+        hideLoading();
+
+        // Acesso revogado?
+        if (perfilUsuario && perfilUsuario.ativo === false) {
+          toast('Seu acesso foi desativado. Contate o administrador.', true);
+          sessionStorage.removeItem('uti_auth_ok');
+          await auth.signOut();
+          mostrarTela('t-login');
+          return;
+        }
+
+        _atualizarBadgeUser();
+
+        // Primeiro acesso: força troca de senha
+        if (perfilUsuario && perfilUsuario.senhaTrocada === false) {
+          const sub = document.getElementById('ts-sub');
+          if (sub) sub.textContent = 'Este é seu primeiro acesso. Defina uma senha pessoal para continuar.';
+          const btnPular = document.getElementById('btn-pular-troca');
+          if (btnPular) btnPular.style.display = 'none';
+          mostrarTela('t-trocasenha');
+          return;
+        }
+
+        irTelaTurno(true);
+        mostrarTela('t-turno');
+        executarLimpezaSeNecessario().catch(e => console.warn('Limpeza:', e));
+      } catch (e) {
+        // Qualquer falha inesperada: não trava o usuário no loading
+        console.error('[Auth] erro pós-login:', e);
+        hideLoading();
+        if (!perfilUsuario) perfilUsuario = _perfilSeed((user.email||'').toLowerCase());
+        _atualizarBadgeUser();
+        irTelaTurno(true);
+        mostrarTela('t-turno');
       }
-
-      usuarioEmail = user.email;
-
-      // Carrega o perfil (nome/COREN/role/ativo/senhaTrocada) do Firestore
-      showLoading('Carregando perfil...');
-      perfilUsuario = await _carregarPerfil(user.email);
-      _registrarCachePerfil(perfilUsuario);
-      hideLoading();
-
-      // Acesso revogado?
-      if (perfilUsuario && perfilUsuario.ativo === false) {
-        toast('Seu acesso foi desativado. Contate o administrador.', true);
-        sessionStorage.removeItem('uti_auth_ok');
-        await auth.signOut();
-        mostrarTela('t-login');
-        return;
-      }
-
-      // Atualiza saudação no cabeçalho
-      _atualizarBadgeUser();
-
-      // Primeiro acesso: força troca de senha
-      if (perfilUsuario && perfilUsuario.senhaTrocada === false) {
-        const sub = document.getElementById('ts-sub');
-        if (sub) sub.textContent = 'Este é seu primeiro acesso. Defina uma senha pessoal para continuar.';
-        const btnPular = document.getElementById('btn-pular-troca');
-        if (btnPular) btnPular.style.display = 'none';   // não pode pular no 1º acesso
-        mostrarTela('t-trocasenha');
-        return;
-      }
-
-      irTelaTurno(true);
-      mostrarTela('t-turno');
-      executarLimpezaSeNecessario().catch(e => console.warn('Limpeza:', e));
     } else {
       sessionStorage.removeItem('uti_auth_ok');
       perfilUsuario = null;
