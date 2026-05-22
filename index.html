@@ -195,29 +195,29 @@
 
     <!-- IDENTIFICAÇÃO -->
     <div class="secao">
-      <div class="secao-t">Identificação do Paciente <span class="herd-tag" id="herd-tag" style="display:none;">↻ dados herdados</span><span class="cloud-tag" id="cloud-tag" style="display:none;">☁ nuvem</span></div>
+      <div class="secao-t">Identificação do Paciente <span class="herd-tag" id="herd-tag" style="display:none;">↻ dados herdados</span><span class="cloud-tag" id="cloud-tag" style="display:none;">☁ nuvem</span><span id="adm-lock-badge" style="display:none;margin-left:8px;font-size:.7rem;background:#b45309;color:white;padding:2px 8px;border-radius:10px;font-weight:600;cursor:default;" title="Campos de admissão bloqueados. Somente o administrador pode editar.">🔒 Admissão bloqueada</span></div>
       <div class="secao-c">
-        <div class="fl"><label>Paciente</label><input type="text" id="f-pac" placeholder="Nome completo"></div>
+        <div class="fl"><label>Paciente</label><input type="text" id="f-pac" placeholder="Nome completo" data-adm-field></div>
         <div class="dc">
           <div class="fl"><label>Data</label><input type="date" id="f-data"></div>
           <div class="fl"><label>Leito</label><input type="text" id="f-leito" readonly style="background:#eee;"></div>
         </div>
         <div class="dc">
-          <div class="fl"><label>DN</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="f-dn" onchange="_calcIdadeDisplay('f-dn','f-idade')"><span id="f-idade" style="font-size:.78rem;font-weight:700;color:var(--azul);white-space:nowrap;min-width:48px;"></span></div></div>
-          <div class="fl"><label>Adm. UTI</label><input type="date" id="f-adm"></div>
+          <div class="fl"><label>DN</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="f-dn" onchange="_calcIdadeDisplay('f-dn','f-idade')" data-adm-field><span id="f-idade" style="font-size:.78rem;font-weight:700;color:var(--azul);white-space:nowrap;min-width:48px;"></span></div></div>
+          <div class="fl"><label>Adm. UTI</label><input type="date" id="f-adm" data-adm-field></div>
         </div>
         <div class="fl"><label>Diagnóstico</label>
           <div style="display:flex;gap:6px;align-items:flex-start;">
-            <input type="text" id="f-diag" placeholder="Diagnóstico principal" style="flex:1;" onblur="_sugerirCID(&apos;f-diag&apos;,&apos;f-cid&apos;)">
+            <input type="text" id="f-diag" placeholder="Diagnóstico principal" style="flex:1;" onblur="_sugerirCID(&apos;f-diag&apos;,&apos;f-cid&apos;)" data-adm-field>
             <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;min-width:110px;">
-              <input type="text" id="f-cid" placeholder="CID-10" style="width:100%;font-family:monospace;font-weight:600;" maxlength="8">
+              <input type="text" id="f-cid" placeholder="CID-10" style="width:100%;font-family:monospace;font-weight:600;" maxlength="8" data-adm-field>
               <span id="f-cid-status" style="font-size:.6rem;color:var(--muted);text-align:center;min-height:12px;"></span>
             </div>
           </div>
         </div>
-        <div class="fl"><label>Comorbidades</label><input type="text" id="f-comor" placeholder="Ex: DM, HAS, tabagista..."></div>
-        <div class="dc"><div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp"></div><div class="fl"><label>Sexo</label><select id="f-sexo"><option value="">–</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div></div>
-<div class="fl"><label>Alergias</label><input type="text" id="f-alergia" placeholder="Ex: Dipirona... ou NKDA"></div>
+        <div class="fl"><label>Comorbidades</label><input type="text" id="f-comor" placeholder="Ex: DM, HAS, tabagista..." data-adm-field></div>
+        <div class="dc"><div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp" data-adm-field></div><div class="fl"><label>Sexo</label><select id="f-sexo" data-adm-field><option value="">–</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div></div>
+<div class="fl"><label>Alergias</label><input type="text" id="f-alergia" placeholder="Ex: Dipirona... ou NKDA" data-adm-field></div>
       </div>
     </div>
 
