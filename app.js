@@ -75,7 +75,7 @@ function initFirebase() {
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    console.log('Firebase conectado! [build login-fix v4]');
+    console.log('Firebase conectado! [build alta-fix v6]');
     return true;
   } catch (e) {
     console.error('Erro crítico no Firebase:', e);
@@ -4423,9 +4423,20 @@ async function getAnterior(n) {
   const outro = turno==='DIURNO'?'NOTURNO':'DIURNO';
   const dtT = dataDoTurno();
   const dtAntes = dtT === hoje() ? ontem() : hoje();
-  return (await dbGet('uti_ev_'+n+'_'+outro+'_'+dtT))
-      || (await dbGet('uti_ev_'+n+'_'+turno+'_'+dtAntes))
-      || (await dbGet('uti_ev_'+n+'_'+outro+'_'+dtAntes));
+  const cand = (await dbGet('uti_ev_'+n+'_'+outro+'_'+dtT))
+            || (await dbGet('uti_ev_'+n+'_'+turno+'_'+dtAntes))
+            || (await dbGet('uti_ev_'+n+'_'+outro+'_'+dtAntes));
+  if(!cand) return null;
+  // Proteção contra reuso de leito: só herda se a evolução anterior for do
+  // MESMO paciente atualmente admitido no leito. Evita puxar dados (culturas,
+  // dispositivos, etc.) de um paciente que já recebeu alta.
+  try {
+    const ld = await leitosData();
+    const pacLeito = ((ld[n]||{}).pac || '').trim().toUpperCase();
+    const pacEv    = (cand.pac || '').trim().toUpperCase();
+    if(pacLeito && pacEv && pacLeito !== pacEv) return null;
+  } catch(_) {}
+  return cand;
 }
 
 async function abrirForm(n) {
@@ -4436,7 +4447,14 @@ async function abrirForm(n) {
   const pac = d[n];
   limparForm();
   const anterior = await getAnterior(n);
-  const evHoje = await dbGet('uti_ev_'+n+'_'+turno+'_'+dataDoTurno());
+  let evHoje = await dbGet('uti_ev_'+n+'_'+turno+'_'+dataDoTurno());
+  // Proteção: se a evolução de hoje for de outro paciente (reuso de leito no
+  // mesmo dia), não a usa como fonte de herança.
+  if(evHoje){
+    const pacLeito = (pac.pac||'').trim().toUpperCase();
+    const pacEv    = (evHoje.pac||'').trim().toUpperCase();
+    if(pacLeito && pacEv && pacLeito !== pacEv) evHoje = null;
+  }
 
   document.getElementById('herd-tag').style.display = anterior ? 'inline' : 'none';
   document.getElementById('cloud-tag').style.display = (!modoOffline && (anterior||evHoje)) ? 'inline' : 'none';
@@ -5275,13 +5293,66 @@ async function confirmarAltaFinal(){
       await dbSet(key, log);
     } catch(e){ console.warn('Log alta:', e); }
 
-    // Libera o leito
-    ld[leitoParaAlta] = {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:'', origem:'', origemOutro:''};
+    // Libera o leito (zera TODOS os campos de admissão, incluindo cid/sexo/idade)
+    ld[leitoParaAlta] = {ocupado:false, pac:'', diag:'', cid:'', dn:'', sexo:'', adm:'', admHosp:'', comor:'', alergia:'', origem:'', origemOutro:''};
     await dbSet('uti_leitos', ld);
 
-    // Apaga evoluções do dia (pra próxima admissão não herdar dados)
-    await dbDelete(evKey(leitoParaAlta,'DIURNO',hoje()));
-    await dbDelete(evKey(leitoParaAlta,'NOTURNO',hoje()));
+    // Apaga TODAS as evoluções deste leito (qualquer turno/data) para que a
+    // próxima admissão não herde NADA do paciente anterior. ANTES de apagar,
+    // agrega cada evolução/NAS num resumo diário (uti_ev_resumo_/uti_nas_resumo_)
+    // para que os INDICADORES sejam preservados (mesma lógica da limpeza diária).
+    try {
+      const chavesEv  = new Set();
+      const chavesNas = new Set();
+      for(let i=0;i<localStorage.length;i++){
+        const k = localStorage.key(i);
+        if(!k) continue;
+        if(k.startsWith('uti_ev_'+leitoParaAlta+'_') && !k.startsWith('uti_ev_resumo_')) chavesEv.add(k);
+        else if(k.startsWith('uti_nas_'+leitoParaAlta+'_') && !k.startsWith('uti_nas_resumo_')) chavesNas.add(k);
+      }
+      if(!modoOffline && db){
+        try{
+          const snap = await db.collection('uti').get();
+          snap.forEach(d=>{
+            const id = d.id;
+            if(id.startsWith('uti_ev_'+leitoParaAlta+'_') && !id.startsWith('uti_ev_resumo_')) chavesEv.add(id);
+            else if(id.startsWith('uti_nas_'+leitoParaAlta+'_') && !id.startsWith('uti_nas_resumo_')) chavesNas.add(id);
+          });
+        }catch(e){ console.warn('[Alta] varredura:', e); }
+      }
+
+      const todas = await dbGetMany([...chavesEv, ...chavesNas]);
+
+      // Agrupa por dia e gera/atualiza os resumos antes de apagar
+      const porDiaEv = {}, porDiaNas = {};
+      for(const k of chavesEv){
+        const ev = todas[k]; if(!ev) continue;
+        const dia = ev.data || k.split('_').slice(4).join('_');
+        (porDiaEv[dia] = porDiaEv[dia] || []).push(_resumirEvolucao(ev));
+      }
+      for(const k of chavesNas){
+        const nas = todas[k]; if(!nas) continue;
+        const dia = nas.data || k.split('_').slice(4).join('_');
+        (porDiaNas[dia] = porDiaNas[dia] || []).push(_resumirNAS(nas));
+      }
+      for(const [dia, lista] of Object.entries(porDiaEv)){
+        const resumoKey = 'uti_ev_resumo_'+dia;
+        const existente = (await dbGet(resumoKey)) || { dia, evolucoes: [], _resumido: true };
+        existente.evolucoes = (existente.evolucoes||[]).concat(lista.filter(Boolean));
+        await dbSet(resumoKey, existente);
+      }
+      for(const [dia, lista] of Object.entries(porDiaNas)){
+        const resumoKey = 'uti_nas_resumo_'+dia;
+        const existente = (await dbGet(resumoKey)) || { dia, nas: [], _resumido: true };
+        existente.nas = (existente.nas||[]).concat(lista.filter(Boolean));
+        await dbSet(resumoKey, existente);
+      }
+
+      // Só agora apaga as evoluções/NAS individuais do leito
+      for(const k of chavesEv)  { try{ await dbDelete(k); }catch(_){} }
+      for(const k of chavesNas) { try{ await dbDelete(k); }catch(_){} }
+      console.log('[Alta] leito '+leitoParaAlta+': '+chavesEv.size+' ev + '+chavesNas.size+' NAS resumidos e apagados');
+    } catch(e){ console.warn('[Alta] limpeza/resumo:', e); }
 
     hideLoading();
     fecharModalAlta();
