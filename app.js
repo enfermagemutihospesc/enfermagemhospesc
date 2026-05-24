@@ -75,7 +75,7 @@ function initFirebase() {
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    console.log('Firebase conectado! [build alta-rapida v7]');
+    console.log('Firebase conectado! [build scan-fix v8]');
     return true;
   } catch (e) {
     console.error('Erro crítico no Firebase:', e);
@@ -202,6 +202,15 @@ function setChecks(cls,arr){ if(!arr) return; document.querySelectorAll('.'+cls)
 function setRadio(name,val){ if(!val) return; const r=document.querySelector('input[name="'+name+'"][value="'+val+'"]'); if(r) r.checked=true; }
 function showLoading(msg){ document.getElementById('loading-msg').textContent=msg||'Carregando...'; document.getElementById('loading-overlay').classList.add('show'); }
 function hideLoading(){ document.getElementById('loading-overlay').classList.remove('show'); }
+
+// Escapa caracteres especiais de HTML para uso seguro em template strings.
+// Evita que nomes/diagnósticos com < > & " ' quebrem o layout dos cards.
+function _esc(v){
+  if(v===null||v===undefined) return '';
+  return String(v).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
 
 // ── STORAGE (Firestore + localStorage fallback) ────────────────────────────────
 async function dbGet(key) {
@@ -3725,7 +3734,7 @@ async function renderLeitos() {
     card.innerHTML = `
       <div class="leito-num">LEITO ${pad(i)}</div>
       <div class="leito-info">${l.ocupado
-        ? `<div class="leito-pac">${l.pac||'–'}</div><div class="leito-diag">${l.diag||''}${_calcIdade(l.dn)!==null?' · '+_calcIdade(l.dn)+' anos':''}</div>`
+        ? `<div class="leito-pac">${_esc(l.pac)||'–'}</div><div class="leito-diag">${_esc(l.diag)||''}${_calcIdade(l.dn)!==null?' · '+_calcIdade(l.dn)+' anos':''}</div>`
         : `<div class="leito-vazio">Vago</div>`}
       </div>
       <div class="leito-badge-row">
@@ -3785,6 +3794,7 @@ async function salvarAdmissao() {
     return;
   }
   showLoading('Salvando admissão...');
+  try {
   const d = await leitosData();
   const leitoExistente = d[modalLeito] || {};
   // Se está admitindo (não estava ocupado) → registra data/hora e log
@@ -3826,6 +3836,11 @@ async function salvarAdmissao() {
 
   hideLoading(); fecharModal(); await renderLeitos();
   toast('Paciente admitido no leito '+pad(modalLeito));
+  } catch(e){
+    hideLoading();
+    console.error('salvarAdmissao:', e);
+    toast('Erro ao salvar admissão: ' + (e.message||e), true);
+  }
 }
 
 // Botão "Alta / Desocupar leito" do modal de admissão → abre modal de alta
