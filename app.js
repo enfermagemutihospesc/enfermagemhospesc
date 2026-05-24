@@ -75,7 +75,7 @@ function initFirebase() {
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    console.log('Firebase conectado! [build alta-fix v6]');
+    console.log('Firebase conectado! [build alta-rapida v7]');
     return true;
   } catch (e) {
     console.error('Erro crítico no Firebase:', e);
@@ -5304,54 +5304,73 @@ async function confirmarAltaFinal(){
     try {
       const chavesEv  = new Set();
       const chavesNas = new Set();
+      // localStorage (rápido, em memória)
       for(let i=0;i<localStorage.length;i++){
         const k = localStorage.key(i);
         if(!k) continue;
         if(k.startsWith('uti_ev_'+leitoParaAlta+'_') && !k.startsWith('uti_ev_resumo_')) chavesEv.add(k);
         else if(k.startsWith('uti_nas_'+leitoParaAlta+'_') && !k.startsWith('uti_nas_resumo_')) chavesNas.add(k);
       }
+      // Firestore: consulta FILTRADA por prefixo do leito (não baixa a coleção
+      // inteira — só os documentos deste leito). Duas queries pequenas em paralelo.
       if(!modoOffline && db){
         try{
-          const snap = await db.collection('uti').get();
-          snap.forEach(d=>{
-            const id = d.id;
-            if(id.startsWith('uti_ev_'+leitoParaAlta+'_') && !id.startsWith('uti_ev_resumo_')) chavesEv.add(id);
-            else if(id.startsWith('uti_nas_'+leitoParaAlta+'_') && !id.startsWith('uti_nas_resumo_')) chavesNas.add(id);
-          });
+          const FP = firebase.firestore.FieldPath.documentId();
+          const prefEv  = 'uti_ev_'+leitoParaAlta+'_';
+          const prefNas = 'uti_nas_'+leitoParaAlta+'_';
+          const [snapEv, snapNas] = await Promise.all([
+            db.collection('uti').where(FP,'>=',prefEv ).where(FP,'<',prefEv +'\uf8ff').get(),
+            db.collection('uti').where(FP,'>=',prefNas).where(FP,'<',prefNas+'\uf8ff').get()
+          ]);
+          snapEv.forEach(d=>{ if(!d.id.startsWith('uti_ev_resumo_')) chavesEv.add(d.id); });
+          snapNas.forEach(d=>{ if(!d.id.startsWith('uti_nas_resumo_')) chavesNas.add(d.id); });
         }catch(e){ console.warn('[Alta] varredura:', e); }
       }
 
-      const todas = await dbGetMany([...chavesEv, ...chavesNas]);
+      if(chavesEv.size || chavesNas.size){
+        const todas = await dbGetMany([...chavesEv, ...chavesNas]);
 
-      // Agrupa por dia e gera/atualiza os resumos antes de apagar
-      const porDiaEv = {}, porDiaNas = {};
-      for(const k of chavesEv){
-        const ev = todas[k]; if(!ev) continue;
-        const dia = ev.data || k.split('_').slice(4).join('_');
-        (porDiaEv[dia] = porDiaEv[dia] || []).push(_resumirEvolucao(ev));
-      }
-      for(const k of chavesNas){
-        const nas = todas[k]; if(!nas) continue;
-        const dia = nas.data || k.split('_').slice(4).join('_');
-        (porDiaNas[dia] = porDiaNas[dia] || []).push(_resumirNAS(nas));
-      }
-      for(const [dia, lista] of Object.entries(porDiaEv)){
-        const resumoKey = 'uti_ev_resumo_'+dia;
-        const existente = (await dbGet(resumoKey)) || { dia, evolucoes: [], _resumido: true };
-        existente.evolucoes = (existente.evolucoes||[]).concat(lista.filter(Boolean));
-        await dbSet(resumoKey, existente);
-      }
-      for(const [dia, lista] of Object.entries(porDiaNas)){
-        const resumoKey = 'uti_nas_resumo_'+dia;
-        const existente = (await dbGet(resumoKey)) || { dia, nas: [], _resumido: true };
-        existente.nas = (existente.nas||[]).concat(lista.filter(Boolean));
-        await dbSet(resumoKey, existente);
-      }
+        // Agrupa por dia
+        const porDiaEv = {}, porDiaNas = {};
+        for(const k of chavesEv){
+          const ev = todas[k]; if(!ev) continue;
+          const dia = ev.data || k.split('_').slice(4).join('_');
+          (porDiaEv[dia] = porDiaEv[dia] || []).push(_resumirEvolucao(ev));
+        }
+        for(const k of chavesNas){
+          const nas = todas[k]; if(!nas) continue;
+          const dia = nas.data || k.split('_').slice(4).join('_');
+          (porDiaNas[dia] = porDiaNas[dia] || []).push(_resumirNAS(nas));
+        }
 
-      // Só agora apaga as evoluções/NAS individuais do leito
-      for(const k of chavesEv)  { try{ await dbDelete(k); }catch(_){} }
-      for(const k of chavesNas) { try{ await dbDelete(k); }catch(_){} }
-      console.log('[Alta] leito '+leitoParaAlta+': '+chavesEv.size+' ev + '+chavesNas.size+' NAS resumidos e apagados');
+        // Lê todos os resumos existentes em paralelo, mescla e grava em paralelo
+        const diasEv  = Object.keys(porDiaEv);
+        const diasNas = Object.keys(porDiaNas);
+        const [resumosEvExist, resumosNasExist] = await Promise.all([
+          dbGetMany(diasEv.map(d=>'uti_ev_resumo_'+d)),
+          dbGetMany(diasNas.map(d=>'uti_nas_resumo_'+d))
+        ]);
+        const gravacoes = [];
+        for(const dia of diasEv){
+          const rk = 'uti_ev_resumo_'+dia;
+          const ex = resumosEvExist[rk] || { dia, evolucoes: [], _resumido: true };
+          ex.evolucoes = (ex.evolucoes||[]).concat(porDiaEv[dia].filter(Boolean));
+          gravacoes.push(dbSet(rk, ex));
+        }
+        for(const dia of diasNas){
+          const rk = 'uti_nas_resumo_'+dia;
+          const ex = resumosNasExist[rk] || { dia, nas: [], _resumido: true };
+          ex.nas = (ex.nas||[]).concat(porDiaNas[dia].filter(Boolean));
+          gravacoes.push(dbSet(rk, ex));
+        }
+        await Promise.all(gravacoes);
+
+        // Só agora apaga as evoluções/NAS individuais (tudo em paralelo)
+        await Promise.all([...chavesEv, ...chavesNas].map(k =>
+          dbDelete(k).catch(()=>{})
+        ));
+        console.log('[Alta] leito '+leitoParaAlta+': '+chavesEv.size+' ev + '+chavesNas.size+' NAS resumidos e apagados');
+      }
     } catch(e){ console.warn('[Alta] limpeza/resumo:', e); }
 
     hideLoading();
