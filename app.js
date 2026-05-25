@@ -75,7 +75,7 @@ function initFirebase() {
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    console.log('Firebase conectado! [build scan-fix v8]');
+    console.log('Firebase conectado! [build logo v9]');
     return true;
   } catch (e) {
     console.error('Erro crítico no Firebase:', e);
@@ -202,6 +202,26 @@ function setChecks(cls,arr){ if(!arr) return; document.querySelectorAll('.'+cls)
 function setRadio(name,val){ if(!val) return; const r=document.querySelector('input[name="'+name+'"][value="'+val+'"]'); if(r) r.checked=true; }
 function showLoading(msg){ document.getElementById('loading-msg').textContent=msg||'Carregando...'; document.getElementById('loading-overlay').classList.add('show'); }
 function hideLoading(){ document.getElementById('loading-overlay').classList.remove('show'); }
+
+// ── LOGO HOSPESC (arquivo logo.png no repositório; usado em login, tela inicial e PDF) ──
+function _logoImg(maxW){
+  return '<img src="logo.png?v=20260522g" alt="HOSPESC - Hospital dos Pescadores" '+
+         'style="max-width:'+(maxW||220)+'px;width:100%;height:auto;display:block;margin:0 auto;">';
+}
+
+// Aguarda todas as <img> de um elemento terminarem de carregar (com timeout),
+// para o html2canvas não capturar o logo antes de ele aparecer.
+function _aguardarImagens(el, timeoutMs){
+  if(!el) return Promise.resolve();
+  const imgs = Array.from(el.querySelectorAll('img'));
+  if(!imgs.length) return Promise.resolve();
+  return Promise.race([
+    Promise.all(imgs.map(img => (img.complete && img.naturalWidth)
+      ? Promise.resolve()
+      : new Promise(res => { img.onload = res; img.onerror = res; }))),
+    new Promise(res => setTimeout(res, timeoutMs || 3000))
+  ]);
+}
 
 // Escapa caracteres especiais de HTML para uso seguro em template strings.
 // Evita que nomes/diagnósticos com < > & " ' quebrem o layout dos cards.
@@ -4764,7 +4784,7 @@ function renderPreview(d) {
   const br=(l,v)=>`<div class="pr"><span class="pl">${l}</span><span class="pv">${v||'–'}</span></div>`;
   const st=t=>`<div class="pst">${t}</div>`;
   let h='';
-  h+=`<div class="ph"><h2>PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</h2><h3>SETOR – UNIDADE DE TERAPIA INTENSIVA (UTI)</h3><p>EVOLUÇÃO DO ENFERMEIRO</p></div><div class="pb">`;
+  h+=`<div class="ph" style="display:flex;align-items:center;gap:14px;"><img src="logo.png?v=20260522g" alt="HOSPESC" style="height:48px;width:auto;flex-shrink:0;"><div style="flex:1;"><h2 style="margin:0;">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</h2><h3 style="margin:0;">SETOR – UNIDADE DE TERAPIA INTENSIVA (UTI)</h3><p style="margin:0;">EVOLUÇÃO DO ENFERMEIRO</p></div></div><div class="pb">`;
   h+=`<div class="pr"><span class="pl">PACIENTE</span><span class="pv">${d.pac||'–'}</span><span class="pl" style="margin-left:1rem;">DATA</span><span class="pv">${fmtD(d.data)}</span><span class="pl" style="margin-left:1rem;">LEITO</span><span class="pv">${pad(d.leito)} – UTI Geral</span><span class="pl" style="margin-left:1rem;">TURNO</span><span class="pv">${d.turno}</span></div>`;
   h+=`<div class="pr"><span class="pl">DN</span><span class="pv">${fmtD(d.dn)}${_calcIdade(d.dn)!==null?' ('+_calcIdade(d.dn)+' anos)':''}</span><span class="pl" style="margin-left:1rem;">ADMISSÃO UTI</span><span class="pv">${fmtD(d.adm)}</span>${d.sexo?`<span class="pl" style="margin-left:1rem;">SEXO</span><span class="pv">${d.sexo==='M'?'Masculino':'Feminino'}</span>`:''}</div>`;
   h+=br('DIAGNÓSTICO', d.diag + (d.cid ? '  –  CID: '+d.cid : '')); h+=br('COMORBIDADES',d.comor);
@@ -4903,6 +4923,7 @@ async function gerarPDF(){
     const contentH = pageH - margin*2;   // 281 mm
 
     // Captura em alta resolução com largura forçada
+    await _aguardarImagens(area, 3000);
     const canvas = await html2canvas(area, {
       scale: 2,
       useCORS: true,
@@ -5162,6 +5183,7 @@ async function _gerarPDFdaArea(area, d){
   const contentH = pageH - margin*2;
   const LARGURA_FIXA = 780;
 
+  await _aguardarImagens(area, 3000);
   const canvas = await html2canvas(area, {
     scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
     width: LARGURA_FIXA, windowWidth: LARGURA_FIXA
@@ -5773,6 +5795,14 @@ window.addEventListener('load', () => {
   const firebaseOk = initFirebase();
   const telaConfig = document.getElementById('t-config');
   if (telaConfig) telaConfig.style.display = 'none';
+
+  // Injeta o logo HOSPESC nas telas claras (login e tela inicial)
+  try {
+    const ll = document.getElementById('logo-login');
+    if (ll) ll.innerHTML = _logoImg(200);
+    const lt = document.getElementById('logo-turno');
+    if (lt) lt.innerHTML = _logoImg(240);
+  } catch(_) {}
 
   if (!firebaseOk || !auth) {
     mostrarTela('t-config');
