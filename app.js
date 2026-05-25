@@ -75,7 +75,7 @@ function initFirebase() {
     }
     db = firebase.firestore();
     auth = firebase.auth();
-    console.log('Firebase conectado! [build logo v9]');
+    console.log('Firebase conectado! [build data-plantao v10]');
     return true;
   } catch (e) {
     console.error('Erro crítico no Firebase:', e);
@@ -182,7 +182,8 @@ function ontem(){ const d=new Date(); d.setDate(d.getDate()-1); return d.getFull
 // Retorna a data correta do turno:
 // Diurno  → 07:00–18:59 (sempre hoje)
 // Noturno → 19:00–23:59 = hoje | 00:00–06:59 = ontem (turno começou no dia anterior)
-function dataDoTurno(){ const h=new Date().getHours(); if(turno==='NOTURNO' && h>=0 && h<=6) return ontem(); return hoje(); }
+// A janela 0–6 cobre a madrugada do plantão noturno, que termina às 07:00.
+function dataDoTurno(){ const h=new Date().getHours(); if(turno==='NOTURNO' && h>=0 && h<7) return ontem(); return hoje(); }
 function fmtD(s){ if(!s||s==='–') return '–'; try{ const[y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }catch(e){ return s; } }
 function gf(id){ const e=document.getElementById(id); return e?e.value:''; }
 function gChecked(cls){ return Array.from(document.querySelectorAll('.'+cls+':checked')).map(e=>e.value); }
@@ -4521,7 +4522,11 @@ async function abrirForm(n) {
     } catch(e){ /* silencioso */ }
   }
   setF('f-sexo', sexoFinal);
-  setF('f-leito','Leito '+pad(n)+' – UTI Geral'); setF('f-data',dataDoTurno());
+  setF('f-leito','Leito '+pad(n)+' – UTI Geral');
+  // Data do plantão: se já existe evolução salva neste turno, usa a data GRAVADA
+  // nela (não recalcula). Isso evita que, ao reabrir/imprimir após a meia-noite,
+  // a data "vire" para o dia seguinte. Só calcula do zero numa evolução nova.
+  setF('f-data', (evHoje && evHoje.data) ? evHoje.data : dataDoTurno());
 
   const fonte = evHoje || anterior;
   if (fonte) {
