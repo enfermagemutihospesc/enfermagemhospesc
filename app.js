@@ -1096,21 +1096,21 @@ const FICHAS_INDICADORES = {
     conceituacao: 'Percentual do tempo em que os leitos da unidade estiveram ocupados durante o período analisado.',
     dominio: 'Gestão',
     relevancia: 'Essencial',
-    importancia: 'Indicador-chave de pressão assistencial e de dimensionamento. Taxas próximas ou superiores a 100% sinalizam falta de leitos e risco de recusa de admissões; taxas muito baixas podem indicar subutilização. É recomendado pela ANS e pela CCIH para monitoramento contínuo.',
-    numerador: 'Pacientes-dia no período (soma dos dias de internação de todas as admissões que se sobrepõem ao período).',
+    importancia: 'Indicador-chave de pressão assistencial e de dimensionamento. Taxas próximas a 100% sinalizam falta de leitos e risco de recusa de admissões; taxas muito baixas podem indicar subutilização. É recomendado pela ANS e pela CCIH para monitoramento contínuo. O valor é limitado a 100% (capping defensivo).',
+    numerador: 'Pacientes-dia no período (ver OCUP-04): pares únicos leito × dia-calendário com evolução registrada.',
     denominador: 'Número de leitos operacionais × número de dias do período.',
-    formula: '(Pacientes-dia ÷ Leitos-dia possíveis) × 100'
+    formula: '(Pacientes-dia ÷ Leitos-dia possíveis) × 100, limitado a 100%'
   },
   ocup_pacientesdia: {
     sigla: 'OCUP-04',
     nome: 'Pacientes-dia',
-    conceituacao: 'Somatório dos dias em que cada paciente esteve internado na UTI durante o período. Cada dia de permanência de um paciente conta como 1 paciente-dia.',
+    conceituacao: 'Número de pares únicos (leito × dia-calendário) com evolução registrada no período. Cada leito ocupado em um dia conta como 1 paciente-dia, independentemente de quantos turnos foram evoluídos (convenção ANVISA/CDC de dia-censo).',
     dominio: 'Gestão',
     relevancia: 'Essencial',
-    importancia: 'Denominador-padrão ANVISA/CDC para o cálculo de taxas de infecção hospitalar, taxa de utilização de dispositivos invasivos e densidade de eventos assistenciais. Sem pacientes-dia não é possível comparar indicadores entre unidades ou períodos.',
-    numerador: 'Soma dos dias de sobreposição entre cada internação e o período selecionado, considerando admissões com e sem alta (em curso até a data atual).',
+    importancia: 'Denominador-padrão ANVISA/CDC para o cálculo de taxas de utilização de dispositivos invasivos, ventilação e densidade de eventos assistenciais. É o MESMO denominador usado em Ocupação, Dispositivos e Ventilação, garantindo comparabilidade entre as abas. Apurado pelas evoluções (mais robusto que logs de admissão/alta: funciona mesmo sem alta registrada).',
+    numerador: 'Pares únicos (leito, data) nas evoluções do período.',
     denominador: '—',
-    formula: 'Σ (dias de internação) no período.'
+    formula: 'Nº de pares únicos (leito × dia) com evolução.'
   },
   ocup_giro: {
     sigla: 'OCUP-05',
@@ -1342,13 +1342,13 @@ const FICHAS_INDICADORES = {
   },
   clin_lpp: {
     sigla: 'CLIN-03',
-    nome: 'Prevalência de risco alto para LPP (Braden ≤ 11)',
-    conceituacao: 'Proporção de avaliações de risco para Lesão por Pressão que resultaram em risco muito alto (Escala de Braden com pontuação igual ou menor que 11).',
+    nome: 'Prevalência de risco muito alto para LPP (Braden ≤ 11)',
+    conceituacao: 'Proporção de avaliações de risco para Lesão por Pressão que resultaram em risco MUITO alto (Escala de Braden ≤ 11). Atenção: a classificação completa da escala usada no sistema é: ≥ 15 baixo, 12–14 moderado, < 12 alto. Este indicador isola o subgrupo mais grave (≤ 11) para priorização de recursos.',
     dominio: 'Segurança',
     relevancia: 'Essencial',
     importancia: 'Sinaliza a demanda por cuidados preventivos intensivos — mobilização frequente, colchão de ar, hidratação da pele. Indicador de qualidade assistencial e de Meta Internacional de Segurança 6 (prevenção de quedas e lesões).',
     numerador: 'Número de evoluções com bradScore > 0 e ≤ 11.',
-    denominador: 'Número de evoluções com Braden avaliado no período.',
+    denominador: 'Número de evoluções com Braden numérico avaliado no período.',
     formula: '(Evoluções com Braden ≤ 11 ÷ Evoluções com Braden) × 100'
   },
   clin_queda: {
@@ -1359,8 +1359,8 @@ const FICHAS_INDICADORES = {
     relevancia: 'Essencial',
     importancia: 'Direciona medidas preventivas específicas: grades elevadas, supervisão contínua, sinalização visual no leito. Parte da Meta Internacional de Segurança 6.',
     numerador: 'Número de evoluções com morseScore ≥ 45.',
-    denominador: 'Número de evoluções com Morse avaliado no período.',
-    formula: '(Evoluções com Morse ≥ 45 ÷ Evoluções com Morse) × 100'
+    denominador: 'Número de evoluções com Morse numérico avaliado no período (inclui Morse = 0, que é avaliação válida de paciente acamado).',
+    formula: '(Evoluções com Morse ≥ 45 ÷ Evoluções com Morse avaliado) × 100'
   },
   clin_pulseira: {
     sigla: 'CLIN-05',
@@ -1378,10 +1378,10 @@ const FICHAS_INDICADORES = {
   disp_diaspaciente: {
     sigla: 'DISP-01',
     nome: 'Pacientes-dia (base para dispositivos)',
-    conceituacao: 'Soma de todos os pares únicos (leito × data) com evolução registrada, representando o total de dias-paciente no período.',
+    conceituacao: 'Pares únicos (leito × dia-calendário) com evolução registrada — o MESMO pacientes-dia definido em OCUP-04, reutilizado como denominador das taxas de dispositivo.',
     dominio: 'Segurança',
     relevancia: 'Essencial',
-    importancia: 'Denominador-padrão ANVISA/CDC para calcular taxas de utilização de dispositivos invasivos. A padronização permite comparação entre unidades e períodos.',
+    importancia: 'Denominador-padrão ANVISA/CDC para calcular taxas de utilização de dispositivos invasivos. Unificado com Ocupação e Ventilação para permitir comparação consistente entre as abas e com outras unidades.',
     numerador: 'Pares únicos (leito, data) nas evoluções do período.',
     denominador: '—',
     formula: 'Valor absoluto.'
@@ -1630,13 +1630,13 @@ const FICHAS_INDICADORES = {
   nut_enteral: {
     sigla: 'NUTR-01',
     nome: 'Prevalência de dieta enteral',
-    conceituacao: 'Proporção de evoluções em que o paciente recebia nutrição enteral por sonda nasoenteral (SNE) ou orogástrica (SOE).',
+    conceituacao: 'Proporção de evoluções em que o paciente recebia nutrição enteral por sonda: nasoenteral (SNE), orogástrica/oroenteral (SOE) ou nasogástrica (SNG).',
     dominio: 'Clínico',
     relevancia: 'Complementar',
     importancia: 'A nutrição enteral é a via preferencial em pacientes críticos com trato digestivo funcionante. Altas prevalências refletem perfil de pacientes sedados, em VMI ou com disfunção neurológica.',
-    numerador: 'Número de evoluções com dieta = SNE ou SOE.',
+    numerador: 'Número de evoluções com dieta contendo SNE, SOE ou SNG (campo dieta é multiseleção).',
     denominador: 'Total de evoluções no período.',
-    formula: '(Evoluções SNE + SOE ÷ Total) × 100'
+    formula: '(Evoluções SNE/SOE/SNG ÷ Total) × 100'
   },
   nut_oral: {
     sigla: 'NUTR-02',
@@ -1786,6 +1786,74 @@ const FICHAS_INDICADORES = {
     numerador: 'Número de óbitos entre pacientes originários de cada local X.',
     denominador: 'Total de altas entre pacientes originários do local X.',
     formula: '(Óbitos da origem X ÷ Altas da origem X) × 100'
+  },
+
+  // ═══ IRAS / BUNDLES ═══
+  iras_total: {
+    sigla: 'IRAS-01',
+    nome: 'Checklists IRAS no período',
+    conceituacao: 'Número de checklists de prevenção de IRAS preenchidos no período (um por leito/turno/dia).',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Mede a cobertura da vigilância de bundles. Quanto mais checklists, mais confiáveis as taxas de adesão e a vigilância de IRAS. Baixa cobertura compromete todos os demais indicadores desta aba.',
+    numerador: 'Número de registros uti_iras_* com data no período.',
+    denominador: '—',
+    formula: 'Valor absoluto.'
+  },
+  iras_pct: {
+    sigla: 'IRAS-02',
+    nome: 'Adesão global aos bundles (tudo ou nada)',
+    conceituacao: 'Proporção de checklists em que TODOS os bundles aplicáveis estavam 100% aderentes, segundo a metodologia "tudo ou nada" do IHI.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Indicador-síntese da qualidade da prevenção de IRAS. Pela regra do IHI, um bundle só conta como aderente quando 100% dos itens aplicáveis (não-N/A) estão conformes. Meta institucional recomendada: ≥ 95%.',
+    numerador: 'Número de checklists em que nenhum bundle aplicável falhou.',
+    denominador: 'Número de checklists com ao menos um bundle aplicável.',
+    formula: '(Checklists 100% aderentes ÷ Checklists avaliáveis) × 100'
+  },
+  iras_notif: {
+    sigla: 'IRAS-03',
+    nome: 'Culturas-sentinela em sítio de IRAS',
+    conceituacao: 'Número de culturas POSITIVAS cujo sítio de coleta mapeia para uma topografia de IRAS associada a dispositivo (respiratório baixo → PAV; urinário → ITU-AC; sangue/cateter → IPCS-AC). Derivado automaticamente do módulo de culturas — sem digitação manual.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Numerador das densidades de incidência estimadas. É uma vigilância-sentinela por cultura: aproxima a carga de IRAS sem depender de notificação manual. Atenção: cultura positiva no sítio pode representar colonização, não infecção confirmada — por isso superestima a IRAS real e serve para tendência/triagem, não como dado oficial.',
+    numerador: 'Culturas positivas com sítio mapeável a PAV, ITU-AC ou IPCS-AC no período.',
+    denominador: '—',
+    formula: 'Contagem de culturas-sentinela.'
+  },
+  iras_dens_pav: {
+    sigla: 'IRAS-04',
+    nome: 'Densidade de incidência estimada de PAV',
+    conceituacao: 'Estimativa de pneumonias associadas à VMI por 1000 dias de ventilação mecânica invasiva, usando culturas positivas de sítio respiratório baixo como numerador-sentinela.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Aproximação do principal indicador de resultado da prevenção respiratória, calculável sem notificação manual. Permite acompanhar tendência e comparar com referências ANVISA, lembrando que o numerador por cultura pode incluir colonização (superestima). Valores em alta disparam revisão do bundle de VMI.',
+    numerador: 'Culturas positivas de sítio respiratório baixo (traqueal, aspirado, LBA, etc.) no período.',
+    denominador: 'VMI-dia: pares únicos (leito × dia) com ventilação mecânica invasiva.',
+    formula: '(Culturas respiratórias ÷ VMI-dia) × 1000'
+  },
+  iras_dens_itu: {
+    sigla: 'IRAS-05',
+    nome: 'Densidade de incidência estimada de ITU-AC',
+    conceituacao: 'Estimativa de infecções urinárias associadas a cateter vesical por 1000 dias de sonda vesical de demora, usando uroculturas positivas como numerador-sentinela.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Aproximação do indicador de resultado da prevenção de ITU. Orienta revisão de indicação e tempo de permanência da SVD. Bacteriúria assintomática pode inflar o numerador (superestima a infecção verdadeira).',
+    numerador: 'Uroculturas positivas no período.',
+    denominador: 'SVD-dia: pares únicos (leito × dia) com sonda vesical de demora.',
+    formula: '(Uroculturas ÷ SVD-dia) × 1000'
+  },
+  iras_dens_ipcs: {
+    sigla: 'IRAS-06',
+    nome: 'Densidade de incidência estimada de IPCS-AC',
+    conceituacao: 'Estimativa de infecções primárias de corrente sanguínea associadas a cateter central por 1000 dias de cateter central, usando hemoculturas/culturas de cateter positivas como numerador-sentinela.',
+    dominio: 'Segurança',
+    relevancia: 'Essencial',
+    importancia: 'Aproximação do indicador de resultado de uma das IRAS de maior letalidade. Cateter central = AVC ou CDL. Hemocultura positiva pode representar contaminação de coleta (superestima); confirmar com a CCIH antes de notificar oficialmente.',
+    numerador: 'Hemoculturas e culturas de cateter positivas no período.',
+    denominador: 'Cateter-dia: pares únicos (leito × dia) com AVC ou CDL.',
+    formula: '(Hemoculturas/cateter ÷ cateter-dia) × 1000'
   }
 };
 // Escape HTML (para exibir código com <, > etc. sem quebrar)
@@ -1895,6 +1963,36 @@ async function renderIndicadores(){
 }
 
 // ── 1. OCUPAÇÃO E FLUXO ──────────────────────────────────────────────────────
+// ── DENOMINADOR ÚNICO: pacientes-dia ─────────────────────────────────────────
+// Convenção ANVISA/CDC adotada em todo o sistema: 1 leito ocupado em 1 dia-calendário
+// = 1 paciente-dia, independentemente de quantos turnos (diurno/noturno) foram
+// evoluídos. Antes este número era calculado de 3 formas diferentes (×0,5 em
+// ocupação; Set(leito|data) em dispositivos e ventilação), o que tornava a taxa
+// de ocupação incomparável com as taxas de dispositivo/VMI. Agora todas as abas
+// usam ESTA função, garantindo o mesmo denominador.
+function _pacientesDia(evPer){
+  return new Set(
+    evPer.filter(e => e.leito && e.data).map(e => e.leito + '|' + e.data)
+  ).size;
+}
+
+// Detecção robusta de VMI: cobre evoluções completas ("TOT – VMI"/"TQT – VMI"),
+// resumos compactados (campo isVMI ou tot_n/tqt_n) e eventual legado só "VMI".
+function _emVMI(e){
+  if (e.isVMI) return true;
+  if (e.tot_n || e.tqt_n) return true;
+  const v = String(e.vent || '');
+  return v.includes('TOT') || v.includes('TQT') || v.includes('VMI');
+}
+
+// dieta é salva como ARRAY de checkboxes (gChecked). Suporta também o formato
+// legado em string. Match case-insensitive.
+function _temDieta(e, val){
+  const d = e.dieta;
+  if (Array.isArray(d)) return d.some(x => String(x).toUpperCase() === val.toUpperCase());
+  return String(d||'').toUpperCase() === val.toUpperCase();
+}
+
 function _indOcupacao(periodo){
   const { admissoes, altas, evolucoes } = _indCache;
   const diasPeriodo = Math.round((periodo.fim - periodo.inicio)/86400000) + 1;
@@ -1903,22 +2001,14 @@ function _indOcupacao(periodo){
   const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
   const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
 
-  // ── Cálculo de pacientes-dia a partir das EVOLUÇÕES ────────────────────────
-  // Cada evolução (turno) é prova de que o leito estava ocupado naquele dia.
-  // 1 evolução = 0,5 paciente-dia. 2 evoluções no mesmo dia/leito = 1 paciente-dia.
-  // Esse método é mais robusto que usar logs de admissão/alta porque:
-  //   - Funciona para pacientes admitidos antes do log existir
-  //   - Não depende de o usuário ter dado alta corretamente
-  //   - Reflete o estado real registrado pela equipe
+  // ── Pacientes-dia: denominador ÚNICO do sistema (ver _pacientesDia) ─────────
+  // 1 leito ocupado em 1 dia = 1 paciente-dia (convenção ANVISA/CDC), apurado
+  // pelas evoluções. Método robusto: funciona para pacientes admitidos antes do
+  // log existir, não depende de alta correta e reflete o registro real da equipe.
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
-  const turnosPorLeitoDia = new Set();
-  evPer.forEach(e => {
-    if(!e.leito || !e.data || !e.turno) return;
-    turnosPorLeitoDia.add(e.leito + '|' + e.data + '|' + e.turno);
-  });
-  const pacientesDia = Math.round(turnosPorLeitoDia.size * 0.5 * 10) / 10; // 1 casa decimal
+  const pacientesDia = _pacientesDia(evPer);
 
-  const taxaOcup = TOTAL * diasPeriodo > 0 ? (pacientesDia*100/(TOTAL*diasPeriodo)).toFixed(1) + '%' : '–';
+  const taxaOcup = TOTAL * diasPeriodo > 0 ? Math.min(100, (pacientesDia*100/(TOTAL*diasPeriodo))).toFixed(1) + '%' : '–';
 
   // Giro de leito
   const giro = TOTAL > 0 ? (admPer.length/TOTAL).toFixed(1) : '–';
@@ -1965,7 +2055,7 @@ function _indOcupacao(periodo){
   h += _cardInd('Admissões no período', admPer.length, `${TOTAL} leitos`, '', 'ocup_admissoes');
   h += _cardInd('Altas no período', altasPer.length, '', '', 'ocup_altas');
   h += _cardInd('Taxa de ocupação', taxaOcup, `${pacientesDia} pacientes-dia / ${TOTAL*diasPeriodo} possíveis`, '', 'ocup_taxa');
-  h += _cardInd('Pacientes-dia', pacientesDia, `em ${diasPeriodo} dias (via evoluções)`, '', 'ocup_pacientesdia');
+  h += _cardInd('Pacientes-dia', pacientesDia, `em ${diasPeriodo} dias (leito × dia)`, '', 'ocup_pacientesdia');
   h += _cardInd('Giro de leito', giro, 'admissões por leito', '', 'ocup_giro');
   h += _cardInd('Permanência média', permMedia !== '–' ? permMedia + ' dias' : '–', `${permanencias.length} altas computadas`, '', 'ocup_permanencia');
   h += _cardInd('Intervalo entre ocupações', intervMedio !== '–' ? intervMedio + ' dias' : '–', 'tempo médio leito vago', '', 'ocup_intervalo');
@@ -2134,8 +2224,10 @@ function _indClinicos(periodo){
 
   const lppAlto   = evPer.filter(e => parseInt(e.bradScore) > 0 && parseInt(e.bradScore) <= 11).length;
   const quedaAlto = evPer.filter(e => parseInt(e.morseScore) >= 45).length;
-  const comBraden = evPer.filter(e => e.bradScore && e.bradScore !== '–').length;
-  const comMorse  = evPer.filter(e => e.morseScore && e.morseScore !== '–' && e.morseScore !== '0').length;
+  const comBraden = evPer.filter(e => e.bradScore && e.bradScore !== '–' && !isNaN(parseInt(e.bradScore))).length;
+  // Morse = 0 é avaliação VÁLIDA (paciente acamado). Excluí-la inflaria a
+  // prevalência de risco alto. Conta qualquer Morse numérico avaliado.
+  const comMorse  = evPer.filter(e => e.morseScore && e.morseScore !== '–' && !isNaN(parseInt(e.morseScore))).length;
   const pulseira  = evPer.filter(e => e.pulseira === 'Sim').length;
 
   let h = '<div class="ind-grid">';
@@ -2155,15 +2247,15 @@ function _indDispositivos(periodo){
   const { dispLog, evolucoes } = _indCache;
   const tipos = ['AVC','CDL','SVD','SNE','TOT','TQT'];
 
-  // Dias-paciente no período = soma de evoluções no período (1 evolução = 1 turno = 0,5 dia, mas simplificamos: 1 leito/dia = 1)
-  const diasPaciente = new Set(evolucoes.filter(e => _dentroPeriodo(e.data, periodo)).map(e => e.leito + '|' + e.data)).size;
+  // Dias-paciente no período: denominador ÚNICO do sistema (1 leito × 1 dia).
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const diasPaciente = _pacientesDia(evPer);
 
   // Para cada tipo, soma dias-dispositivo: conta evoluções onde o dispositivo estava presente
   const diasDisp = {};
   tipos.forEach(t => { diasDisp[t] = 0; });
 
-  evolucoes.forEach(e => {
-    if (!_dentroPeriodo(e.data, periodo)) return;
+  evPer.forEach(e => {
     if (e.avc_l)  diasDisp.AVC++;
     if (e.dial_l) diasDisp.CDL++;
     if (e.svd_n)  diasDisp.SVD++;
@@ -2210,8 +2302,8 @@ function _indVentilacao(periodo){
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
   const total = evPer.length;
 
-  const diasVMI = evPer.filter(e => e.vent && (e.vent.includes('TOT') || e.vent.includes('TQT'))).length;
-  const diasPac = new Set(evPer.map(e => e.leito + '|' + e.data)).size;
+  const diasVMI = evPer.filter(_emVMI).length;
+  const diasPac = _pacientesDia(evPer);
   const taxaVMI = diasPac > 0 ? (diasVMI*100/diasPac).toFixed(1)+'%' : '–';
 
   // Tipo de oxigenoterapia
@@ -2390,15 +2482,16 @@ function _indNutricao(periodo){
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
   const total = evPer.length;
 
-  const sne = evPer.filter(e => e.dieta === 'SNE').length;
-  const soe = evPer.filter(e => e.dieta === 'SOE').length;
-  const oral = evPer.filter(e => e.dieta === 'Oral').length;
-  const npt = evPer.filter(e => e.dieta === 'NPT').length;
-  const jejum = evPer.filter(e => e.dieta === 'Jejum/Zero').length;
+  // dieta é salva como ARRAY de checkboxes; _temDieta (global) normaliza array/string.
+  // Enteral = SNE + SOE + SNG (todas as vias de sonda para nutrição enteral)
+  const enteral = evPer.filter(e => _temDieta(e,'SNE') || _temDieta(e,'SOE') || _temDieta(e,'SNG')).length;
+  const oral  = evPer.filter(e => _temDieta(e,'Oral')).length;
+  const npt   = evPer.filter(e => _temDieta(e,'NPT')).length;
+  const jejum = evPer.filter(e => _temDieta(e,'Jejum/Zero')).length;
 
   let h = '<div class="ind-grid">';
   h += _cardInd('Evoluções no período', total, '', '', 'clin_evolucoes');
-  h += _cardInd('Dieta enteral (SNE/SOE)', _pct(sne+soe, total), `${sne+soe} evoluções`, '', 'nut_enteral');
+  h += _cardInd('Dieta enteral (SNE/SOE/SNG)', _pct(enteral, total), `${enteral} evoluções`, '', 'nut_enteral');
   h += _cardInd('Dieta oral', _pct(oral, total), `${oral} evoluções`, '', 'nut_oral');
   h += _cardInd('NPT', _pct(npt, total), `${npt} evoluções`, '', 'nut_npt');
   h += _cardInd('Jejum', _pct(jejum, total), `${jejum} evoluções`, jejum>0?'laranja':'', 'nut_jejum');
@@ -2467,13 +2560,34 @@ function _indCruzamentos(periodo){
     .sort((a,b) => b.valor - a.valor);
 
   // Permanência × NAS (para cada alta, calcula permanência e correlaciona com NAS médio do paciente)
+  // Correção de vazamento: quando o registro NAS tem paciente, exige match EXATO
+  // de paciente (não mistura NAS de outro paciente que ocupou o mesmo leito). O
+  // fallback por leito+data só vale para NAS antigos SEM paciente, e ainda assim
+  // descarta o intervalo se outra internação no mesmo leito o sobrepõe (troca de
+  // paciente → atribuição ambígua).
   const pacPermNAS = [];
   altasPer.forEach(a => {
     const perm = _diasEntre(a.admUTI, a.dataAlta);
     if (perm === null || !a.paciente) return;
-    // NAS médio do paciente
+    const adm = _dataLocal(a.admUTI), altaD = _dataLocal(a.dataAlta);
+
+    // Detecta troca de paciente no mesmo leito durante a internação (admissão de
+    // OUTRO paciente no mesmo leito dentro do intervalo) → fallback por leito fica proibido.
+    const leitoTeveTroca = admissoes.some(o =>
+      o.leito === a.leito && o.paciente && o.paciente !== a.paciente &&
+      o.admUTI && (() => { const d = _dataLocal(o.admUTI); return d && adm && altaD && d > adm && d <= altaD; })()
+    );
+
     const nasPac = nas
-      .filter(n => n.paciente === a.paciente || (n.leito === a.leito && _dataLocal(n.data) >= _dataLocal(a.admUTI) && _dataLocal(n.data) <= _dataLocal(a.dataAlta)))
+      .filter(n => {
+        const v = parseFloat(n.total);
+        if (isNaN(v)) return false;
+        if (n.paciente) return n.paciente === a.paciente;       // match exato por paciente
+        // NAS sem paciente: fallback por leito+data, só se não houve troca de paciente
+        if (leitoTeveTroca) return false;
+        const nd = _dataLocal(n.data);
+        return n.leito === a.leito && nd && adm && altaD && nd >= adm && nd <= altaD;
+      })
       .map(n => parseFloat(n.total))
       .filter(v => !isNaN(v));
     const nasMed = nasPac.length ? nasPac.reduce((s,x)=>s+x,0)/nasPac.length : null;
@@ -2485,7 +2599,7 @@ function _indCruzamentos(periodo){
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
   const gravMax = evPer.filter(e => {
     const temDVA = (e.dva && Object.values(e.dva).some(v => v.checked)) || (e.dvaOutros||[]).length > 0;
-    const temVMI = e.vent && (e.vent.includes('TOT') || e.vent.includes('TQT'));
+    const temVMI = _emVMI(e);
     const temATB = (e.atbs||[]).some(a => a.nome && a.nome.trim());
     return temDVA && temVMI && temATB;
   }).length;
@@ -2597,11 +2711,61 @@ function _indIRAS(periodo){
   const pctGlobal = pacientesAvaliados > 0 ? Math.round(pacientesTodosAderentes*100/pacientesAvaliados) : 0;
   const corGlobal = pctGlobal >= 95 ? '' : pctGlobal >= 80 ? 'amarelo' : 'vermelho';
 
+  // ── DENSIDADE DE INCIDÊNCIA DE IRAS (por 1000 dispositivo-dia) ─────────────
+  // Numerador: CULTURAS POSITIVAS cujo sítio mapeia para a topografia (PAV/ITU/IPCS),
+  //            buscadas automaticamente do módulo de culturas (agregado da planilha
+  //            quando carregado; senão, das evoluções locais). Sem digitação manual.
+  // Denominador: dispositivo-dia apurado nas evoluções do período (mesma base
+  //            dos indicadores de dispositivo/VMI). Padrão de vigilância ANVISA/CDC.
+  // NOTA: é uma estimativa por culturas-sentinela. Uma cultura positiva no sítio
+  //       não é necessariamente IRAS confirmada (pode ser colonização); por isso
+  //       o card sinaliza "proxy por cultura".
+  const evPerIRAS = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const _dispDia = (pred) => new Set(
+    evPerIRAS.filter(e => e.leito && e.data && pred(e)).map(e => e.leito + '|' + e.data)
+  ).size;
+  const vmiDia = _dispDia(_emVMI);
+  const svdDia = _dispDia(e => !!e.svd_n);
+  const cvcDia = _dispDia(e => !!(e.avc_l || e.dial_l)); // cateter central: AVC ou CDL
+
+  // Coleta culturas positivas e classifica por sítio → topografia
+  const culturasIRAS = _coletarCulturasIRAS(periodo);
+  const notif = { PAV:0, ITU_AC:0, IPCS_AC:0 };
+  culturasIRAS.forEach(c => { if(notif[c.topografia] != null) notif[c.topografia]++; });
+  const totalNotif = notif.PAV + notif.ITU_AC + notif.IPCS_AC;
+  const fonteCult = culturasIRAS.fonte; // 'agregado' | 'local' | 'nenhuma'
+
+  const _dens = (num, den) => den > 0 ? +(num*1000/den).toFixed(2) : null;
+  const densPAV  = _dens(notif.PAV, vmiDia);
+  const densITU  = _dens(notif.ITU_AC, svdDia);
+  const densIPCS = _dens(notif.IPCS_AC, cvcDia);
+
   let h = '<div class="ind-grid">';
   h += _cardInd('Checklists IRAS', totalCheck, 'no período', '', 'iras_total');
   h += _cardInd('Adesão global (tudo ou nada)', pctGlobal+'%',
                 `${pacientesTodosAderentes}/${pacientesAvaliados} checklists 100% aderentes`, corGlobal, 'iras_pct');
+  h += _cardInd('Culturas-sentinela', totalNotif, 'positivas em sítio de IRAS', totalNotif>0?'laranja':'verde', 'iras_notif');
   h += '</div>';
+
+  // ── Cards de densidade de incidência ──
+  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">🦠 Densidade de incidência estimada (por 1000 dispositivo-dia)</div>';
+  h += '<div class="ind-grid">';
+  const _densCard = (titulo, dens, num, den, fichaId) => {
+    const txt = dens === null ? '–' : dens.toFixed(2);
+    const cor = dens === null ? '' : dens > 0 ? 'laranja' : 'verde';
+    return _cardInd(titulo, txt, den>0 ? `${num} cultura(s) / ${den} disp.-dia` : 'sem dispositivo-dia', cor, fichaId);
+  };
+  h += _densCard('PAV / 1000 VMI-dia', densPAV, notif.PAV, vmiDia, 'iras_dens_pav');
+  h += _densCard('ITU-AC / 1000 SVD-dia', densITU, notif.ITU_AC, svdDia, 'iras_dens_itu');
+  h += _densCard('IPCS-AC / 1000 cateter-dia', densIPCS, notif.IPCS_AC, cvcDia, 'iras_dens_ipcs');
+  h += '</div>';
+  const _fonteTxt = fonteCult === 'agregado' ? 'planilha de culturas (CCIH)'
+                  : fonteCult === 'local' ? 'culturas registradas nas evoluções'
+                  : 'nenhuma fonte de culturas disponível';
+  if(fonteCult === 'nenhuma'){
+    h += '<div class="ind-hint">⚠️ Sem culturas no período. Carregue a planilha de culturas na aba CCIH ou registre culturas nas evoluções para estimar as densidades.</div>';
+  }
+  h += `<div class="ind-hint">📌 Densidade = (culturas positivas no sítio ÷ dispositivo-dia) × 1000. Numerador derivado automaticamente de: <strong>${_fonteTxt}</strong>. É uma <strong>estimativa por culturas-sentinela</strong> — cultura positiva no sítio pode incluir colonização, então o valor superestima a IRAS confirmada pela CCIH. Use para tendência e triagem, não como notificação oficial.</div>`;
 
   // Score por bundle (aderência all-or-nothing por bundle)
   h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">📊 Adesão por Bundle (tudo ou nada)</div>';
@@ -3203,6 +3367,63 @@ function _renderCCIHLocal(periodo){
 }
 
 // Parseia microorg legado ("MRSA (Hemocultura); KPC (Urina)") para array
+// ── Coleta culturas positivas mapeáveis a topografia de IRAS ─────────────────
+// Fonte preferencial: agregado da planilha (_ccihAgregadoCache); senão, culturas
+// registradas nas evoluções do período. Retorna array de {topografia, microorg}
+// com propriedade .fonte = 'agregado'|'local'|'nenhuma'. Filtra por período quando
+// a cultura tem data; culturas sem data são incluídas (não dá para excluí-las).
+function _coletarCulturasIRAS(periodo){
+  const out = [];
+  // 1) Agregado (planilha CCIH) — fonte completa
+  if(_ccihAgregadoCache && Array.isArray(_ccihAgregadoCache.culturas)){
+    _ccihAgregadoCache.culturas.forEach(c => {
+      if(c.negativa || !c.microorg) return;
+      // no agregado o sítio fica em c.cultura; aceita c.sito como fallback
+      const sito = c.cultura || c.sito || '';
+      const topo = _sitioParaTopografia(sito);
+      if(!topo) return;
+      if(c.data && !_dentroPeriodo(c.data, periodo)) return;
+      out.push({ topografia: topo, microorg: (c.microorg||'').toUpperCase() });
+    });
+    out.fonte = 'agregado';
+    return out;
+  }
+  // 2) Local — culturas nas evoluções do período
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  let achou = false;
+  evPer.forEach(e => {
+    const arr = (e.culturas && e.culturas.length) ? e.culturas : _parseMicroorgLegado(e.microorg || '');
+    arr.forEach(c => {
+      if(c.negativa || !c.microorg) return;
+      const topo = _sitioParaTopografia(c.sito || '');
+      if(!topo) return;
+      achou = true;
+      out.push({ topografia: topo, microorg: (c.microorg||'').toUpperCase() });
+    });
+  });
+  out.fonte = achou ? 'local' : 'nenhuma';
+  return out;
+}
+
+// ── Mapeamento SÍTIO de cultura → topografia de IRAS ─────────────────────────
+// Os sítios são texto livre na planilha ("Hemocultura", "Secreção traqueal",
+// "Urocultura", "Ponta de cateter"...). Normaliza e classifica por palavra-chave.
+// Retorna 'PAV' | 'ITU_AC' | 'IPCS_AC' | null (sítio não mapeável ao dispositivo).
+function _sitioParaTopografia(sito){
+  const s = String(sito||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos
+    .toLowerCase();
+  if(!s) return null;
+  // Respiratório baixo → PAV (associada à VMI; o cruzamento com VMI-dia ocorre no denominador)
+  if(/(traqueal|aspirado|lavado|bronc|alveolar|escarro|secrec.*resp|tubo|cultura.*resp|lba)/.test(s)) return 'PAV';
+  // Urinário → ITU-AC
+  if(/(urin|urocult|urina|jato|vesical|cultura.*urin)/.test(s)) return 'ITU_AC';
+  // Corrente sanguínea / cateter central → IPCS-AC
+  if(/(hemocult|sangue|corrente|cateter|ponta.*cateter|cvc|acesso.*central)/.test(s)) return 'IPCS_AC';
+  return null;
+}
+
 function _parseMicroorgLegado(raw){
   if(!raw) return [];
   return raw.split(';').map(p => p.trim()).filter(Boolean).map(p => {
@@ -6658,13 +6879,11 @@ function _coletarDadosRelatorio(periodo, secoes){
     const altasPer = altas.filter(a => _dentroPeriodo(a.dataAlta, periodo));
     const diasPeriodo = Math.round((periodo.fim - periodo.inicio)/86400000) + 1;
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
-    const turnos = new Set();
-    evPer.forEach(e => { if(e.leito && e.data && e.turno) turnos.add(e.leito+'|'+e.data+'|'+e.turno); });
-    const pacientesDia = Math.round(turnos.size * 0.5 * 10) / 10;
+    const pacientesDia = _pacientesDia(evPer);
     const perms = altasPer.map(a => _diasEntre(a.admUTI, a.dataAlta)).filter(d => d !== null);
     dados.secoes.ocupacao = {
       admissoes: admPer.length, altas: altasPer.length,
-      taxaOcupacao: TOTAL*diasPeriodo > 0 ? pct(pacientesDia, TOTAL*diasPeriodo) : null,
+      taxaOcupacao: TOTAL*diasPeriodo > 0 ? Math.min(100, +pct(pacientesDia, TOTAL*diasPeriodo)) : null,
       giroLeito: TOTAL > 0 ? +(admPer.length/TOTAL).toFixed(1) : null,
       permanenciaMedia: med(perms), diasPeriodo, pacientesDia, leitos: TOTAL
     };
@@ -6727,8 +6946,8 @@ function _coletarDadosRelatorio(periodo, secoes){
   if(secoes.includes('clinicos')){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const total = evPer.length;
-    const comBraden = evPer.filter(e => e.bradScore && e.bradScore !== '–').length;
-    const comMorse  = evPer.filter(e => e.morseScore && e.morseScore !== '–' && e.morseScore !== '0').length;
+    const comBraden = evPer.filter(e => e.bradScore && e.bradScore !== '–' && !isNaN(parseInt(e.bradScore))).length;
+    const comMorse  = evPer.filter(e => e.morseScore && e.morseScore !== '–' && !isNaN(parseInt(e.morseScore))).length;
     dados.secoes.clinicos = {
       totalEvolucoes: total,
       isolContato:   evPer.filter(e=>e.isolamento==='Contato').length,
@@ -6746,7 +6965,8 @@ function _coletarDadosRelatorio(periodo, secoes){
   if(secoes.includes('ventilacao')){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const total = evPer.length;
-    const diasVMI = evPer.filter(e=>e.vent&&(e.vent.includes('TOT')||e.vent.includes('TQT'))).length;
+    const diasVMI = evPer.filter(_emVMI).length;
+    const diasPac = _pacientesDia(evPer);
     const fio2s = evPer.map(e=>parseFloat(e.vmi_fio2)).filter(n=>!isNaN(n)&&n>0&&n<=100);
     const peeps = evPer.map(e=>parseFloat(e.vmi_peep)).filter(n=>!isNaN(n)&&n>0);
     const frs   = evPer.map(e=>parseFloat(e.vmi_fr)).filter(n=>!isNaN(n)&&n>0);
@@ -6754,7 +6974,7 @@ function _coletarDadosRelatorio(periodo, secoes){
     const oxig  = {}; evPer.forEach(e=>{ if(e.vent) oxig[e.vent]=(oxig[e.vent]||0)+1; });
     dados.secoes.ventilacao = {
       totalEvolucoes: total, diasVMI,
-      taxaVMI: pct(diasVMI, total), fio2Medio: med(fio2s),
+      taxaVMI: pct(diasVMI, diasPac), fio2Medio: med(fio2s),
       peepMedio: med(peeps), frMedia: med(frs),
       modos: Object.entries(modos).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>({k,v})),
       oxigenoterapia: Object.entries(oxig).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>({k,v}))
@@ -6765,7 +6985,7 @@ function _coletarDadosRelatorio(periodo, secoes){
   if(secoes.includes('dispositivos')){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const total = evPer.length;
-    const diasPac = new Set(evPer.map(e=>e.leito+'|'+e.data)).size;
+    const diasPac = _pacientesDia(evPer);
     const cv = campo => evPer.filter(e=>e[campo]).length;
     const retiPer = dispLog.filter(d => _dentroPeriodo(d.data_retirada, periodo));
     const tempoMedio = tipo => {
@@ -6855,11 +7075,12 @@ function _coletarDadosRelatorio(periodo, secoes){
     const total = evPer.length;
     dados.secoes.nutricao = {
       totalEvolucoes: total,
-      sne:  evPer.filter(e=>e.dieta==='SNE').length,
-      soe:  evPer.filter(e=>e.dieta==='SOE').length,
-      oral: evPer.filter(e=>e.dieta==='Oral').length,
-      npt:  evPer.filter(e=>e.dieta==='NPT').length,
-      jejum:evPer.filter(e=>e.dieta==='Jejum/Zero').length
+      sne:  evPer.filter(e=>_temDieta(e,'SNE')).length,
+      soe:  evPer.filter(e=>_temDieta(e,'SOE')).length,
+      sng:  evPer.filter(e=>_temDieta(e,'SNG')).length,
+      oral: evPer.filter(e=>_temDieta(e,'Oral')).length,
+      npt:  evPer.filter(e=>_temDieta(e,'NPT')).length,
+      jejum:evPer.filter(e=>_temDieta(e,'Jejum/Zero')).length
     };
   }
 
@@ -6904,7 +7125,7 @@ function _coletarDadosRelatorio(periodo, secoes){
     });
     const gravMax = evPer.filter(e=>{
       const temDVA=(e.dva&&Object.values(e.dva).some(v=>v.checked))||(e.dvaOutros||[]).length>0;
-      const temVMI=e.vent&&(e.vent.includes('TOT')||e.vent.includes('TQT'));
+      const temVMI=_emVMI(e);
       const temATB=(e.atbs||[]).some(a=>a.nome&&a.nome.trim());
       return temDVA&&temVMI&&temATB;
     }).length;
@@ -6979,12 +7200,27 @@ function _coletarDadosRelatorio(periodo, secoes){
         if(!falhouAlgum) pacientesAderentes++;
       }
     });
+    // Densidade de incidência estimada (culturas-sentinela ÷ dispositivo-dia × 1000)
+    const evPerIRAS = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const _dd = (pred) => new Set(evPerIRAS.filter(e=>e.leito&&e.data&&pred(e)).map(e=>e.leito+'|'+e.data)).size;
+    const vmiDia = _dd(_emVMI), svdDia = _dd(e=>!!e.svd_n), cvcDia = _dd(e=>!!(e.avc_l||e.dial_l));
+    const culturasIRAS = _coletarCulturasIRAS(periodo);
+    const notif = { PAV:0, ITU_AC:0, IPCS_AC:0 };
+    culturasIRAS.forEach(c => { if(notif[c.topografia]!=null) notif[c.topografia]++; });
+    const _dens = (num,den) => den>0 ? +(num*1000/den).toFixed(2) : null;
+
     dados.secoes.iras = {
       totalChecklists: checklists.length,
       pacientesAvaliados,
       pacientesAderentes,
       adesaoGlobal: pacientesAvaliados > 0 ? pct(pacientesAderentes, pacientesAvaliados) : null,
       metodologia: 'tudo_ou_nada_IHI',
+      densidade: {
+        fonte: culturasIRAS.fonte,
+        pav:  { n: notif.PAV,     dispDia: vmiDia, valor: _dens(notif.PAV, vmiDia) },
+        itu:  { n: notif.ITU_AC,  dispDia: svdDia, valor: _dens(notif.ITU_AC, svdDia) },
+        ipcs: { n: notif.IPCS_AC, dispDia: cvcDia, valor: _dens(notif.IPCS_AC, cvcDia) }
+      },
       bundles: Object.entries(bundleStats).map(([id,st])=>({
         id, titulo:st.titulo,
         observados: st.observados,
@@ -7392,7 +7628,7 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
       linha('Evoluções totais', t);
       const pctN=(n)=>t>0?+(n*100/t).toFixed(1)+'%':'–';
       tabela(['Via de Alimentação','Evoluções','%'],[
-        ['SNE',s.sne,pctN(s.sne)], ['SOE',s.soe,pctN(s.soe)],
+        ['SNE',s.sne,pctN(s.sne)], ['SOE',s.soe,pctN(s.soe)], ['SNG',s.sng,pctN(s.sng)],
         ['Oral',s.oral,pctN(s.oral)], ['NPT',s.npt,pctN(s.npt)],
         ['Jejum/Zero',s.jejum,pctN(s.jejum)]
       ],[70,25,25]);
@@ -7457,6 +7693,26 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
           }),
           [85, 28, 28, 33]
         );
+      }
+      if(s.densidade){
+        const dz = s.densidade;
+        const fmt = v => v == null ? '–' : v.toFixed(2);
+        y+=2;
+        tabela(
+          ['Densidade estimada (/1000 disp.-dia)','Culturas','Disp.-dia','Densidade'],
+          [
+            ['PAV (sítio respiratório)',  dz.pav.n,  dz.pav.dispDia,  fmt(dz.pav.valor)],
+            ['ITU-AC (urocultura)',       dz.itu.n,  dz.itu.dispDia,  fmt(dz.itu.valor)],
+            ['IPCS-AC (hemo/cateter)',    dz.ipcs.n, dz.ipcs.dispDia, fmt(dz.ipcs.valor)]
+          ],
+          [90, 26, 26, 32]
+        );
+        const fonteTxt = dz.fonte === 'agregado' ? 'planilha de culturas (CCIH)'
+                       : dz.fonte === 'local' ? 'culturas das evoluções' : 'sem culturas no período';
+        y+=1;
+        doc.setFontSize(7); doc.setTextColor(120,120,120);
+        doc.text(_trans(`Estimativa por culturas-sentinela (fonte: ${fonteTxt}). Pode incluir colonização — não substitui notificação da CCIH.`), M, y);
+        doc.setTextColor(0,0,0); y+=4;
       }
     }
 
