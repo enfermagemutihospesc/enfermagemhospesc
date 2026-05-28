@@ -2251,18 +2251,26 @@ function _indDispositivos(periodo){
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
   const diasPaciente = _pacientesDia(evPer);
 
-  // Para cada tipo, soma dias-dispositivo: conta evoluções onde o dispositivo estava presente
-  const diasDisp = {};
-  tipos.forEach(t => { diasDisp[t] = 0; });
+  // Dias-dispositivo = pares únicos (leito × dia) com o dispositivo presente.
+  // Usa a MESMA lógica do denominador (leito × dia-calendário) para garantir
+  // que a taxa nunca ultrapasse 100%: um paciente com dois turnos no mesmo dia
+  // conta apenas 1 dia-dispositivo, não 2.
+  const setsDisp = {};
+  tipos.forEach(t => { setsDisp[t] = new Set(); });
 
   evPer.forEach(e => {
-    if (e.avc_l)  diasDisp.AVC++;
-    if (e.dial_l) diasDisp.CDL++;
-    if (e.svd_n)  diasDisp.SVD++;
-    if (e.sne_n)  diasDisp.SNE++;
-    if (e.tot_n || (e.vent && e.vent.includes('TOT'))) diasDisp.TOT++;
-    if (e.tqt_n || (e.vent && e.vent.includes('TQT'))) diasDisp.TQT++;
+    if (!e.leito || !e.data) return;
+    const k = e.leito + '|' + e.data;
+    if (e.avc_l)  setsDisp.AVC.add(k);
+    if (e.dial_l) setsDisp.CDL.add(k);
+    if (e.svd_n)  setsDisp.SVD.add(k);
+    if (e.sne_n)  setsDisp.SNE.add(k);
+    if (e.tot_n || (e.vent && e.vent.includes('TOT'))) setsDisp.TOT.add(k);
+    if (e.tqt_n || (e.vent && e.vent.includes('TQT'))) setsDisp.TQT.add(k);
   });
+
+  const diasDisp = {};
+  tipos.forEach(t => { diasDisp[t] = setsDisp[t].size; });
 
   // Tempo médio de uso por paciente: entre instalação e retirada no log
   const tempos = {};
@@ -6986,7 +6994,10 @@ function _coletarDadosRelatorio(periodo, secoes){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const total = evPer.length;
     const diasPac = _pacientesDia(evPer);
-    const cv = campo => evPer.filter(e=>e[campo]).length;
+    const cv = campo => evPer.filter(e=>e[campo]).length; // prevalência por evolução
+    // dias-dispositivo: par único leito×dia (igual ao denominador diasPac)
+    const cd = campo => new Set(evPer.filter(e=>e[campo]&&e.leito&&e.data).map(e=>e.leito+'|'+e.data)).size;
+    const cdVent = (tok) => new Set(evPer.filter(e=>e.leito&&e.data&&(e[tok]||(e.vent&&e.vent.includes(tok.toUpperCase())))).map(e=>e.leito+'|'+e.data)).size;
     const retiPer = dispLog.filter(d => _dentroPeriodo(d.data_retirada, periodo));
     const tempoMedio = tipo => {
       const arr = retiPer.filter(r=>r.tipo===tipo&&r.data_instalacao&&r.data_retirada).map(r=>_diasEntre(r.data_instalacao,r.data_retirada)).filter(d=>d!==null);
@@ -6998,11 +7009,11 @@ function _coletarDadosRelatorio(periodo, secoes){
       prevAVC: pct(cv('avc_l'),total), prevCDL: pct(cv('dial_l'),total),
       prevSVD: pct(cv('svd_n'),total), prevSNE: pct(cv('sne_n'),total),
       prevTOT: pct(cv('tot_n'),total), prevTQT: pct(cv('tqt_n'),total),
-      diasAVC: cv('avc_l'), diasCDL: cv('dial_l'), diasSVD: cv('svd_n'),
-      diasSNE: cv('sne_n'), diasTOT: cv('tot_n'), diasTQT: cv('tqt_n'),
-      taxaAVC: pct(cv('avc_l'),diasPac), taxaCDL: pct(cv('dial_l'),diasPac),
-      taxaSVD: pct(cv('svd_n'),diasPac), taxaSNE: pct(cv('sne_n'),diasPac),
-      taxaTOT: pct(cv('tot_n'),diasPac), taxaTQT: pct(cv('tqt_n'),diasPac),
+      diasAVC: cd('avc_l'), diasCDL: cd('dial_l'), diasSVD: cd('svd_n'),
+      diasSNE: cd('sne_n'), diasTOT: cdVent('tot_n'), diasTQT: cdVent('tqt_n'),
+      taxaAVC: pct(cd('avc_l'),diasPac), taxaCDL: pct(cd('dial_l'),diasPac),
+      taxaSVD: pct(cd('svd_n'),diasPac), taxaSNE: pct(cd('sne_n'),diasPac),
+      taxaTOT: pct(cdVent('tot_n'),diasPac), taxaTQT: pct(cdVent('tqt_n'),diasPac),
       totalAVPs: qtdAVPs, totalRetiradas: retiPer.length,
       tempoMedioAVC: tempoMedio('AVC'), tempoMedioCDL: tempoMedio('CDL'),
       tempoMedioSVD: tempoMedio('SVD'), tempoMedioTOT: tempoMedio('TOT')
