@@ -2310,7 +2310,8 @@ function _indVentilacao(periodo){
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
   const total = evPer.length;
 
-  const diasVMI = evPer.filter(_emVMI).length;
+  // dias-VMI = pares únicos (leito × dia) com VMI ativo — mesma unidade do denominador
+  const diasVMI = new Set(evPer.filter(_emVMI).filter(e=>e.leito&&e.data).map(e=>e.leito+'|'+e.data)).size;
   const diasPac = _pacientesDia(evPer);
   const taxaVMI = diasPac > 0 ? (diasVMI*100/diasPac).toFixed(1)+'%' : '–';
 
@@ -6973,7 +6974,7 @@ function _coletarDadosRelatorio(periodo, secoes){
   if(secoes.includes('ventilacao')){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const total = evPer.length;
-    const diasVMI = evPer.filter(_emVMI).length;
+    const diasVMI = new Set(evPer.filter(_emVMI).filter(e=>e.leito&&e.data).map(e=>e.leito+'|'+e.data)).size;
     const diasPac = _pacientesDia(evPer);
     const fio2s = evPer.map(e=>parseFloat(e.vmi_fio2)).filter(n=>!isNaN(n)&&n>0&&n<=100);
     const peeps = evPer.map(e=>parseFloat(e.vmi_peep)).filter(n=>!isNaN(n)&&n>0);
