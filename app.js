@@ -2993,6 +2993,13 @@ function _indSAENanda(periodo){
   const totalEv = evPer.length;
 
   // Contagem de diagnósticos NANDA
+  // OBS: evoluções com mais de 120 dias são compactadas (_resumirEvolucao) e
+  // perdem os títulos reais dos diagnósticos, ficando com o placeholder
+  // 'Diagnóstico arquivado'. Esses NÃO devem entrar no ranking por título
+  // (poluiria o topo da lista com um pseudo-diagnóstico), mas continuam
+  // contando no total de SAE/dx para refletir que a SAE foi feita.
+  const PLACEHOLDER_ARQUIV = 'diagnóstico arquivado';
+  let dxArquivados = 0;
   const freqDx = {};
   const freqDominio = {};
   const freqTipo = {};
@@ -3002,6 +3009,7 @@ function _indSAENanda(periodo){
       // Normaliza título
       const titulo = dx.titulo_nanda.trim();
       const chave = titulo.toLowerCase();
+      if (chave === PLACEHOLDER_ARQUIV) { dxArquivados++; return; } // pula placeholder
       if (!freqDx[chave]) freqDx[chave] = { titulo, codigo: dx.codigo_nanda||'', count: 0 };
       freqDx[chave].count++;
       // Domínio
@@ -3019,7 +3027,8 @@ function _indSAENanda(periodo){
 
   const rankDx = Object.values(freqDx).sort((a,b)=>b.count-a.count);
   const rankDom = Object.entries(freqDominio).sort((a,b)=>b[1]-a[1]);
-  const totalDx = Object.values(freqDx).reduce((s,v)=>s+v.count,0);
+  const totalDxDetalhado = Object.values(freqDx).reduce((s,v)=>s+v.count,0);
+  const totalDx = totalDxDetalhado + dxArquivados; // total para "Total de diagnósticos NANDA"
 
   let h = '<div class="ind-grid">';
   h += _cardInd('Evoluções no período', totalEv, '', '', 'sae_total_ev');
@@ -3035,10 +3044,16 @@ function _indSAENanda(periodo){
 
   // Ranking dos diagnósticos mais frequentes
   h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">🔝 Diagnósticos de Enfermagem Mais Frequentes</div>';
+  if (dxArquivados > 0) {
+    h += `<div class="ind-hint">ℹ️ ${dxArquivados} diagnóstico(s) vêm de evoluções com mais de 120 dias (compactadas no resumo) e não têm título detalhado disponível — não entram no ranking abaixo, mas estão contados no total geral.</div>`;
+  }
+  if (!rankDx.length) {
+    h += '<div class="ind-hint">Nenhum diagnóstico com título detalhado no período. ' + (dxArquivados>0 ? 'Todos foram arquivados pela compactação automática.' : '') + '</div>';
+  } else {
   h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.82rem;">';
   h += '<thead><tr style="background:#eaf5ee;"><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #c8e6d5;">#</th><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #c8e6d5;">Diagnóstico NANDA</th><th style="padding:7px 10px;text-align:center;border-bottom:2px solid #c8e6d5;">Código</th><th style="padding:7px 10px;text-align:center;border-bottom:2px solid #c8e6d5;">Freq.</th><th style="padding:7px 10px;text-align:center;border-bottom:2px solid #c8e6d5;">%</th></tr></thead><tbody>';
   rankDx.slice(0, 15).forEach((dx, i) => {
-    const pct = _pct(dx.count, totalDx);
+    const pct = _pct(dx.count, totalDxDetalhado);
     const bar = Math.round(dx.count/rankDx[0].count*100);
     h += `<tr style="border-bottom:1px solid #f0f0f0;${i%2===0?'':'background:#fafafa'}">
       <td style="padding:6px 10px;font-weight:700;color:var(--azul);">${i+1}</td>
@@ -3052,6 +3067,7 @@ function _indSAENanda(periodo){
     </tr>`;
   });
   h += '</tbody></table></div>';
+  }
 
   // Distribuição por domínio
   if (rankDom.length) {
@@ -3065,7 +3081,7 @@ function _indSAENanda(periodo){
     h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">🏷️ Tipo de Diagnóstico</div>';
     h += '<div class="ind-grid">';
     Object.entries(freqTipo).sort((a,b)=>b[1]-a[1]).forEach(([tipo, n]) => {
-      h += _cardInd(tipo, n, _pct(n, totalDx), '', 'sae_tipo_'+tipo.toLowerCase().replace(/\s/g,'_'));
+      h += _cardInd(tipo, n, _pct(n, totalDxDetalhado), '', 'sae_tipo_'+tipo.toLowerCase().replace(/\s/g,'_'));
     });
     h += '</div>';
   }
@@ -7153,10 +7169,20 @@ function _coletarDadosRelatorio(periodo, secoes){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const comSAE = evPer.filter(e => e.sae && e.sae.diagnosticos && e.sae.diagnosticos.length);
     const freqDx = {};
-    comSAE.forEach(e => { e.sae.diagnosticos.forEach(dx => { if(dx.titulo_nanda){ const k=dx.titulo_nanda.trim(); freqDx[k]=(freqDx[k]||0)+1; } }); });
+    let dxArquivados = 0;
+    comSAE.forEach(e => {
+      e.sae.diagnosticos.forEach(dx => {
+        if(!dx.titulo_nanda) return;
+        const k = dx.titulo_nanda.trim();
+        // Pula placeholder de evolução compactada (>120 dias) — sem título real
+        if(k.toLowerCase() === 'diagnóstico arquivado'){ dxArquivados++; return; }
+        freqDx[k] = (freqDx[k]||0) + 1;
+      });
+    });
     dados.secoes.sae_nanda = {
       totalEvolucoes: evPer.length, comSAE: comSAE.length,
       taxaSAE: pct(comSAE.length, evPer.length),
+      dxArquivados,
       top5: Object.entries(freqDx).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([dx,n])=>({dx,n}))
     };
   }
