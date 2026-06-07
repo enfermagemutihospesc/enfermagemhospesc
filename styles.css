@@ -461,7 +461,21 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:8px 
 
 @media(max-width:600px){
   #modal-checklist-setorial{padding:0!important;}
-  #modal-checklist-setorial .modal{border-radius:0!important;max-width:100%!important;max-height:100vh!important;height:100vh!important;width:100%!important;}
+  /* Em iOS Safari / Chrome Android o `100vh` corresponde ao viewport GRANDE
+     (barra de URL recolhida), fazendo o rodapé sair da área visível. O
+     `100dvh` (dynamic viewport height) acompanha o que realmente está visível,
+     mantendo o botão Salvar acessível mesmo com a barra do navegador ou o
+     teclado virtual abertos. Mantemos `100vh` como fallback para navegadores
+     antigos que não conhecem `100dvh`. */
+  #modal-checklist-setorial .modal{
+    border-radius:0!important;
+    max-width:100%!important;
+    max-height:100vh!important;
+    max-height:100dvh!important;
+    height:100vh!important;
+    height:100dvh!important;
+    width:100%!important;
+  }
 }
 /* Print do checklist agora usa janela dedicada — fallback se pop-up bloqueado */
 @media print{
