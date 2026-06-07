@@ -1180,12 +1180,27 @@
         </div>
       </div>
 
-      <!-- Tabela de materiais -->
-      <div style="overflow-x:auto;">
+      <!-- Tabela de materiais (desktop) -->
+      <div class="cl-tabela-wrap" style="overflow-x:auto;">
         <table id="cl-tabela" style="width:100%;border-collapse:collapse;font-size:.72rem;min-width:820px;">
           <thead id="cl-thead"></thead>
           <tbody id="cl-tbody"></tbody>
         </table>
+      </div>
+
+      <!-- Carrossel de leitos (mobile) -->
+      <div class="cl-carrossel-wrap" id="cl-carrossel">
+        <div class="cl-carrossel-nav">
+          <button class="cl-carr-btn" id="cl-carr-prev" onclick="clCarrNavegar(-1)" disabled>&#8249;</button>
+          <div class="cl-carr-titulo">
+            <div class="cl-carr-leito" id="cl-carr-nome">LEITO 01</div>
+            <div class="cl-carr-prog" id="cl-carr-prog">1 de 11</div>
+          </div>
+          <button class="cl-carr-btn" id="cl-carr-next" onclick="clCarrNavegar(1)">&#8250;</button>
+        </div>
+        <div class="cl-card-progresso"><div class="cl-card-progresso-fill" id="cl-carr-fill" style="width:0%"></div></div>
+        <div class="cl-dots" id="cl-dots"></div>
+        <div class="cl-carrossel-body" id="cl-carr-body"></div>
       </div>
 
       <!-- Observações -->
