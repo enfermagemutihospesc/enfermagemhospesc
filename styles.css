@@ -474,25 +474,14 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:8px 
   body.printing-checklist .cl-tabela-wrap{display:block!important;}
 }
 
-/* ── Footer mobile: visível acima da barra do navegador ── */
-@media(max-width:600px){
-  #cl-footer{
-    padding-bottom:calc(12px + env(safe-area-inset-bottom, 16px))!important;
-    flex-direction:column!important;
-    align-items:stretch!important;
-    gap:6px!important;
+/* ── Botões só-desktop no checklist ── */
+.cl-btn-desktop-only { display: inline-flex; }
+@media(max-width:700px){
+  .cl-btn-desktop-only { display: none !important; }
+  /* Footer compacto no mobile */
+  #cl-footer {
+    padding: 8px 12px !important;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 10px)) !important;
   }
-  #cl-footer-btns{
-    display:flex!important;
-    flex-direction:column!important;
-    gap:6px!important;
-  }
-  #cl-footer-btns .btn{
-    width:100%!important;
-    justify-content:center!important;
-    padding:13px!important;
-    font-size:.9rem!important;
-    text-align:center!important;
-  }
-  #cl-save-status{text-align:center!important;}
+  #cl-footer-btns .btn { padding: 8px 14px !important; font-size: .8rem !important; }
 }
