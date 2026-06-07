@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>UTI – Hospital dos Pescadores</title>
+<title>UTI â€“ Hospital dos Pescadores</title>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -21,10 +21,10 @@
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════
-     CONFIGURAÇÃO FIREBASE
-     ─ Substitua os valores abaixo pelos do seu projeto Firebase
-     ══════════════════════════════════════════ -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     CONFIGURAÃ‡ÃƒO FIREBASE
+     â”€ Substitua os valores abaixo pelos do seu projeto Firebase
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
 
 
 <!-- TELA LOGIN -->
@@ -32,8 +32,8 @@
   <div class="login-card">
     <div class="login-logo">
       <div id="logo-login" style="margin-bottom:1rem;"></div>
-      <span class="login-badge">SISTEMA DE EVOLUÇÃO</span>
-      <h1>PREFEITURA MUNICIPAL DO NATAL<br>HOSPITAL DOS PESCADORES – UTI</h1>
+      <span class="login-badge">SISTEMA DE EVOLUÃ‡ÃƒO</span>
+      <h1>PREFEITURA MUNICIPAL DO NATAL<br>HOSPITAL DOS PESCADORES â€“ UTI</h1>
       <p>Acesso do Enfermeiro</p>
     </div>
     <div class="login-field">
@@ -42,26 +42,26 @@
     </div>
     <div class="login-field">
       <label>Senha</label>
-      <input type="password" id="li-senha" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') fazerLogin()">
+      <input type="password" id="li-senha" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autocomplete="current-password" onkeydown="if(event.key==='Enter') fazerLogin()">
     </div>
     <button class="btn-login" id="btn-entrar" onclick="fazerLogin()">Entrar</button>
     <div class="login-err" id="login-err"></div>
-    <p class="login-msg">Primeiro acesso? Peça ao administrador para cadastrar seu e-mail.</p>
+    <p class="login-msg">Primeiro acesso? PeÃ§a ao administrador para cadastrar seu e-mail.</p>
   </div>
 </div>
 
-<!-- TELA CONFIGURAÇÃO (exibida quando Firebase não está configurado) -->
+<!-- TELA CONFIGURAÃ‡ÃƒO (exibida quando Firebase nÃ£o estÃ¡ configurado) -->
 <div id="t-config" class="tela" style="padding:2rem;min-height:100vh;align-items:center;justify-content:center;">
   <div class="config-banner">
-    <h3>⚙️ Configure o Firebase para ativar a nuvem</h3>
-    <p>Para salvar os dados na nuvem e compartilhar entre todos os enfermeiros, você precisa configurar um projeto Firebase gratuito.</p>
+    <h3>âš™ï¸ Configure o Firebase para ativar a nuvem</h3>
+    <p>Para salvar os dados na nuvem e compartilhar entre todos os enfermeiros, vocÃª precisa configurar um projeto Firebase gratuito.</p>
     <p><strong>Passo a passo:</strong></p>
     <p>1. Acesse <strong>console.firebase.google.com</strong> e crie um projeto</p>
-    <p>2. Ative <strong>Firestore Database</strong> (modo de produção)</p>
-    <p>3. Ative <strong>Authentication → E-mail/senha</strong></p>
-    <p>4. Vá em <strong>Configurações do projeto → Seus apps → App da Web</strong></p>
-    <p>5. Copie as configurações e cole no início deste arquivo HTML onde está <code>FIREBASE_CONFIG</code></p>
-    <p>6. Cadastre os enfermeiros em <strong>Authentication → Usuários</strong></p>
+    <p>2. Ative <strong>Firestore Database</strong> (modo de produÃ§Ã£o)</p>
+    <p>3. Ative <strong>Authentication â†’ E-mail/senha</strong></p>
+    <p>4. VÃ¡ em <strong>ConfiguraÃ§Ãµes do projeto â†’ Seus apps â†’ App da Web</strong></p>
+    <p>5. Copie as configuraÃ§Ãµes e cole no inÃ­cio deste arquivo HTML onde estÃ¡ <code>FIREBASE_CONFIG</code></p>
+    <p>6. Cadastre os enfermeiros em <strong>Authentication â†’ UsuÃ¡rios</strong></p>
     <p>Enquanto isso, o sistema funciona offline com dados locais.</p>
     <button class="btn btn-pri" onclick="usarOffline()">Continuar sem nuvem (local)</button>
   </div>
@@ -71,35 +71,35 @@
 <div id="t-turno" style="display:none;">
   <div class="logo-h">
     <div id="logo-turno" style="margin-bottom:.8rem;"></div>
-    <h1>PREFEITURA MUNICIPAL DO NATAL<br>HOSPITAL DOS PESCADORES – UTI</h1>
-    <p>Sistema de Evolução do Enfermeiro</p>
+    <h1>PREFEITURA MUNICIPAL DO NATAL<br>HOSPITAL DOS PESCADORES â€“ UTI</h1>
+    <p>Sistema de EvoluÃ§Ã£o do Enfermeiro</p>
   </div>
   <div class="turno-cards">
-    <button class="turno-btn" onclick="escolherTurno('DIURNO')"><span class="turno-icon">☀️</span><span class="turno-label">Turno<br>Diurno</span></button>
-    <button class="turno-btn" onclick="escolherTurno('NOTURNO')"><span class="turno-icon">🌙</span><span class="turno-label">Turno<br>Noturno</span></button>
+    <button class="turno-btn" onclick="escolherTurno('DIURNO')"><span class="turno-icon">â˜€ï¸</span><span class="turno-label">Turno<br>Diurno</span></button>
+    <button class="turno-btn" onclick="escolherTurno('NOTURNO')"><span class="turno-icon">ðŸŒ™</span><span class="turno-label">Turno<br>Noturno</span></button>
   </div>
   <div class="sync-status" id="sync-status">
     <span class="sync-dot" id="sync-dot"></span>
-    <span id="sync-txt">verificando conexão...</span>
+    <span id="sync-txt">verificando conexÃ£o...</span>
   </div>
   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:1rem;">
-    <button class="btn btn-sec btn-sm" onclick="abrirTrocaSenhaVoluntaria()">🔑 Trocar minha senha</button>
-    <button class="btn btn-sec btn-sm" id="btn-gerenciar-usuarios" style="display:none;" onclick="abrirGerenciarUsuarios()">👥 Gerenciar usuários</button>
-    <button class="btn btn-sec btn-sm" onclick="fazerLogout()">🚪 Sair</button>
+    <button class="btn btn-sec btn-sm" onclick="abrirTrocaSenhaVoluntaria()">ðŸ”‘ Trocar minha senha</button>
+    <button class="btn btn-sec btn-sm" id="btn-gerenciar-usuarios" style="display:none;" onclick="abrirGerenciarUsuarios()">ðŸ‘¥ Gerenciar usuÃ¡rios</button>
+    <button class="btn btn-sec btn-sm" onclick="fazerLogout()">ðŸšª Sair</button>
   </div>
 </div>
 
-<!-- TELA TROCA DE SENHA (primeiro acesso ou voluntária) -->
+<!-- TELA TROCA DE SENHA (primeiro acesso ou voluntÃ¡ria) -->
 <div id="t-trocasenha" class="tela" style="display:none;padding:2rem;min-height:100vh;align-items:center;justify-content:center;">
   <div class="login-card">
     <div class="login-logo">
-      <span class="login-badge">SEGURANÇA</span>
+      <span class="login-badge">SEGURANÃ‡A</span>
       <h1>Definir senha</h1>
       <p id="ts-sub">Defina uma nova senha de acesso.</p>
     </div>
     <div class="login-field">
       <label>Nova senha</label>
-      <input type="password" id="ts-nova" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+      <input type="password" id="ts-nova" placeholder="mÃ­nimo 6 caracteres" autocomplete="new-password">
     </div>
     <div class="login-field">
       <label>Confirmar nova senha</label>
@@ -111,31 +111,31 @@
   </div>
 </div>
 
-<!-- TELA GERENCIAR USUÁRIOS (admin) -->
+<!-- TELA GERENCIAR USUÃRIOS (admin) -->
 <div id="t-usuarios" class="tela" style="display:none;">
   <div class="app-header" style="border-radius:var(--r);">
-    <div><h2>👥 Gerenciar Usuários</h2><small>Adicionar, ativar/desativar e remover acessos</small></div>
+    <div><h2>ðŸ‘¥ Gerenciar UsuÃ¡rios</h2><small>Adicionar, ativar/desativar e remover acessos</small></div>
     <div class="header-right">
-      <span class="badge-user" onclick="irTelaTurno(true);mostrarTela('t-turno');">← Voltar</span>
+      <span class="badge-user" onclick="irTelaTurno(true);mostrarTela('t-turno');">â† Voltar</span>
     </div>
   </div>
   <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;">
     <div class="secao" style="margin-bottom:1rem;">
-      <div class="secao-t">Adicionar novo usuário</div>
+      <div class="secao-t">Adicionar novo usuÃ¡rio</div>
       <div class="secao-c">
         <div class="fl"><label>Nome completo</label><input type="text" id="add-nome" placeholder="Ex: MARIA DA SILVA SANTOS"></div>
         <div class="dc">
           <div class="fl"><label>E-mail institucional</label><input type="email" id="add-email" placeholder="nome.s@hospesc.com"></div>
           <div class="fl"><label>COREN</label><input type="text" id="add-coren" placeholder="000.000"></div>
         </div>
-        <div class="fl"><label>Senha provisória</label><input type="text" id="add-senha" placeholder="mínimo 6 caracteres (o usuário troca no 1º acesso)" value="hospesc123"></div>
-        <button class="btn btn-pri" id="btn-add-user" onclick="adicionarUsuario()" style="margin-top:8px;">+ Criar usuário</button>
+        <div class="fl"><label>Senha provisÃ³ria</label><input type="text" id="add-senha" placeholder="mÃ­nimo 6 caracteres (o usuÃ¡rio troca no 1Âº acesso)" value="hospesc123"></div>
+        <button class="btn btn-pri" id="btn-add-user" onclick="adicionarUsuario()" style="margin-top:8px;">+ Criar usuÃ¡rio</button>
         <div class="login-err" id="add-err" style="margin-top:6px;"></div>
-        <p style="font-size:.7rem;color:var(--muted);margin-top:6px;">O usuário entrará com a senha provisória e será obrigado a defini-la no primeiro acesso.</p>
+        <p style="font-size:.7rem;color:var(--muted);margin-top:6px;">O usuÃ¡rio entrarÃ¡ com a senha provisÃ³ria e serÃ¡ obrigado a defini-la no primeiro acesso.</p>
       </div>
     </div>
     <div class="secao">
-      <div class="secao-t">Usuários cadastrados</div>
+      <div class="secao-t">UsuÃ¡rios cadastrados</div>
       <div class="secao-c"><div id="usuarios-lista"></div></div>
     </div>
   </div>
@@ -144,7 +144,7 @@
 <!-- TELA LEITOS -->
 <div id="t-leitos" class="tela">
   <div class="app-header" style="border-radius:var(--r);">
-    <div><h2>UTI – Hospital dos Pescadores</h2><small>Selecione o leito para preencher a evolução</small></div>
+    <div><h2>UTI â€“ Hospital dos Pescadores</h2><small>Selecione o leito para preencher a evoluÃ§Ã£o</small></div>
     <div class="header-right">
       <span class="badge" id="badge-leitos"></span>
       <span class="badge-user" id="badge-user" onclick="fazerLogout()" title="Clique para sair">Sair</span>
@@ -153,13 +153,13 @@
   <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;display:flex;flex-direction:column;gap:.9rem;">
     <div class="leitos-grid" id="leitos-grid"></div>
     <div class="btn-row">
-      <button class="btn btn-sec btn-sm" onclick="irTurno()">← Trocar turno</button>
-      <button class="btn btn-sec btn-sm" onclick="irNAS()">📊 NAS do Turno</button>
-      <button class="btn btn-sec btn-sm" onclick="abrirHistoricoDispositivosGeral()">🩺 Dispositivos</button>
-      <button class="btn btn-sec btn-sm" onclick="irIndicadores()">📈 Indicadores</button>
-      <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;" onclick="abrirChecklistSetorial()">📋 Check-list Setorial</button>
-      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirTurnoCompleto()">🖨 Imprimir turno</button>
-      <button class="btn btn-sm" style="background:#6c3483;color:white;" onclick="enviarTodasEvolucoesTurno()">☁ Enviar tudo ao Drive</button>
+      <button class="btn btn-sec btn-sm" onclick="irTurno()">â† Trocar turno</button>
+      <button class="btn btn-sec btn-sm" onclick="irNAS()">ðŸ“Š NAS do Turno</button>
+      <button class="btn btn-sec btn-sm" onclick="abrirHistoricoDispositivosGeral()">ðŸ©º Dispositivos</button>
+      <button class="btn btn-sec btn-sm" onclick="irIndicadores()">ðŸ“ˆ Indicadores</button>
+      <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;" onclick="abrirChecklistSetorial()">ðŸ“‹ Check-list Setorial</button>
+      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirTurnoCompleto()">ðŸ–¨ Imprimir turno</button>
+      <button class="btn btn-sm" style="background:#6c3483;color:white;" onclick="enviarTodasEvolucoesTurno()">â˜ Enviar tudo ao Drive</button>
     </div>
   </div>
 </div>
@@ -167,16 +167,16 @@
 <!-- TELA NAS -->
 <div id="t-nas" class="tela">
   <div class="app-header" style="border-radius:var(--r);">
-    <div><h2>NAS – Nursing Activities Score</h2><small>Hospital dos Pescadores · UTI</small></div>
+    <div><h2>NAS â€“ Nursing Activities Score</h2><small>Hospital dos Pescadores Â· UTI</small></div>
     <div class="header-right">
       <span class="badge" id="badge-nas"></span>
-      <span class="badge-user" onclick="irLeitos()">← Leitos</span>
+      <span class="badge-user" onclick="irLeitos()">â† Leitos</span>
     </div>
   </div>
   <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;display:flex;flex-direction:column;gap:.8rem;">
     <div style="font-size:.76rem;color:var(--azul);background:var(--azul-xl);border:1px solid var(--azul-cl);border-radius:6px;padding:8px 12px;line-height:1.6;">
       O NAS representa a % do tempo de 24h que a enfermagem dedica a cada paciente.<br>
-      NAS ≥ 100% indica necessidade de mais de um profissional por plantão.
+      NAS â‰¥ 100% indica necessidade de mais de um profissional por plantÃ£o.
     </div>
     <div id="nas-lista"></div>
     <div id="nas-resumo" style="background:var(--cinza);border:1px solid var(--borda);border-radius:8px;padding:10px 14px;"></div>
@@ -186,79 +186,79 @@
 <!-- TELA INDICADORES -->
 <div id="t-indicadores" class="tela" style="max-width:1100px;">
   <div class="app-header" style="border-radius:var(--r);">
-    <div><h2>📈 Indicadores Assistenciais</h2><small>Hospital dos Pescadores · UTI</small></div>
+    <div><h2>ðŸ“ˆ Indicadores Assistenciais</h2><small>Hospital dos Pescadores Â· UTI</small></div>
     <div class="header-right">
-      <span class="badge-user" onclick="irLeitos()">← Leitos</span>
+      <span class="badge-user" onclick="irLeitos()">â† Leitos</span>
     </div>
   </div>
   <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;display:flex;flex-direction:column;gap:1rem;">
-    <!-- Filtros de período -->
+    <!-- Filtros de perÃ­odo -->
     <div class="ind-filtros">
       <div class="ind-filtro-g">
-        <label>Período</label>
+        <label>PerÃ­odo</label>
         <select id="ind-periodo" onchange="_atualizarPeriodoIndicadores()">
-          <option value="7">Últimos 7 dias</option>
-          <option value="30" selected>Últimos 30 dias</option>
-          <option value="90">Últimos 90 dias</option>
-          <option value="180">Últimos 6 meses</option>
-          <option value="365">Últimos 12 meses</option>
-          <option value="all">Todo o histórico</option>
+          <option value="7">Ãšltimos 7 dias</option>
+          <option value="30" selected>Ãšltimos 30 dias</option>
+          <option value="90">Ãšltimos 90 dias</option>
+          <option value="180">Ãšltimos 6 meses</option>
+          <option value="365">Ãšltimos 12 meses</option>
+          <option value="all">Todo o histÃ³rico</option>
           <option value="custom">Personalizado</option>
         </select>
       </div>
       <div class="ind-filtro-g" id="ind-custom" style="display:none;">
         <label>De</label>
         <input type="date" id="ind-de">
-        <label style="margin-left:6px;">Até</label>
+        <label style="margin-left:6px;">AtÃ©</label>
         <input type="date" id="ind-ate">
       </div>
-      <button class="btn btn-pri btn-sm" onclick="renderIndicadores()">🔄 Atualizar</button>
-      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="abrirModalExportarRelatorio()">📊 Exportar Relatório</button>
+      <button class="btn btn-pri btn-sm" onclick="renderIndicadores()">ðŸ”„ Atualizar</button>
+      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="abrirModalExportarRelatorio()">ðŸ“Š Exportar RelatÃ³rio</button>
     </div>
 
-    <!-- Categorias navegáveis -->
+    <!-- Categorias navegÃ¡veis -->
     <div class="ind-cats" id="ind-cats">
-      <button class="ind-cat-btn ativa" data-cat="ocupacao">🏥 Ocupação</button>
-      <button class="ind-cat-btn" data-cat="saida">📤 Saída</button>
-      <button class="ind-cat-btn" data-cat="demograficos">👥 Demográficos</button>
-      <button class="ind-cat-btn" data-cat="sazonalidade">📅 Sazonalidade</button>
-      <button class="ind-cat-btn" data-cat="clinicos">🦠 Clínicos</button>
-      <button class="ind-cat-btn" data-cat="dispositivos">💊 Dispositivos</button>
-      <button class="ind-cat-btn" data-cat="ventilacao">🫁 Ventilação</button>
-      <button class="ind-cat-btn" data-cat="infusoes">💉 Infusões</button>
-      <button class="ind-cat-btn" data-cat="atbs">🧫 Antimicrobianos</button>
-      <button class="ind-cat-btn" data-cat="nas">📊 NAS</button>
-      <button class="ind-cat-btn" data-cat="nutricao">🍽️ Nutrição</button>
-      <button class="ind-cat-btn" data-cat="neuro">🩺 Neurológicos</button>
-      <button class="ind-cat-btn" data-cat="operacionais">⏱️ Operacionais</button>
-      <button class="ind-cat-btn" data-cat="cruzamentos">🔗 Cruzamentos</button>
-      <button class="ind-cat-btn" data-cat="sae_nanda">🩺 SAE/NANDA</button>
-      <button class="ind-cat-btn" data-cat="diagnosticos">🏥 Diagnósticos / CID</button>
-      <button class="ind-cat-btn" data-cat="iras">🧫 IRAS / Bundles</button>
-      <button class="ind-cat-btn" data-cat="ccih" style="background:#0d47a1;color:white;border-color:#0d47a1;">🔬 CCIH / Culturas</button>
+      <button class="ind-cat-btn ativa" data-cat="ocupacao">ðŸ¥ OcupaÃ§Ã£o</button>
+      <button class="ind-cat-btn" data-cat="saida">ðŸ“¤ SaÃ­da</button>
+      <button class="ind-cat-btn" data-cat="demograficos">ðŸ‘¥ DemogrÃ¡ficos</button>
+      <button class="ind-cat-btn" data-cat="sazonalidade">ðŸ“… Sazonalidade</button>
+      <button class="ind-cat-btn" data-cat="clinicos">ðŸ¦  ClÃ­nicos</button>
+      <button class="ind-cat-btn" data-cat="dispositivos">ðŸ’Š Dispositivos</button>
+      <button class="ind-cat-btn" data-cat="ventilacao">ðŸ« VentilaÃ§Ã£o</button>
+      <button class="ind-cat-btn" data-cat="infusoes">ðŸ’‰ InfusÃµes</button>
+      <button class="ind-cat-btn" data-cat="atbs">ðŸ§« Antimicrobianos</button>
+      <button class="ind-cat-btn" data-cat="nas">ðŸ“Š NAS</button>
+      <button class="ind-cat-btn" data-cat="nutricao">ðŸ½ï¸ NutriÃ§Ã£o</button>
+      <button class="ind-cat-btn" data-cat="neuro">ðŸ©º NeurolÃ³gicos</button>
+      <button class="ind-cat-btn" data-cat="operacionais">â±ï¸ Operacionais</button>
+      <button class="ind-cat-btn" data-cat="cruzamentos">ðŸ”— Cruzamentos</button>
+      <button class="ind-cat-btn" data-cat="sae_nanda">ðŸ©º SAE/NANDA</button>
+      <button class="ind-cat-btn" data-cat="diagnosticos">ðŸ¥ DiagnÃ³sticos / CID</button>
+      <button class="ind-cat-btn" data-cat="iras">ðŸ§« IRAS / Bundles</button>
+      <button class="ind-cat-btn" data-cat="ccih" style="background:#0d47a1;color:white;border-color:#0d47a1;">ðŸ”¬ CCIH / Culturas</button>
     </div>
 
-    <!-- Área dinâmica -->
+    <!-- Ãrea dinÃ¢mica -->
     <div id="ind-conteudo">
       <div style="text-align:center;padding:2rem;color:var(--muted);font-size:.85rem;">Selecione uma categoria e clique em Atualizar.</div>
     </div>
   </div>
 </div>
 
-<!-- TELA FORMULÁRIO -->
+<!-- TELA FORMULÃRIO -->
 <div id="t-form" class="tela">
   <div class="app-header">
-    <div><h2 id="form-titulo">Evolução – Leito 01</h2><small id="form-sub">Hospital dos Pescadores · UTI</small></div>
+    <div><h2 id="form-titulo">EvoluÃ§Ã£o â€“ Leito 01</h2><small id="form-sub">Hospital dos Pescadores Â· UTI</small></div>
     <div class="header-right">
-      <button class="btn" id="btn-editar-admissao" style="font-size:.72rem;padding:4px 10px;" onclick="abrirModalAdmissao()">✏ Editar Admissão</button>
+      <button class="btn" id="btn-editar-admissao" style="font-size:.72rem;padding:4px 10px;" onclick="abrirModalAdmissao()">âœ Editar AdmissÃ£o</button>
       <span class="badge" id="badge-form"></span>
     </div>
   </div>
   <div class="card">
 
-    <!-- IDENTIFICAÇÃO -->
+    <!-- IDENTIFICAÃ‡ÃƒO -->
     <div class="secao">
-      <div class="secao-t">Identificação do Paciente <span class="herd-tag" id="herd-tag" style="display:none;">↻ dados herdados</span><span class="cloud-tag" id="cloud-tag" style="display:none;">☁ nuvem</span></div>
+      <div class="secao-t">IdentificaÃ§Ã£o do Paciente <span class="herd-tag" id="herd-tag" style="display:none;">â†» dados herdados</span><span class="cloud-tag" id="cloud-tag" style="display:none;">â˜ nuvem</span></div>
       <div class="secao-c">
         <div class="fl"><label>Paciente</label><input type="text" id="f-pac" placeholder="Nome completo" data-adm-field></div>
         <div class="dc">
@@ -269,54 +269,49 @@
           <div class="fl"><label>DN</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="f-dn" onchange="_calcIdadeDisplay('f-dn','f-idade')" data-adm-field><span id="f-idade" style="font-size:.78rem;font-weight:700;color:var(--azul);white-space:nowrap;min-width:48px;"></span></div></div>
           <div class="fl"><label>Adm. UTI</label><input type="date" id="f-adm" data-adm-field></div>
         </div>
-        <div class="fl"><label>Diagnóstico</label>
-          <div style="display:flex;gap:6px;align-items:flex-start;">
-            <input type="text" id="f-diag" placeholder="Diagnóstico principal" style="flex:1;" onblur="_sugerirCID(&apos;f-diag&apos;,&apos;f-cid&apos;)" data-adm-field>
-            <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;min-width:110px;">
-              <input type="text" id="f-cid" placeholder="CID-10" style="width:100%;font-family:monospace;font-weight:600;" maxlength="8" data-adm-field>
-              <span id="f-cid-status" style="font-size:.6rem;color:var(--muted);text-align:center;min-height:12px;"></span>
-            </div>
-          </div>
+        <div class="fl"><label>DiagnÃ³stico(s)</label>
+          <div id="f-diags-wrap" style="display:flex;flex-direction:column;gap:6px;"></div>
+          <button type="button" id="f-diags-add" onclick="_addDiagRow('f')" style="margin-top:5px;font-size:.72rem;padding:3px 10px;background:var(--azul);color:#fff;border:none;border-radius:4px;cursor:pointer;">+ DiagnÃ³stico</button>
         </div>
         <div class="fl"><label>Comorbidades</label><input type="text" id="f-comor" placeholder="Ex: DM, HAS, tabagista..." data-adm-field></div>
-        <div class="dc"><div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp" data-adm-field></div><div class="fl"><label>Sexo</label><select id="f-sexo" data-adm-field><option value="">–</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div></div>
+        <div class="dc"><div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp" data-adm-field></div><div class="fl"><label>Sexo</label><select id="f-sexo" data-adm-field><option value="">â€“</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div></div>
 <div class="fl"><label>Alergias</label><input type="text" id="f-alergia" placeholder="Ex: Dipirona... ou NKDA" data-adm-field></div>
       </div>
     </div>
 
-<!-- SEGURANÇA -->
+<!-- SEGURANÃ‡A -->
 <div class="secao">
-  <div class="secao-t">Segurança do Paciente</div>
+  <div class="secao-t">SeguranÃ§a do Paciente</div>
   <div class="secao-c">
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-      <span class="sub-t">Pulseira de identificação</span>
+      <span class="sub-t">Pulseira de identificaÃ§Ã£o</span>
       <label class="ri"><input type="radio" name="pulseira" value="Sim"> Sim</label>
-      <label class="ri"><input type="radio" name="pulseira" value="Não"> Não</label>
+      <label class="ri"><input type="radio" name="pulseira" value="NÃ£o"> NÃ£o</label>
     </div>
     <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <span class="sub-t" style="padding-top:3px;">Isolamento</span>
       <div class="rg">
-        <label class="ri"><input type="radio" name="isolamento" value="Não"> Não</label>
-        <label class="ri"><input type="radio" name="isolamento" value="Vigilância"> Vigilância</label>
+        <label class="ri"><input type="radio" name="isolamento" value="NÃ£o"> NÃ£o</label>
+        <label class="ri"><input type="radio" name="isolamento" value="VigilÃ¢ncia"> VigilÃ¢ncia</label>
         <label class="ri"><input type="radio" name="isolamento" value="Contato"> Contato</label>
-        <label class="ri"><input type="radio" name="isolamento" value="Gotículas"> Gotículas</label>
-        <label class="ri"><input type="radio" name="isolamento" value="Aerossóis"> Aerossóis</label>
+        <label class="ri"><input type="radio" name="isolamento" value="GotÃ­culas"> GotÃ­culas</label>
+        <label class="ri"><input type="radio" name="isolamento" value="AerossÃ³is"> AerossÃ³is</label>
       </div>
     </div>
     <div class="fl"><label>Culturas Positivas</label>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-        <button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;" onclick="buscarCulturas()">🔬 Buscar na planilha</button>
-        <button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;background:#f0f4fa;" onclick="_abrirEntradaManualCultura()">✏️ Adicionar manual</button>
+        <button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;" onclick="buscarCulturas()">ðŸ”¬ Buscar na planilha</button>
+        <button class="btn btn-sec" style="font-size:.72rem;padding:4px 10px;white-space:nowrap;background:#f0f4fa;" onclick="_abrirEntradaManualCultura()">âœï¸ Adicionar manual</button>
       </div>
       <div id="culturas-lista" style="display:flex;flex-direction:column;gap:3px;min-height:0;"></div>
       <div id="culturas-auto" style="display:none;margin-top:4px;"></div>
-      <!-- campo oculto mantém compatibilidade com coleta de dados e texto da evolução -->
+      <!-- campo oculto mantÃ©m compatibilidade com coleta de dados e texto da evoluÃ§Ã£o -->
       <input type="text" id="f-microorg" style="display:none;">
       <!-- entrada manual inline (colapsada) -->
       <div id="cult-manual-inline" style="display:none;margin-top:6px;padding:10px;background:#f0f4fa;border-radius:8px;border:1px solid #d0d8e8;">
-        <div style="font-size:.76rem;font-weight:700;color:var(--azul);margin-bottom:6px;">✏️ Registrar manualmente</div>
+        <div style="font-size:.76rem;font-weight:700;color:var(--azul);margin-bottom:6px;">âœï¸ Registrar manualmente</div>
         <div style="display:flex;flex-direction:column;gap:5px;">
-          <input id="cult-inline-sito" type="text" placeholder="Sítio (ex: Hemocultura, Urinocultura, Secreção traqueal...)" style="border:1px solid #c8d4e8;border-radius:6px;padding:5px 9px;font-size:.8rem;">
+          <input id="cult-inline-sito" type="text" placeholder="SÃ­tio (ex: Hemocultura, Urinocultura, SecreÃ§Ã£o traqueal...)" style="border:1px solid #c8d4e8;border-radius:6px;padding:5px 9px;font-size:.8rem;">
           <input id="cult-inline-mo" type="text" placeholder="Microrganismo (ex: MRSA, KPC, Candida albicans...)" style="border:1px solid #c8d4e8;border-radius:6px;padding:5px 9px;font-size:.8rem;">
           <input id="cult-inline-sens" type="text" placeholder="Sensibilidade (opcional)" style="border:1px solid #c8d4e8;border-radius:6px;padding:5px 9px;font-size:.8rem;">
           <div style="display:flex;gap:6px;">
@@ -329,9 +324,9 @@
   </div>
 </div>
     
-    <!-- NEUROLÓGICO -->
+    <!-- NEUROLÃ“GICO -->
     <div class="secao">
-      <div class="secao-t">Avaliação Neurológica</div>
+      <div class="secao-t">AvaliaÃ§Ã£o NeurolÃ³gica</div>
       <div class="secao-c">
         <div class="cg">
           <label class="ci"><input type="checkbox" class="f-neuro" value="Consciente"> Consciente</label>
@@ -346,7 +341,7 @@
             <label style="display:flex;align-items:center;gap:6px;">Glasgow
               <button type="button" class="btn-escala" onclick="abrirEscala('glasgow')" title="Ver escala Glasgow">?</button>
             </label>
-            <input type="number" id="f-glas" min="3" max="15" placeholder="3–15">
+            <input type="number" id="f-glas" min="3" max="15" placeholder="3â€“15">
           </div>
           <div class="fl">
             <label style="display:flex;align-items:center;gap:6px;">RASS
@@ -358,18 +353,18 @@
         <p class="sub-t">Pupilas</p>
         <div style="display:flex;flex-direction:column;gap:4px;">
           <div class="cg">
-            <label class="ci"><input type="checkbox" class="f-pup" value="Isocóricas"> Isocóricas</label>
-            <label class="ci"><input type="checkbox" class="f-pup" value="Anisocóricas"> Anisocóricas</label>
-            <label class="ci"><input type="checkbox" class="f-pup" value="Mióticas"> Mióticas</label>
-            <label class="ci"><input type="checkbox" class="f-pup" value="Midriáticas"> Midriáticas</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="IsocÃ³ricas"> IsocÃ³ricas</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="AnisocÃ³ricas"> AnisocÃ³ricas</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="MiÃ³ticas"> MiÃ³ticas</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="MidriÃ¡ticas"> MidriÃ¡ticas</label>
             <label class="ci"><input type="checkbox" class="f-pup" value="Fixas"> Fixas</label>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:4px 0;align-items:center;">
             <span style="font-size:.73rem;font-weight:800;color:var(--azul);min-width:34px;">RFM</span>
             <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-pup" value="RFM+ OD"> + OD</label>
             <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-pup" value="RFM+ OE"> + OE</label>
-            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-pup" value="RFM- OD"> – OD</label>
-            <label class="ci"><input type="checkbox" class="f-pup" value="RFM- OE"> – OE</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-pup" value="RFM- OD"> â€“ OD</label>
+            <label class="ci"><input type="checkbox" class="f-pup" value="RFM- OE"> â€“ OE</label>
           </div>
         </div>
       </div>
@@ -382,25 +377,25 @@
         <div class="cg">
           <label class="ci"><input type="checkbox" class="f-pele" value="Normocorado"> Normocorado</label>
           <label class="ci"><input type="checkbox" class="f-pele" value="Hipocorado"> Hipocorado</label>
-          <label class="ci"><input type="checkbox" class="f-pele" value="Acianótico"> Acianótico</label>
-          <label class="ci"><input type="checkbox" class="f-pele" value="Cianótico"> Cianótico</label>
-          <label class="ci"><input type="checkbox" class="f-pele" value="Ictérico"> Ictérico</label>
-          <label class="ci"><input type="checkbox" class="f-pele" value="Anictérico"> Anictérico</label>
-          <label class="ci"><input type="checkbox" class="f-pele" value="Íntegra"> Íntegra</label>
-          <label class="ci"><input type="checkbox" class="f-pele" value="Não íntegra"> Não íntegra</label>
+          <label class="ci"><input type="checkbox" class="f-pele" value="AcianÃ³tico"> AcianÃ³tico</label>
+          <label class="ci"><input type="checkbox" class="f-pele" value="CianÃ³tico"> CianÃ³tico</label>
+          <label class="ci"><input type="checkbox" class="f-pele" value="IctÃ©rico"> IctÃ©rico</label>
+          <label class="ci"><input type="checkbox" class="f-pele" value="AnictÃ©rico"> AnictÃ©rico</label>
+          <label class="ci"><input type="checkbox" class="f-pele" value="Ãntegra"> Ãntegra</label>
+          <label class="ci"><input type="checkbox" class="f-pele" value="NÃ£o Ã­ntegra"> NÃ£o Ã­ntegra</label>
         </div>
-        <p class="sub-t">Lesões e Curativos</p>
-        <textarea id="f-les" style="min-height:65px;" placeholder="Localização, tipo de lesão e curativos realizados..."></textarea>
+        <p class="sub-t">LesÃµes e Curativos</p>
+        <textarea id="f-les" style="min-height:65px;" placeholder="LocalizaÃ§Ã£o, tipo de lesÃ£o e curativos realizados..."></textarea>
       </div>
     </div>
 
-    <!-- RESPIRATÓRIO -->
+    <!-- RESPIRATÃ“RIO -->
     <div class="secao">
-      <div class="secao-t">Sistema Respiratório</div>
+      <div class="secao-t">Sistema RespiratÃ³rio</div>
       <div class="secao-c">
         <div class="cg">
-          <label class="ci"><input type="checkbox" class="f-resp" value="Tórax simétrico"> Tórax simétrico</label>
-          <label class="ci"><input type="checkbox" class="f-resp" value="Tórax assimétrico"> Tórax assimétrico</label>
+          <label class="ci"><input type="checkbox" class="f-resp" value="TÃ³rax simÃ©trico"> TÃ³rax simÃ©trico</label>
+          <label class="ci"><input type="checkbox" class="f-resp" value="TÃ³rax assimÃ©trico"> TÃ³rax assimÃ©trico</label>
         </div>
         <p class="sub-t">Ausculta Pulmonar</p>
         <div class="sub-blk">
@@ -411,20 +406,20 @@
             <label class="ci"><input type="checkbox" class="f-ausc" value="MV+ Esquerda"> Esquerda</label>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:4px 0;align-items:center;">
-            <span style="font-size:.73rem;font-weight:800;color:#c0392b;min-width:44px;">MV↓</span>
-            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV↓ Bilateral"> Bilateral</label>
-            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV↓ Base D"> Base D</label>
-            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV↓ Base E"> Base E</label>
-            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV↓ Ápice D"> Ápice D</label>
-            <label class="ci"><input type="checkbox" class="f-ausc" value="MV↓ Ápice E"> Ápice E</label>
+            <span style="font-size:.73rem;font-weight:800;color:#c0392b;min-width:44px;">MVâ†“</span>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MVâ†“ Bilateral"> Bilateral</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MVâ†“ Base D"> Base D</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MVâ†“ Base E"> Base E</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MVâ†“ Ãpice D"> Ãpice D</label>
+            <label class="ci"><input type="checkbox" class="f-ausc" value="MVâ†“ Ãpice E"> Ãpice E</label>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:4px 0;align-items:center;">
-            <span style="font-size:.73rem;font-weight:800;color:#7b1f1f;min-width:44px;">MV–</span>
+            <span style="font-size:.73rem;font-weight:800;color:#7b1f1f;min-width:44px;">MVâ€“</span>
             <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Bilateral"> Bilateral</label>
             <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Base D"> Base D</label>
             <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Base E"> Base E</label>
-            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Ápice D"> Ápice D</label>
-            <label class="ci"><input type="checkbox" class="f-ausc" value="MV- Ápice E"> Ápice E</label>
+            <label class="ci" style="margin-right:10px;"><input type="checkbox" class="f-ausc" value="MV- Ãpice D"> Ãpice D</label>
+            <label class="ci"><input type="checkbox" class="f-ausc" value="MV- Ãpice E"> Ãpice E</label>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:5px 12px;padding-top:4px;border-top:1px solid var(--borda);">
             <label class="ci"><input type="checkbox" class="f-ausc" value="Roncos"> Roncos</label>
@@ -435,7 +430,7 @@
             <label class="ci"><input type="checkbox" class="f-ausc" value="Atrito Pleural"> Atrito Pleural</label>
           </div>
         </div>
-        <p class="sub-t">Ventilação</p>
+        <p class="sub-t">VentilaÃ§Ã£o</p>
         <div class="rg">
           <label class="ri"><input type="radio" name="vent" value="Ar ambiente" onchange="toggleVMI()"> Ar ambiente</label>
           <label class="ri">
@@ -444,31 +439,31 @@
             <span style="font-size:.68rem;color:var(--muted);">L/min</span>
           </label>
           <label class="ri">
-            <input type="radio" name="vent" value="Máscara NR" onchange="toggleVMI()"> Máscara NR
+            <input type="radio" name="vent" value="MÃ¡scara NR" onchange="toggleVMI()"> MÃ¡scara NR
             <input type="number" id="f-mnr-lmin" placeholder="L/min" min="0" max="15" step="0.5" style="width:65px;margin-left:4px;">
             <span style="font-size:.68rem;color:var(--muted);">L/min</span>
           </label>
           <label class="ri">
-            <input type="radio" name="vent" value="Macronebulização MV" onchange="toggleVMI()"> MV (macronebulização)
+            <input type="radio" name="vent" value="MacronebulizaÃ§Ã£o MV" onchange="toggleVMI()"> MV (macronebulizaÃ§Ã£o)
             <input type="number" id="f-mv-fio2" placeholder="%" min="21" max="100" style="width:55px;margin-left:4px;">
             <span style="font-size:.68rem;color:var(--muted);">%</span>
           </label>
-          <label class="ri"><input type="radio" name="vent" value="VNI – BIPAP" onchange="toggleVMI()"> VNI – BIPAP</label>
+          <label class="ri"><input type="radio" name="vent" value="VNI â€“ BIPAP" onchange="toggleVMI()"> VNI â€“ BIPAP</label>
           <label class="ri">
-            <input type="radio" name="vent" value="TOT – VMI" onchange="toggleVMI()"> TOT – VMI
-            <input type="text" id="f-tot-n" placeholder="Nº" style="width:50px;margin-left:4px;" oninput="document.getElementById('f-tot-n2').value=this.value">
+            <input type="radio" name="vent" value="TOT â€“ VMI" onchange="toggleVMI()"> TOT â€“ VMI
+            <input type="text" id="f-tot-n" placeholder="NÂº" style="width:50px;margin-left:4px;" oninput="document.getElementById('f-tot-n2').value=this.value">
           </label>
           <label class="ri">
-            <input type="radio" name="vent" value="TQT – VMI" onchange="toggleVMI()"> TQT – VMI
-            <input type="text" id="f-tqt-n" placeholder="Nº" style="width:50px;margin-left:4px;" oninput="document.getElementById('f-tqt-n2').value=this.value">
+            <input type="radio" name="vent" value="TQT â€“ VMI" onchange="toggleVMI()"> TQT â€“ VMI
+            <input type="text" id="f-tqt-n" placeholder="NÂº" style="width:50px;margin-left:4px;" oninput="document.getElementById('f-tqt-n2').value=this.value">
           </label>
         </div>
         <div class="vmi-box" id="vmi-box">
-          <p class="sub-t" style="margin:0;">Parâmetros do Ventilador</p>
+          <p class="sub-t" style="margin:0;">ParÃ¢metros do Ventilador</p>
           <div class="vmi-grid">
-            <div class="vf"><label>Modo</label><select id="vmi-modo"><option value="">– sel. –</option><option>VCV</option><option>PCV</option><option>PSV</option><option>SIMV</option><option>APRV</option><option>BiPAP</option></select></div>
+            <div class="vf"><label>Modo</label><select id="vmi-modo"><option value="">â€“ sel. â€“</option><option>VCV</option><option>PCV</option><option>PSV</option><option>SIMV</option><option>APRV</option><option>BiPAP</option></select></div>
             <div class="vf"><label>FiO2 (%)</label><input type="number" id="vmi-fio2" min="21" max="100" placeholder="Ex: 40"></div>
-            <div class="vf"><label>PEEP (cmH₂O)</label><input type="number" id="vmi-peep" min="0" max="30" placeholder="Ex: 5"></div>
+            <div class="vf"><label>PEEP (cmHâ‚‚O)</label><input type="number" id="vmi-peep" min="0" max="30" placeholder="Ex: 5"></div>
             <div class="vf"><label>FR (ipm)</label><input type="number" id="vmi-fr" min="0" max="60" placeholder="Ex: 14"></div>
             <div class="vf"><label>SENS</label><input type="number" id="vmi-sens" step="0.1" placeholder="Ex: -2"></div>
             <div class="vf"><label>VT (mL)</label><input type="number" id="vmi-vt" placeholder="Ex: 450"></div>
@@ -488,10 +483,10 @@
       <div class="secao-t">Cardiovascular</div>
       <div class="secao-c">
         <div class="cg">
-          <label class="ci"><input type="checkbox" class="f-car" value="Perfusão inalterada"> Perfusão inalterada</label>
-          <label class="ci"><input type="checkbox" class="f-car" value="Perfusão lentificada"> Perfusão lentificada</label>
+          <label class="ci"><input type="checkbox" class="f-car" value="PerfusÃ£o inalterada"> PerfusÃ£o inalterada</label>
+          <label class="ci"><input type="checkbox" class="f-car" value="PerfusÃ£o lentificada"> PerfusÃ£o lentificada</label>
           <label class="ci"><input type="checkbox" class="f-car" value="Ausculta em 2T"> Ausculta em 2T</label>
-          <label class="ci"><input type="checkbox" class="f-car" value="Bulhas acessórias"> Bulhas acessórias</label>
+          <label class="ci"><input type="checkbox" class="f-car" value="Bulhas acessÃ³rias"> Bulhas acessÃ³rias</label>
         </div>
         <p class="sub-t">Edema</p>
         <div style="display:flex;flex-direction:column;gap:5px;">
@@ -512,20 +507,20 @@
             <label class="ci"><input type="radio" name="edema-grau" value="NA"> N/A</label>
           </div>
         </div>
-        <p class="sub-t">Ritmo / Frequência Cardíaca</p>
+        <p class="sub-t">Ritmo / FrequÃªncia CardÃ­aca</p>
         <div style="display:flex;flex-direction:column;gap:6px;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label class="ci"><input type="checkbox" class="f-car" value="Normocárdico"> Normocárdico</label>
+            <label class="ci"><input type="checkbox" class="f-car" value="NormocÃ¡rdico"> NormocÃ¡rdico</label>
             <input type="number" id="f-fc-norm" class="fc-inline" placeholder="FC" min="0" max="400">
             <span style="font-size:.74rem;color:var(--muted);">bpm</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label class="ci"><input type="checkbox" class="f-car" value="Taquicárdico"> Taquicárdico</label>
+            <label class="ci"><input type="checkbox" class="f-car" value="TaquicÃ¡rdico"> TaquicÃ¡rdico</label>
             <input type="number" id="f-fc-taqui" class="fc-inline" placeholder="FC" min="0" max="400">
             <span style="font-size:.74rem;color:var(--muted);">bpm</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label class="ci"><input type="checkbox" class="f-car" value="Bradicárdico"> Bradicárdico</label>
+            <label class="ci"><input type="checkbox" class="f-car" value="BradicÃ¡rdico"> BradicÃ¡rdico</label>
             <input type="number" id="f-fc-bradi" class="fc-inline" placeholder="FC" min="0" max="400">
             <span style="font-size:.74rem;color:var(--muted);">bpm</span>
           </div>
@@ -552,7 +547,7 @@
           </div>
         </div>
         <div class="dc">
-          <div class="fl"><label>Temperatura (°C)</label><input type="number" id="f-temp" min="30" max="43" step="0.1" placeholder="Ex: 36.5"></div>
+          <div class="fl"><label>Temperatura (Â°C)</label><input type="number" id="f-temp" min="30" max="43" step="0.1" placeholder="Ex: 36.5"></div>
         </div>
       </div>
     </div>
@@ -565,21 +560,21 @@
           <label class="ci"><input type="checkbox" class="f-abd" value="Plano"> Plano</label>
           <label class="ci"><input type="checkbox" class="f-abd" value="Globoso"> Globoso</label>
           <label class="ci"><input type="checkbox" class="f-abd" value="Escavado"> Escavado</label>
-          <label class="ci"><input type="checkbox" class="f-abd" value="Flácido"> Flácido</label>
-          <label class="ci"><input type="checkbox" class="f-abd" value="Rígido"> Rígido</label>
+          <label class="ci"><input type="checkbox" class="f-abd" value="FlÃ¡cido"> FlÃ¡cido</label>
+          <label class="ci"><input type="checkbox" class="f-abd" value="RÃ­gido"> RÃ­gido</label>
           <label class="ci"><input type="checkbox" class="f-abd" value="Distendido"> Distendido</label>
           <label class="ci"><input type="checkbox" class="f-abd" value="RHA+"> RHA+</label>
           <label class="ci"><input type="checkbox" class="f-abd" value="RHA ausente"> RHA ausente</label>
           <label class="ci"><input type="checkbox" class="f-abd" value="Dor"> Dor</label>
-          <label class="ci"><input type="checkbox" class="f-abd" value="Timpânico"> Timpânico</label>
-          <label class="ci"><input type="checkbox" class="f-abd" value="Ascítico"> Ascítico</label>
+          <label class="ci"><input type="checkbox" class="f-abd" value="TimpÃ¢nico"> TimpÃ¢nico</label>
+          <label class="ci"><input type="checkbox" class="f-abd" value="AscÃ­tico"> AscÃ­tico</label>
         </div>
       </div>
     </div>
 
     <!-- DIETA/DIURESE -->
     <div class="secao">
-      <div class="secao-t">Dieta, Diurese e Eliminações</div>
+      <div class="secao-t">Dieta, Diurese e EliminaÃ§Ãµes</div>
       <div class="secao-c">
         <p class="sub-t">Dieta</p>
         <div class="rg">
@@ -590,30 +585,30 @@
           <label class="ci"><input type="checkbox" class="f-dieta" value="NPT"> NPT</label>
           <label class="ci"><input type="checkbox" class="f-dieta" value="Jejum/Zero"> Jejum/Zero</label>
         </div>
-        <div class="fl"><label>Vazão dieta</label><input type="number" id="f-vdieta" placeholder="ml/h"></div>
+        <div class="fl"><label>VazÃ£o dieta</label><input type="number" id="f-vdieta" placeholder="ml/h"></div>
         <p class="sub-t">Diurese</p>
         <div class="rg">
           <label class="ci"><input type="checkbox" class="f-diu" value="SVD"> SVD</label>
           <label class="ci"><input type="checkbox" class="f-diu" value="Fralda"> Fralda</label>
-          <label class="ci"><input type="checkbox" class="f-diu" value="Disp. não invasivo"> Disp. não invasivo</label>
+          <label class="ci"><input type="checkbox" class="f-diu" value="Disp. nÃ£o invasivo"> Disp. nÃ£o invasivo</label>
           <label class="ci"><input type="checkbox" class="f-diu" value="Cistostomia"> Cistostomia</label>
           <label class="ci"><input type="checkbox" class="f-diu" value="Ausente"> Ausente</label>
         </div>
         <div class="cg">
           <label class="ci"><input type="checkbox" class="f-uri" value="Clara"> Clara</label>
           <label class="ci"><input type="checkbox" class="f-uri" value="Concentrada"> Concentrada</label>
-          <label class="ci"><input type="checkbox" class="f-uri" value="Colúria"> Colúria</label>
-          <label class="ci"><input type="checkbox" class="f-uri" value="Hematúria"> Hematúria</label>
+          <label class="ci"><input type="checkbox" class="f-uri" value="ColÃºria"> ColÃºria</label>
+          <label class="ci"><input type="checkbox" class="f-uri" value="HematÃºria"> HematÃºria</label>
         </div>
-        <div class="fl"><label>Débito diurese</label><input type="number" id="f-ddiu" placeholder="ml no turno"></div>
-        <p class="sub-t">Eliminações Intestinais</p>
+        <div class="fl"><label>DÃ©bito diurese</label><input type="number" id="f-ddiu" placeholder="ml no turno"></div>
+        <p class="sub-t">EliminaÃ§Ãµes Intestinais</p>
         <div class="cg">
           <label class="ci"><input type="checkbox" class="f-eli" value="Presente"> Presente</label>
           <label class="ci"><input type="checkbox" class="f-eli" value="Ausente"> Ausente</label>
-          <label class="ci"><input type="checkbox" class="f-eli" value="Espontânea"> Espontânea</label>
+          <label class="ci"><input type="checkbox" class="f-eli" value="EspontÃ¢nea"> EspontÃ¢nea</label>
           <label class="ci"><input type="checkbox" class="f-eli" value="Colostomia"> Colostomia</label>
           <label class="ci"><input type="checkbox" class="f-eli" value="Ileostomia"> Ileostomia</label>
-          <label class="ci"><input type="checkbox" class="f-eli" value="Líquidas"> Líquidas</label>
+          <label class="ci"><input type="checkbox" class="f-eli" value="LÃ­quidas"> LÃ­quidas</label>
           <label class="ci"><input type="checkbox" class="f-eli" value="Pastosas"> Pastosas</label>
           <label class="ci"><input type="checkbox" class="f-eli" value="Endurecidas"> Endurecidas</label>
           <label class="ci"><input type="checkbox" class="f-eli" value="Melena"> Melena</label>
@@ -624,14 +619,14 @@
       </div>
     </div>
 
-    <!-- INFUSÕES -->
+    <!-- INFUSÃ•ES -->
     <div class="secao">
-      <div class="secao-t">Infusões <span class="herd-tag">↻ herdado</span></div>
+      <div class="secao-t">InfusÃµes <span class="herd-tag">â†» herdado</span></div>
       <div class="secao-c">
-        <p class="sub-t">Hidratação Venosa</p>
+        <p class="sub-t">HidrataÃ§Ã£o Venosa</p>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <select id="f-hv-tipo" style="flex:0 1 170px;">
-            <option value="">– selecione –</option>
+            <option value="">â€“ selecione â€“</option>
             <option value="SF 0,9%">SF 0,9%</option>
             <option value="Ringer Lactato">Ringer Lactato</option>
             <option value="Ringer Simples">Ringer Simples</option>
@@ -641,9 +636,9 @@
           <span style="font-size:.74rem;color:var(--muted);">ml/h</span>
         </div>
         <div style="margin-top:6px;">
-          <p class="sub-t">Outras infusões venosas</p>
+          <p class="sub-t">Outras infusÃµes venosas</p>
           <div id="hv-outras-lista"></div>
-          <button class="btn-add" onclick="addHVOutra()">+ Adicionar infusão</button>
+          <button class="btn-add" onclick="addHVOutra()">+ Adicionar infusÃ£o</button>
         </div>
         <p class="sub-t">DVA em uso</p>
         <p class="sub-t">DVA em uso</p>
@@ -678,10 +673,10 @@
       <div class="secao-c">
         <div class="cg">
           <label class="ci"><input type="checkbox" class="f-prev" value="Profilaxia TEV"> Profilaxia TEV</label>
-          <label class="ci"><input type="checkbox" class="f-prev" value="Profilaxia úlcera gástrica"> Profilaxia úlcera gástrica</label>
+          <label class="ci"><input type="checkbox" class="f-prev" value="Profilaxia Ãºlcera gÃ¡strica"> Profilaxia Ãºlcera gÃ¡strica</label>
           <label class="ci"><input type="checkbox" class="f-prev" value="Grades elevadas"> Grades elevadas</label>
-          <label class="ci"><input type="checkbox" class="f-prev" value="Colchão de ar"> Colchão de ar</label>
-          <label class="ci"><input type="checkbox" class="f-prev" value="Cabeceira a 30°"> Cabeceira a 30°</label>
+          <label class="ci"><input type="checkbox" class="f-prev" value="ColchÃ£o de ar"> ColchÃ£o de ar</label>
+          <label class="ci"><input type="checkbox" class="f-prev" value="Cabeceira a 30Â°"> Cabeceira a 30Â°</label>
           <label class="ci"><input type="checkbox" class="f-prev" value="Higiene oral"> Higiene oral</label>
         </div>
       </div>
@@ -690,18 +685,18 @@
     <!-- DISPOSITIVOS -->
     <div class="secao">
       <div class="secao-t" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-        <span>Dispositivos Médicos <span class="herd-tag">↻ herdado</span></span>
-        <button class="btn-sec" style="font-size:.72rem;padding:4px 11px;background:#e8f4fd;border-color:#1565c0;color:#0d47a1;font-weight:700;" onclick="abrirHistoricoDispositivos(leitoAtual)">📋 DISPOSITIVOS ANTERIORES</button>
+        <span>Dispositivos MÃ©dicos <span class="herd-tag">â†» herdado</span></span>
+        <button class="btn-sec" style="font-size:.72rem;padding:4px 11px;background:#e8f4fd;border-color:#1565c0;color:#0d47a1;font-weight:700;" onclick="abrirHistoricoDispositivos(leitoAtual)">ðŸ“‹ DISPOSITIVOS ANTERIORES</button>
       </div>
       <div class="secao-c">
-        <p class="sub-t">Acesso Venoso Periférico (AVP)</p>
+        <p class="sub-t">Acesso Venoso PerifÃ©rico (AVP)</p>
         <div id="avp-lista"></div>
         <button class="btn-add" onclick="addAVP()">+ Adicionar AVP</button>
 
         <div class="disp-wrap" id="disp-avc" data-tipo="AVC">
           <p class="sub-t" style="margin-top:4px;">Acesso Venoso Central (AVC)</p>
           <div class="dyn-row" style="flex-wrap:wrap;gap:4px;">
-            <input type="text" id="f-avc-l" placeholder="Local (ex: subclávia D)">
+            <input type="text" id="f-avc-l" placeholder="Local (ex: subclÃ¡via D)">
             <input type="date" id="f-avc-d" style="max-width:140px;flex:none;" onchange="_atualizarDiasDisp('f-avc-d','dias-avc')">
             <input type="text" id="dias-avc" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
             <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('AVC','f-avc-l','f-avc-d')">Trocar</button>
@@ -715,7 +710,7 @@
         </div>
 
         <div class="disp-wrap" id="disp-cdl" data-tipo="CDL">
-          <p class="sub-t">Cateter de Diálise (CDL)</p>
+          <p class="sub-t">Cateter de DiÃ¡lise (CDL)</p>
           <div class="dyn-row" style="flex-wrap:wrap;gap:4px;">
             <input type="text" id="f-dial-l" placeholder="Local (ex: jugular D)">
             <input type="date" id="f-dial-d" style="max-width:140px;flex:none;" onchange="_atualizarDiasDisp('f-dial-d','dias-dial')">
@@ -734,7 +729,7 @@
           <div class="disp-wrap" id="disp-svd" data-tipo="SVD">
             <p class="sub-t">SVD</p>
             <div class="dyn-row" style="margin-top:4px;flex-wrap:wrap;gap:4px;">
-              <input type="text" id="f-svd-n" placeholder="Nº" style="max-width:55px;flex:none;">
+              <input type="text" id="f-svd-n" placeholder="NÂº" style="max-width:55px;flex:none;">
               <input type="date" id="f-svd-d" onchange="_atualizarDiasDisp('f-svd-d','dias-svd')">
               <input type="text" id="dias-svd" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
               <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('SVD','f-svd-n','f-svd-d')">Trocar</button>
@@ -749,7 +744,7 @@
           <div class="disp-wrap" id="disp-sne" data-tipo="SNE">
             <p class="sub-t">SNE</p>
             <div class="dyn-row" style="margin-top:4px;flex-wrap:wrap;gap:4px;">
-              <input type="text" id="f-sne-n" placeholder="Nº" style="max-width:55px;flex:none;">
+              <input type="text" id="f-sne-n" placeholder="NÂº" style="max-width:55px;flex:none;">
               <input type="date" id="f-sne-d" onchange="_atualizarDiasDisp('f-sne-d','dias-sne')">
               <input type="text" id="dias-sne" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
               <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('SNE','f-sne-n','f-sne-d')">Trocar</button>
@@ -765,9 +760,9 @@
 
         <div class="dc">
           <div class="disp-wrap" id="disp-tot" data-tipo="TOT">
-            <p class="sub-t">TOT – Tubo Orotraqueal</p>
+            <p class="sub-t">TOT â€“ Tubo Orotraqueal</p>
             <div class="dyn-row" style="margin-top:4px;flex-wrap:wrap;gap:4px;">
-              <input type="text" id="f-tot-n2" placeholder="Nº" style="max-width:55px;flex:none;">
+              <input type="text" id="f-tot-n2" placeholder="NÂº" style="max-width:55px;flex:none;">
               <input type="date" id="f-tot-d" onchange="_atualizarDiasDisp('f-tot-d','dias-tot')">
               <input type="text" id="dias-tot" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
               <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('TOT','f-tot-n2','f-tot-d')">Trocar</button>
@@ -780,9 +775,9 @@
             </div>
           </div>
           <div class="disp-wrap" id="disp-tqt" data-tipo="TQT">
-            <p class="sub-t">TQT – Traqueostomia</p>
+            <p class="sub-t">TQT â€“ Traqueostomia</p>
             <div class="dyn-row" style="margin-top:4px;flex-wrap:wrap;gap:4px;">
-              <input type="text" id="f-tqt-n2" placeholder="Nº" style="max-width:55px;flex:none;">
+              <input type="text" id="f-tqt-n2" placeholder="NÂº" style="max-width:55px;flex:none;">
               <input type="date" id="f-tqt-d" onchange="_atualizarDiasDisp('f-tqt-d','dias-tqt')">
               <input type="text" id="dias-tqt" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" placeholder="dias">
               <button class="btn-sec" style="font-size:.72rem;padding:3px 8px;" onclick="trocarDispositivo('TQT','f-tqt-n2','f-tqt-d')">Trocar</button>
@@ -797,28 +792,28 @@
         </div>
 
         <p class="sub-t">Outros dispositivos</p>
-        <input type="text" id="f-disp-o" placeholder="Dreno de tórax, gastrostomia, etc." style="width:100%;">
+        <input type="text" id="f-disp-o" placeholder="Dreno de tÃ³rax, gastrostomia, etc." style="width:100%;">
       </div>
     </div>
 
 <div class="secao">
   <div class="secao-t">Exames e Procedimentos Realizados Hoje</div>
   <div class="secao-c">
-    <textarea id="f-exames-real" style="min-height:90px;" placeholder="Ex: Hemograma, gasometria, RX tórax, fisioterapia..."></textarea>
+    <textarea id="f-exames-real" style="min-height:90px;" placeholder="Ex: Hemograma, gasometria, RX tÃ³rax, fisioterapia..."></textarea>
   </div>
 </div>
 <div class="secao">
   <div class="secao-t">Exames e Pareceres Solicitados</div>
   <div class="secao-c">
-    <textarea id="f-exames-solic" style="min-height:90px;" placeholder="Ex: TC tórax, parecer infectologia..."></textarea>
+    <textarea id="f-exames-solic" style="min-height:90px;" placeholder="Ex: TC tÃ³rax, parecer infectologia..."></textarea>
   </div>
 </div>
     
     <!-- ATB -->
     <div class="secao">
-      <div class="secao-t">Antimicrobianos em Uso <span class="herd-tag">↻ herdado</span></div>
+      <div class="secao-t">Antimicrobianos em Uso <span class="herd-tag">â†» herdado</span></div>
       <div class="secao-c">
-        <p style="font-size:.71rem;color:var(--muted);">Informe o antimicrobiano e a <strong>data de início</strong> do tratamento.</p>
+        <p style="font-size:.71rem;color:var(--muted);">Informe o antimicrobiano e a <strong>data de inÃ­cio</strong> do tratamento.</p>
         <div id="atb-lista"></div>
         <button class="btn-add" onclick="addATB()">+ Adicionar antimicrobiano</button>
       </div>
@@ -826,54 +821,54 @@
 
     <!-- BRADEN -->
     <div class="secao">
-      <div class="secao-t">Escala de Braden – Risco de LP <span class="herd-tag">↻ herdado</span></div>
+      <div class="secao-t">Escala de Braden â€“ Risco de LP <span class="herd-tag">â†» herdado</span></div>
       <div class="secao-c">
         <div style="overflow-x:auto;">
           <table class="bt">
-            <thead><tr><th style="text-align:left;">Domínio</th><th>1</th><th>2</th><th>3</th><th>4</th><th>Pts</th></tr></thead>
+            <thead><tr><th style="text-align:left;">DomÃ­nio</th><th>1</th><th>2</th><th>3</th><th>4</th><th>Pts</th></tr></thead>
             <tbody>
-              <tr><td>Percepção sensorial</td><td>Tot.limitado</td><td>Muito lim.</td><td>Lev.limitado</td><td>Nenhuma</td><td><select class="bs" onchange="calcB()"><option value="">–</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
-              <tr><td>Umidade</td><td>Excessiva</td><td>Muita</td><td>Ocasional</td><td>Rara</td><td><select class="bs" onchange="calcB()"><option value="">–</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
-              <tr><td>Atividade</td><td>Acamado</td><td>Cadeira</td><td>Deambula oc.</td><td>Deambula fr.</td><td><select class="bs" onchange="calcB()"><option value="">–</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
-              <tr><td>Mobilidade</td><td>Imóvel</td><td>Muito lim.</td><td>Discreta lim.</td><td>Sem lim.</td><td><select class="bs" onchange="calcB()"><option value="">–</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
-              <tr><td>Nutrição</td><td>Deficiente</td><td>Inadequada</td><td>Adequada</td><td>Excelente</td><td><select class="bs" onchange="calcB()"><option value="">–</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
-              <tr><td>Fricção/Cisalh.</td><td>Problema</td><td>Prob.pot.</td><td>Sem prob.</td><td>–</td><td><select class="bs" onchange="calcB()"><option value="">–</option><option>1</option><option>2</option><option>3</option></select></td></tr>
+              <tr><td>PercepÃ§Ã£o sensorial</td><td>Tot.limitado</td><td>Muito lim.</td><td>Lev.limitado</td><td>Nenhuma</td><td><select class="bs" onchange="calcB()"><option value="">â€“</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
+              <tr><td>Umidade</td><td>Excessiva</td><td>Muita</td><td>Ocasional</td><td>Rara</td><td><select class="bs" onchange="calcB()"><option value="">â€“</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
+              <tr><td>Atividade</td><td>Acamado</td><td>Cadeira</td><td>Deambula oc.</td><td>Deambula fr.</td><td><select class="bs" onchange="calcB()"><option value="">â€“</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
+              <tr><td>Mobilidade</td><td>ImÃ³vel</td><td>Muito lim.</td><td>Discreta lim.</td><td>Sem lim.</td><td><select class="bs" onchange="calcB()"><option value="">â€“</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
+              <tr><td>NutriÃ§Ã£o</td><td>Deficiente</td><td>Inadequada</td><td>Adequada</td><td>Excelente</td><td><select class="bs" onchange="calcB()"><option value="">â€“</option><option>1</option><option>2</option><option>3</option><option>4</option></select></td></tr>
+              <tr><td>FricÃ§Ã£o/Cisalh.</td><td>Problema</td><td>Prob.pot.</td><td>Sem prob.</td><td>â€“</td><td><select class="bs" onchange="calcB()"><option value="">â€“</option><option>1</option><option>2</option><option>3</option></select></td></tr>
             </tbody>
           </table>
         </div>
-        <div class="score-row"><span style="font-size:.76rem;color:var(--muted);">Total Braden:</span><span class="score-n" id="b-sc">–</span><span class="rb" id="b-r"></span></div>
+        <div class="score-row"><span style="font-size:.76rem;color:var(--muted);">Total Braden:</span><span class="score-n" id="b-sc">â€“</span><span class="rb" id="b-r"></span></div>
       </div>
     </div>
 
     <!-- MORSE -->
     <div class="secao">
-      <div class="secao-t">Escala de Morse – Risco de Queda <span class="herd-tag">↻ herdado</span></div>
+      <div class="secao-t">Escala de Morse â€“ Risco de Queda <span class="herd-tag">â†» herdado</span></div>
       <div class="secao-c">
-        <div class="morse-blk"><div class="morse-t">1. Histórico de quedas</div><div class="morse-o"><label class="ri"><input type="radio" name="m1" value="0" onchange="calcM()"> Não (0)</label><label class="ri"><input type="radio" name="m1" value="25" onchange="calcM()"> Sim (25)</label></div></div>
-        <div class="morse-blk"><div class="morse-t">2. Diagnóstico secundário</div><div class="morse-o"><label class="ri"><input type="radio" name="m2" value="0" onchange="calcM()"> Não (0)</label><label class="ri"><input type="radio" name="m2" value="15" onchange="calcM()"> Sim (15)</label></div></div>
-        <div class="morse-blk"><div class="morse-t">3. Auxílio na deambulação</div><div class="morse-o"><label class="ri"><input type="radio" name="m3" value="0" onchange="calcM()"> Nenhum/Acamado (0)</label><label class="ri"><input type="radio" name="m3" value="15" onchange="calcM()"> Muletas/Bengala (15)</label><label class="ri"><input type="radio" name="m3" value="30" onchange="calcM()"> Mobiliário/Parede (30)</label></div></div>
-        <div class="morse-blk"><div class="morse-t">4. Terapia endovenosa</div><div class="morse-o"><label class="ri"><input type="radio" name="m4" value="0" onchange="calcM()"> Não (0)</label><label class="ri"><input type="radio" name="m4" value="20" onchange="calcM()"> Sim (20)</label></div></div>
+        <div class="morse-blk"><div class="morse-t">1. HistÃ³rico de quedas</div><div class="morse-o"><label class="ri"><input type="radio" name="m1" value="0" onchange="calcM()"> NÃ£o (0)</label><label class="ri"><input type="radio" name="m1" value="25" onchange="calcM()"> Sim (25)</label></div></div>
+        <div class="morse-blk"><div class="morse-t">2. DiagnÃ³stico secundÃ¡rio</div><div class="morse-o"><label class="ri"><input type="radio" name="m2" value="0" onchange="calcM()"> NÃ£o (0)</label><label class="ri"><input type="radio" name="m2" value="15" onchange="calcM()"> Sim (15)</label></div></div>
+        <div class="morse-blk"><div class="morse-t">3. AuxÃ­lio na deambulaÃ§Ã£o</div><div class="morse-o"><label class="ri"><input type="radio" name="m3" value="0" onchange="calcM()"> Nenhum/Acamado (0)</label><label class="ri"><input type="radio" name="m3" value="15" onchange="calcM()"> Muletas/Bengala (15)</label><label class="ri"><input type="radio" name="m3" value="30" onchange="calcM()"> MobiliÃ¡rio/Parede (30)</label></div></div>
+        <div class="morse-blk"><div class="morse-t">4. Terapia endovenosa</div><div class="morse-o"><label class="ri"><input type="radio" name="m4" value="0" onchange="calcM()"> NÃ£o (0)</label><label class="ri"><input type="radio" name="m4" value="20" onchange="calcM()"> Sim (20)</label></div></div>
         <div class="morse-blk"><div class="morse-t">5. Marcha</div><div class="morse-o"><label class="ri"><input type="radio" name="m5" value="0" onchange="calcM()"> Normal/Acamado (0)</label><label class="ri"><input type="radio" name="m5" value="10" onchange="calcM()"> Fraca (10)</label><label class="ri"><input type="radio" name="m5" value="20" onchange="calcM()"> Comprometida (20)</label></div></div>
         <div class="morse-blk"><div class="morse-t">6. Estado mental</div><div class="morse-o"><label class="ri"><input type="radio" name="m6" value="0" onchange="calcM()"> Orientado (0)</label><label class="ri"><input type="radio" name="m6" value="15" onchange="calcM()"> Superestima capacidade (15)</label></div></div>
-        <div class="score-row"><span style="font-size:.76rem;color:var(--muted);">Total Morse:</span><span class="score-n" id="m-sc">–</span><span class="rb" id="m-r"></span></div>
+        <div class="score-row"><span style="font-size:.76rem;color:var(--muted);">Total Morse:</span><span class="score-n" id="m-sc">â€“</span><span class="rb" id="m-r"></span></div>
       </div>
     </div>
 
-    <!-- OBSERVAÇÕES -->
+    <!-- OBSERVAÃ‡Ã•ES -->
     <div class="secao">
-      <div class="secao-t">Observações / Intercorrências / Informações Complementares</div>
+      <div class="secao-t">ObservaÃ§Ãµes / IntercorrÃªncias / InformaÃ§Ãµes Complementares</div>
       <div class="secao-c">
         <div style="display:flex;justify-content:flex-end;">
-          <button class="btn-add" onclick="gerarTextoEvolucao()" title="Preenche o campo com um resumo baseado nos dados da evolução">📝 Gerar texto automático</button>
+          <button class="btn-add" onclick="gerarTextoEvolucao()" title="Preenche o campo com um resumo baseado nos dados da evoluÃ§Ã£o">ðŸ“ Gerar texto automÃ¡tico</button>
         </div>
-        <textarea id="f-obs" style="min-height:130px;" placeholder="Registre observações e intercorrências do turno..."></textarea>
+        <textarea id="f-obs" style="min-height:130px;" placeholder="Registre observaÃ§Ãµes e intercorrÃªncias do turno..."></textarea>
       </div>
     </div>
 
     <div class="btn-row">
-      <button class="btn btn-sec" onclick="irLeitos()">← Leitos</button>
-      <button class="btn" style="background:#1a6b3a;color:white;" id="btn-sae" onclick="abrirSAE()">🩺 Gerar SAE / NANDA</button>
-      <button class="btn btn-pri" id="btn-gerar" onclick="gerarPreview()">Gerar Impressão →</button>
+      <button class="btn btn-sec" onclick="irLeitos()">â† Leitos</button>
+      <button class="btn" style="background:#1a6b3a;color:white;" id="btn-sae" onclick="abrirSAE()">ðŸ©º Gerar SAE / NANDA</button>
+      <button class="btn btn-pri" id="btn-gerar" onclick="gerarPreview()">Gerar ImpressÃ£o â†’</button>
     </div>
   </div>
 </div>
@@ -881,7 +876,7 @@
 <!-- TELA PREVIEW -->
 <div id="t-prev" class="tela">
   <div class="app-header">
-    <div><h2>Pré-visualização – Impressão</h2><small id="prev-sub">Leito · Turno</small></div>
+    <div><h2>PrÃ©-visualizaÃ§Ã£o â€“ ImpressÃ£o</h2><small id="prev-sub">Leito Â· Turno</small></div>
     <span class="badge" id="badge-prev"></span>
   </div>
   <div style="background:white;border:1px solid var(--borda);border-top:none;border-radius:0 0 var(--r) var(--r);padding:1rem;display:flex;flex-direction:column;gap:.9rem;">
@@ -889,39 +884,34 @@
       <div id="preview-area"></div>
     </div>
     <div class="btn-row btn-row-prev">
-  <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
-  <button class="btn btn-sec btn-sm" onclick="irLeitos()">🛏 Leitos</button>
-  <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">☁ Salvar PDF no Drive</button>
-  <button class="btn btn-sm" style="background:#d63031; color:white;" onclick="confirmarAlta()">🏥 Alta</button>
-  <button class="btn btn-sm" style="background:#fdcb6e; color:black;" onclick="prepararTransferencia()">🔄 Transf.</button>
+  <button class="btn btn-sec btn-sm" onclick="irForm()">â† Editar</button>
+  <button class="btn btn-sec btn-sm" onclick="irLeitos()">ðŸ› Leitos</button>
+  <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">â˜ Salvar PDF no Drive</button>
+  <button class="btn btn-sm" style="background:#d63031; color:white;" onclick="confirmarAlta()">ðŸ¥ Alta</button>
+  <button class="btn btn-sm" style="background:#fdcb6e; color:black;" onclick="prepararTransferencia()">ðŸ”„ Transf.</button>
 </div>
     <p id="pdf-status" style="font-size:.72rem;color:var(--muted);text-align:right;"></p>
   </div>
 </div>
 
-<!-- MODAL ADMISSÃO -->
+<!-- MODAL ADMISSÃƒO -->
 <div class="overlay" id="modal-adm">
   <div class="modal">
-    <div class="modal-header"><h3 id="modal-titulo">Leito 01 – Admissão</h3><button class="modal-close" onclick="fecharModal()">×</button></div>
+    <div class="modal-header"><h3 id="modal-titulo">Leito 01 â€“ AdmissÃ£o</h3><button class="modal-close" onclick="fecharModal()">Ã—</button></div>
     <div class="modal-body">
       <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Nome do paciente</label><input type="text" id="m-pac" placeholder="Nome completo" style="width:100%;"></div>
-      <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Diagnóstico</label>
-        <div style="display:flex;gap:6px;align-items:flex-start;">
-          <input type="text" id="m-diag" placeholder="Diagnóstico principal" style="flex:1;" onblur="_sugerirCID(&apos;m-diag&apos;,&apos;m-cid&apos;)">
-          <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;min-width:110px;">
-            <input type="text" id="m-cid" placeholder="CID-10" style="width:100%;font-family:monospace;font-weight:600;" maxlength="8">
-            <span id="m-cid-status" style="font-size:.6rem;color:var(--muted);text-align:center;min-height:12px;"></span>
-          </div>
-        </div>
+      <div style="display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">DiagnÃ³stico(s)</label>
+        <div id="m-diags-wrap" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <button type="button" onclick="_addDiagRow('m')" style="margin-top:5px;font-size:.72rem;padding:3px 10px;background:var(--azul);color:#fff;border:none;border-radius:4px;cursor:pointer;">+ DiagnÃ³stico</button>
       </div>
       <div style="display:flex;gap:8px;">
         <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Data de nascimento</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="m-dn" style="flex:1;" onchange="_calcIdadeDisplay('m-dn','m-idade')"><span id="m-idade" style="font-size:.78rem;font-weight:700;color:var(--azul);white-space:nowrap;min-width:48px;"></span></div></div>
-        <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">Admissão UTI</label><input type="date" id="m-adm" style="width:100%;"></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:5px;"><label style="font-size:.76rem;font-weight:600;color:var(--muted);">AdmissÃ£o UTI</label><input type="date" id="m-adm" style="width:100%;"></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;">
         <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Sexo</label>
         <select id="m-sexo" style="width:100%;">
-          <option value="">– selecione –</option>
+          <option value="">â€“ selecione â€“</option>
           <option value="M">Masculino</option>
           <option value="F">Feminino</option>
         </select>
@@ -937,17 +927,17 @@
 </div>
 <div style="display:flex;flex-direction:column;gap:5px;">
   <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Origem do paciente</label>
-  <select id="m-origem" style="width:100%;" onchange="document.getElementById('m-origem-outro-wrap').style.display=this.value==='Transferência de outro serviço'?'flex':'none'">
-    <option value="">– selecione –</option>
+  <select id="m-origem" style="width:100%;" onchange="document.getElementById('m-origem-outro-wrap').style.display=this.value==='TransferÃªncia de outro serviÃ§o'?'flex':'none'">
+    <option value="">â€“ selecione â€“</option>
     <option value="Pronto Socorro">Pronto Socorro</option>
-    <option value="Transferência de outro serviço">Transferência de outro serviço</option>
-    <option value="Centro Cirúrgico">Centro Cirúrgico</option>
+    <option value="TransferÃªncia de outro serviÃ§o">TransferÃªncia de outro serviÃ§o</option>
+    <option value="Centro CirÃºrgico">Centro CirÃºrgico</option>
     <option value="Enfermarias">Enfermarias</option>
   </select>
 </div>
 <div id="m-origem-outro-wrap" style="display:none;flex-direction:column;gap:5px;">
-  <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Qual serviço?</label>
-  <input type="text" id="m-origem-outro" placeholder="Ex: UPA Esperança, Hospital Walfredo..." style="width:100%;">
+  <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Qual serviÃ§o?</label>
+  <input type="text" id="m-origem-outro" placeholder="Ex: UPA EsperanÃ§a, Hospital Walfredo..." style="width:100%;">
 </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding-top:4px;">
         <button class="btn btn-imp btn-sm" id="btn-alta" onclick="darAlta()">Alta / Desocupar leito</button>
@@ -964,23 +954,23 @@
 <div class="overlay" id="modal-alta">
   <div class="modal">
     <div class="modal-header">
-      <h3 id="modal-alta-titulo">🏥 Alta do Paciente</h3>
-      <button class="modal-close" onclick="fecharModalAlta()">×</button>
+      <h3 id="modal-alta-titulo">ðŸ¥ Alta do Paciente</h3>
+      <button class="modal-close" onclick="fecharModalAlta()">Ã—</button>
     </div>
     <div class="modal-body">
-      <p style="font-size:.78rem;color:var(--muted);line-height:1.5;">Registre o tipo de alta, a data e a hora para manter o histórico clínico e permitir o cálculo de indicadores futuros.</p>
+      <p style="font-size:.78rem;color:var(--muted);line-height:1.5;">Registre o tipo de alta, a data e a hora para manter o histÃ³rico clÃ­nico e permitir o cÃ¡lculo de indicadores futuros.</p>
       <div style="display:flex;flex-direction:column;gap:5px;">
         <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Tipo de alta</label>
-        <select id="alta-tipo" style="width:100%;" onchange="document.getElementById('alta-destino-wrap').style.display=this.value==='Transferência para outro serviço'?'flex':'none'">
-          <option value="">– selecione –</option>
+        <select id="alta-tipo" style="width:100%;" onchange="document.getElementById('alta-destino-wrap').style.display=this.value==='TransferÃªncia para outro serviÃ§o'?'flex':'none'">
+          <option value="">â€“ selecione â€“</option>
           <option value="Alta para enfermaria">Alta para enfermaria</option>
-          <option value="Transferência para outro serviço">Transferência para outro serviço</option>
-          <option value="Óbito">Óbito</option>
+          <option value="TransferÃªncia para outro serviÃ§o">TransferÃªncia para outro serviÃ§o</option>
+          <option value="Ã“bito">Ã“bito</option>
         </select>
       </div>
       <div id="alta-destino-wrap" style="display:none;flex-direction:column;gap:5px;">
-        <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Para qual serviço?</label>
-        <input type="text" id="alta-destino" placeholder="Ex: UPA Esperança, Hospital Walfredo..." style="width:100%;">
+        <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Para qual serviÃ§o?</label>
+        <input type="text" id="alta-destino" placeholder="Ex: UPA EsperanÃ§a, Hospital Walfredo..." style="width:100%;">
       </div>
       <div style="display:flex;gap:8px;">
         <div style="flex:1;display:flex;flex-direction:column;gap:5px;">
@@ -993,8 +983,8 @@
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:5px;">
-        <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Observação (opcional)</label>
-        <textarea id="alta-obs" placeholder="Qualquer informação adicional sobre a alta..." style="width:100%;min-height:60px;"></textarea>
+        <label style="font-size:.76rem;font-weight:600;color:var(--muted);">ObservaÃ§Ã£o (opcional)</label>
+        <textarea id="alta-obs" placeholder="Qualquer informaÃ§Ã£o adicional sobre a alta..." style="width:100%;min-height:60px;"></textarea>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:6px;padding-top:4px;">
         <button class="btn btn-sec btn-sm" onclick="fecharModalAlta()">Cancelar</button>
@@ -1009,7 +999,7 @@
   <div class="modal ficha-modal">
     <div class="modal-header">
       <h3 id="ficha-titulo">Ficha do Indicador</h3>
-      <button class="modal-close" onclick="fecharFichaIndicador()">×</button>
+      <button class="modal-close" onclick="fecharFichaIndicador()">Ã—</button>
     </div>
     <div class="modal-body" id="ficha-body"></div>
   </div>
@@ -1028,16 +1018,16 @@
   <div class="modal" style="max-width:880px;">
     <div class="modal-header">
       <div>
-        <h3>🩺 Sistematização da Assistência de Enfermagem</h3>
-        <small id="sae-paciente-info">—</small>
+        <h3>ðŸ©º SistematizaÃ§Ã£o da AssistÃªncia de Enfermagem</h3>
+        <small id="sae-paciente-info">â€”</small>
       </div>
-      <button class="modal-close" onclick="fecharSAE()">×</button>
+      <button class="modal-close" onclick="fecharSAE()">Ã—</button>
     </div>
     <div class="modal-body" id="sae-conteudo"></div>
     <div class="modal-footer" style="background:#eaf5ee;border-top:1px solid #c8e6d5;display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;">
       <button class="btn btn-sec btn-sm" onclick="fecharSAE()">Fechar</button>
-      <button class="btn btn-sm" style="background:#856404;color:white;" onclick="if(confirm('Gerar uma nova SAE? Isso substituirá a anterior.')) gerarSAE()">↻ Regenerar</button>
-      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirSAE()">🖨 Imprimir SAE</button>
+      <button class="btn btn-sm" style="background:#856404;color:white;" onclick="if(confirm('Gerar uma nova SAE? Isso substituirÃ¡ a anterior.')) gerarSAE()">â†» Regenerar</button>
+      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirSAE()">ðŸ–¨ Imprimir SAE</button>
     </div>
   </div>
 </div>
@@ -1046,8 +1036,8 @@
 <div class="overlay" id="modal-culturas">
   <div class="modal" style="max-width:700px;">
     <div class="modal-header">
-      <h3>🔬 Resultados de Cultura</h3>
-      <button class="modal-close" onclick="document.getElementById('modal-culturas').classList.remove('show')">×</button>
+      <h3>ðŸ”¬ Resultados de Cultura</h3>
+      <button class="modal-close" onclick="document.getElementById('modal-culturas').classList.remove('show')">Ã—</button>
     </div>
     <div class="modal-body" id="culturas-conteudo" style="max-height:70vh;overflow-y:auto;"></div>
     <div class="modal-footer" style="display:flex;justify-content:flex-end;padding:10px 16px;">
@@ -1056,52 +1046,52 @@
   </div>
 </div>
 
-<!-- MODAL EXPORTAR RELATÓRIO -->
+<!-- MODAL EXPORTAR RELATÃ“RIO -->
 <div class="overlay" id="modal-exportar">
   <div class="modal" style="max-width:480px;">
     <div class="modal-header" style="background:linear-gradient(135deg,#1a6b3a,#2d9e5f);color:white;">
-      <h3 style="color:white;margin:0;">📊 Exportar Relatório Gerencial</h3>
-      <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-exportar').classList.remove('show')">×</button>
+      <h3 style="color:white;margin:0;">ðŸ“Š Exportar RelatÃ³rio Gerencial</h3>
+      <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-exportar').classList.remove('show')">Ã—</button>
     </div>
     <div class="modal-body" style="padding:18px;display:flex;flex-direction:column;gap:14px;">
       <div style="font-size:.84rem;color:var(--muted);">
-        O relatório inclui todos os indicadores do período selecionado, narrativa gerada por IA e é exportado como <strong>Google Slides</strong> e <strong>PDF local</strong>.
+        O relatÃ³rio inclui todos os indicadores do perÃ­odo selecionado, narrativa gerada por IA e Ã© exportado como <strong>Google Slides</strong> e <strong>PDF local</strong>.
       </div>
       <div>
-        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Título do relatório</label>
-        <input type="text" id="exp-titulo" style="width:100%;" placeholder="Ex: Relatório UTI – Abril 2026">
+        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">TÃ­tulo do relatÃ³rio</label>
+        <input type="text" id="exp-titulo" style="width:100%;" placeholder="Ex: RelatÃ³rio UTI â€“ Abril 2026">
       </div>
       <div>
-        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Período</label>
-        <div id="exp-periodo-info" style="font-size:.84rem;font-weight:600;color:#1a6b3a;padding:6px 10px;background:#eaf5ee;border-radius:6px;">—</div>
+        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">PerÃ­odo</label>
+        <div id="exp-periodo-info" style="font-size:.84rem;font-weight:600;color:#1a6b3a;padding:6px 10px;background:#eaf5ee;border-radius:6px;">â€”</div>
       </div>
       <div>
-        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Seções a incluir</label>
+        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">SeÃ§Ãµes a incluir</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px;" id="exp-secoes">
-          <label class="ci"><input type="checkbox" value="ocupacao" checked> 🏥 Ocupação</label>
-          <label class="ci"><input type="checkbox" value="saida" checked> 📤 Saída/Mortalidade</label>
-          <label class="ci"><input type="checkbox" value="demograficos" checked> 👥 Demográficos</label>
-          <label class="ci"><input type="checkbox" value="sazonalidade" checked> 📅 Sazonalidade</label>
-          <label class="ci"><input type="checkbox" value="clinicos" checked> 🦠 Clínicos</label>
-          <label class="ci"><input type="checkbox" value="ventilacao" checked> 🫁 Ventilação</label>
-          <label class="ci"><input type="checkbox" value="dispositivos" checked> 💊 Dispositivos</label>
-          <label class="ci"><input type="checkbox" value="infusoes" checked> 💉 Infusões/DVA</label>
-          <label class="ci"><input type="checkbox" value="atbs" checked> 🧫 Antimicrobianos</label>
-          <label class="ci"><input type="checkbox" value="nas" checked> 📊 NAS</label>
-          <label class="ci"><input type="checkbox" value="nutricao" checked> 🍽️ Nutrição</label>
-          <label class="ci"><input type="checkbox" value="neuro" checked> 🧠 Neurológicos</label>
-          <label class="ci"><input type="checkbox" value="operacionais" checked> ⏱️ Operacionais</label>
-          <label class="ci"><input type="checkbox" value="cruzamentos" checked> 🔗 Cruzamentos</label>
-          <label class="ci"><input type="checkbox" value="sae_nanda" checked> 🩺 SAE/NANDA</label>
-          <label class="ci"><input type="checkbox" value="diagnosticos" checked> 🏥 Diagnósticos/CID</label>
-          <label class="ci"><input type="checkbox" value="iras" checked> 🧫 IRAS/Bundles</label>
+          <label class="ci"><input type="checkbox" value="ocupacao" checked> ðŸ¥ OcupaÃ§Ã£o</label>
+          <label class="ci"><input type="checkbox" value="saida" checked> ðŸ“¤ SaÃ­da/Mortalidade</label>
+          <label class="ci"><input type="checkbox" value="demograficos" checked> ðŸ‘¥ DemogrÃ¡ficos</label>
+          <label class="ci"><input type="checkbox" value="sazonalidade" checked> ðŸ“… Sazonalidade</label>
+          <label class="ci"><input type="checkbox" value="clinicos" checked> ðŸ¦  ClÃ­nicos</label>
+          <label class="ci"><input type="checkbox" value="ventilacao" checked> ðŸ« VentilaÃ§Ã£o</label>
+          <label class="ci"><input type="checkbox" value="dispositivos" checked> ðŸ’Š Dispositivos</label>
+          <label class="ci"><input type="checkbox" value="infusoes" checked> ðŸ’‰ InfusÃµes/DVA</label>
+          <label class="ci"><input type="checkbox" value="atbs" checked> ðŸ§« Antimicrobianos</label>
+          <label class="ci"><input type="checkbox" value="nas" checked> ðŸ“Š NAS</label>
+          <label class="ci"><input type="checkbox" value="nutricao" checked> ðŸ½ï¸ NutriÃ§Ã£o</label>
+          <label class="ci"><input type="checkbox" value="neuro" checked> ðŸ§  NeurolÃ³gicos</label>
+          <label class="ci"><input type="checkbox" value="operacionais" checked> â±ï¸ Operacionais</label>
+          <label class="ci"><input type="checkbox" value="cruzamentos" checked> ðŸ”— Cruzamentos</label>
+          <label class="ci"><input type="checkbox" value="sae_nanda" checked> ðŸ©º SAE/NANDA</label>
+          <label class="ci"><input type="checkbox" value="diagnosticos" checked> ðŸ¥ DiagnÃ³sticos/CID</label>
+          <label class="ci"><input type="checkbox" value="iras" checked> ðŸ§« IRAS/Bundles</label>
         </div>
       </div>
       <div id="exp-status" style="display:none;padding:10px;background:#eaf5ee;border-radius:8px;font-size:.82rem;color:#1a6b3a;"></div>
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:10px 18px;border-top:1px solid #eee;">
       <button class="btn btn-sec btn-sm" onclick="document.getElementById('modal-exportar').classList.remove('show')">Cancelar</button>
-      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" id="btn-exportar-ok" onclick="executarExportacao()">📊 Gerar Relatório</button>
+      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" id="btn-exportar-ok" onclick="executarExportacao()">ðŸ“Š Gerar RelatÃ³rio</button>
     </div>
   </div>
 </div>
@@ -1111,33 +1101,33 @@
   <div class="modal" style="max-width:780px;">
     <div class="modal-header" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;">
       <div>
-        <h3 style="color:white;margin:0;">📋 Checklist IRAS – CCIH</h3>
-        <small id="iras-pac-info" style="opacity:.9;">—</small>
+        <h3 style="color:white;margin:0;">ðŸ“‹ Checklist IRAS â€“ CCIH</h3>
+        <small id="iras-pac-info" style="opacity:.9;">â€”</small>
       </div>
-      <button class="modal-close" style="color:white;" onclick="fecharIRAS()">×</button>
+      <button class="modal-close" style="color:white;" onclick="fecharIRAS()">Ã—</button>
     </div>
     <div class="modal-body" id="iras-conteudo" style="max-height:78vh;overflow-y:auto;padding:14px 16px;"></div>
     <div class="modal-footer" style="background:#e3f0ff;border-top:1px solid #bbdefb;display:flex;gap:8px;justify-content:space-between;align-items:center;padding:10px 16px;flex-shrink:0;">
       <div id="iras-score" style="font-size:.82rem;color:#0d47a1;font-weight:600;"></div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-sec btn-sm" onclick="fecharIRAS()">Fechar</button>
-        <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="salvarIRAS()">💾 Salvar Checklist</button>
-        <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirIRAS()">🖨 Imprimir</button>
+        <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="salvarIRAS()">ðŸ’¾ Salvar Checklist</button>
+        <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirIRAS()">ðŸ–¨ Imprimir</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ════════════════════════════════════════════
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
      JAVASCRIPT
-═════════════════════════════════════════════ -->
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
 <script src="app.js?v=20260522h"></script>
-<!-- MODAL HISTÓRICO DE DISPOSITIVOS -->
+<!-- MODAL HISTÃ“RICO DE DISPOSITIVOS -->
 <div class="overlay" id="modal-hist-disp">
   <div class="modal" style="max-width:620px;">
     <div class="modal-header" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;">
-      <h3 style="color:white;margin:0;" id="hist-disp-titulo">📋 Dispositivos</h3>
-      <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-hist-disp').classList.remove('show')">×</button>
+      <h3 style="color:white;margin:0;" id="hist-disp-titulo">ðŸ“‹ Dispositivos</h3>
+      <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-hist-disp').classList.remove('show')">Ã—</button>
     </div>
     <div class="modal-body" style="padding:16px;max-height:72vh;overflow-y:auto;" id="hist-disp-body">
       <div style="text-align:center;color:var(--muted);padding:2rem;">Carregando...</div>
@@ -1150,33 +1140,33 @@
   <div class="modal" style="max-width:860px;display:flex;flex-direction:column;max-height:92vh;">
     <div class="modal-header" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;flex-shrink:0;">
       <div>
-        <h3 style="color:white;margin:0;">📋 Conferência: Leitos da UTI</h3>
-        <small id="cl-header-info" style="opacity:.9;">—</small>
+        <h3 style="color:white;margin:0;">ðŸ“‹ ConferÃªncia: Leitos da UTI</h3>
+        <small id="cl-header-info" style="opacity:.9;">â€”</small>
       </div>
-      <button class="modal-close" style="color:white;" onclick="fecharChecklistSetorial()">×</button>
+      <button class="modal-close" style="color:white;" onclick="fecharChecklistSetorial()">Ã—</button>
     </div>
 
-    <!-- Abas: Preencher / Histórico -->
+    <!-- Abas: Preencher / HistÃ³rico -->
     <div style="display:flex;border-bottom:2px solid #bbdefb;background:#e8f4fd;flex-shrink:0;">
-      <button id="cl-tab-form" onclick="clAba('form')" style="flex:1;padding:10px;border:none;background:white;font-size:.82rem;font-weight:700;color:#0d47a1;border-bottom:3px solid #0d47a1;margin-bottom:-2px;cursor:pointer;font-family:inherit;transition:background .15s;">📝 Preencher</button>
-      <button id="cl-tab-hist" onclick="clAba('hist')" style="flex:1;padding:10px;border:none;background:transparent;font-size:.82rem;font-weight:600;color:#5a6a7a;border-bottom:3px solid transparent;margin-bottom:-2px;cursor:pointer;font-family:inherit;transition:background .15s;">📅 Histórico</button>
+      <button id="cl-tab-form" onclick="clAba('form')" style="flex:1;padding:10px;border:none;background:white;font-size:.82rem;font-weight:700;color:#0d47a1;border-bottom:3px solid #0d47a1;margin-bottom:-2px;cursor:pointer;font-family:inherit;transition:background .15s;">ðŸ“ Preencher</button>
+      <button id="cl-tab-hist" onclick="clAba('hist')" style="flex:1;padding:10px;border:none;background:transparent;font-size:.82rem;font-weight:600;color:#5a6a7a;border-bottom:3px solid transparent;margin-bottom:-2px;cursor:pointer;font-family:inherit;transition:background .15s;">ðŸ“… HistÃ³rico</button>
     </div>
 
-    <!-- ABA FORMULÁRIO -->
+    <!-- ABA FORMULÃRIO -->
     <div id="cl-aba-form" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;">
-      <!-- Cabeçalho automático -->
+      <!-- CabeÃ§alho automÃ¡tico -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;background:#f0f7ff;border:1px solid #bbdefb;border-radius:9px;padding:12px 14px;">
         <div>
           <div style="font-size:.68rem;font-weight:700;color:#5a6a7a;text-transform:uppercase;letter-spacing:.05em;">Data</div>
-          <div id="cl-data-display" style="font-size:.92rem;font-weight:700;color:#0d47a1;margin-top:3px;">—</div>
+          <div id="cl-data-display" style="font-size:.92rem;font-weight:700;color:#0d47a1;margin-top:3px;">â€”</div>
         </div>
         <div>
           <div style="font-size:.68rem;font-weight:700;color:#5a6a7a;text-transform:uppercase;letter-spacing:.05em;">Turno</div>
-          <div id="cl-turno-display" style="font-size:.92rem;font-weight:700;color:#0d47a1;margin-top:3px;">—</div>
+          <div id="cl-turno-display" style="font-size:.92rem;font-weight:700;color:#0d47a1;margin-top:3px;">â€”</div>
         </div>
         <div>
           <div style="font-size:.68rem;font-weight:700;color:#5a6a7a;text-transform:uppercase;letter-spacing:.05em;">Enfermeiro(a)</div>
-          <div id="cl-enf-display" style="font-size:.82rem;font-weight:600;color:#0d47a1;margin-top:3px;line-height:1.3;">—</div>
+          <div id="cl-enf-display" style="font-size:.82rem;font-weight:600;color:#0d47a1;margin-top:3px;line-height:1.3;">â€”</div>
         </div>
       </div>
 
@@ -1203,17 +1193,17 @@
         <div class="cl-carrossel-body" id="cl-carr-body"></div>
       </div>
 
-      <!-- Observações -->
+      <!-- ObservaÃ§Ãµes -->
       <div>
-        <div style="font-size:.72rem;font-weight:700;color:#0d47a1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Observações / Pendências</div>
-        <textarea id="cl-obs" placeholder="Registre aqui pendências, materiais em falta, solicitações à chefia, etc." style="width:100%;min-height:80px;font-family:inherit;font-size:.82rem;border:1.5px solid #bbdefb;border-radius:8px;padding:10px;resize:vertical;background:white;color:#1a1a2e;transition:border-color .15s;" onfocus="this.style.borderColor='#0d47a1'" onblur="this.style.borderColor='#bbdefb'"></textarea>
+        <div style="font-size:.72rem;font-weight:700;color:#0d47a1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">ObservaÃ§Ãµes / PendÃªncias</div>
+        <textarea id="cl-obs" placeholder="Registre aqui pendÃªncias, materiais em falta, solicitaÃ§Ãµes Ã  chefia, etc." style="width:100%;min-height:80px;font-family:inherit;font-size:.82rem;border:1.5px solid #bbdefb;border-radius:8px;padding:10px;resize:vertical;background:white;color:#1a1a2e;transition:border-color .15s;" onfocus="this.style.borderColor='#0d47a1'" onblur="this.style.borderColor='#bbdefb'"></textarea>
       </div>
     </div>
 
-    <!-- ABA HISTÓRICO -->
+    <!-- ABA HISTÃ“RICO -->
     <div id="cl-aba-hist" style="flex:1;overflow-y:auto;padding:16px;display:none;flex-direction:column;gap:10px;">
       <div id="cl-hist-lista">
-        <div style="text-align:center;color:var(--muted);padding:2rem;font-size:.84rem;">Carregando histórico...</div>
+        <div style="text-align:center;color:var(--muted);padding:2rem;font-size:.84rem;">Carregando histÃ³rico...</div>
       </div>
     </div>
 
@@ -1221,11 +1211,11 @@
       <div id="cl-save-status" style="font-size:.72rem;color:#1565c0;min-width:0;flex:1;"></div>
       <div id="cl-footer-btns" style="display:flex;gap:6px;flex-shrink:0;">
         <button class="btn btn-sec btn-sm" onclick="fecharChecklistSetorial()">Fechar</button>
-        <!-- Imprimir período: só desktop -->
-        <button class="btn btn-sm cl-btn-desktop-only" style="background:#6a3fa0;color:white;" onclick="clImprimirPeriodo()">📅 Imprimir período</button>
-        <!-- Imprimir turno atual: só desktop -->
-        <button class="btn btn-sm cl-btn-desktop-only" style="background:#1a6b3a;color:white;" onclick="imprimirChecklistSetorial()">🖨 Imprimir</button>
-        <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="salvarChecklistSetorial()">💾 Salvar</button>
+        <!-- Imprimir perÃ­odo: sÃ³ desktop -->
+        <button class="btn btn-sm cl-btn-desktop-only" style="background:#6a3fa0;color:white;" onclick="clImprimirPeriodo()">ðŸ“… Imprimir perÃ­odo</button>
+        <!-- Imprimir turno atual: sÃ³ desktop -->
+        <button class="btn btn-sm cl-btn-desktop-only" style="background:#1a6b3a;color:white;" onclick="imprimirChecklistSetorial()">ðŸ–¨ Imprimir</button>
+        <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="salvarChecklistSetorial()">ðŸ’¾ Salvar</button>
       </div>
     </div>
   </div>
@@ -1236,21 +1226,21 @@
   <div class="modal" style="max-width:560px;">
     <div class="modal-header" id="escala-header">
       <h3 id="escala-titulo">Escala</h3>
-      <button class="modal-close" onclick="fecharEscala()">×</button>
+      <button class="modal-close" onclick="fecharEscala()">Ã—</button>
     </div>
     <div class="modal-body" id="escala-body" style="padding:0;max-height:80vh;overflow-y:auto;"></div>
   </div>
 </div>
 
-<!-- MODAL IMPRIMIR PERÍODO CHECKLIST -->
+<!-- MODAL IMPRIMIR PERÃODO CHECKLIST -->
 <div class="overlay" id="modal-cl-periodo" style="z-index:1100;">
   <div class="modal" style="max-width:420px;">
     <div class="modal-header" style="background:linear-gradient(135deg,#6a3fa0,#8b5cf6);">
-      <h3 style="color:white;">📅 Imprimir Período</h3>
-      <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-cl-periodo').classList.remove('show')">×</button>
+      <h3 style="color:white;">ðŸ“… Imprimir PerÃ­odo</h3>
+      <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-cl-periodo').classList.remove('show')">Ã—</button>
     </div>
     <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:14px;">
-      <p style="font-size:.82rem;color:#5a6a7a;margin:0;">Selecione o intervalo de datas para gerar o relatório consolidado de conferências.</p>
+      <p style="font-size:.82rem;color:#5a6a7a;margin:0;">Selecione o intervalo de datas para gerar o relatÃ³rio consolidado de conferÃªncias.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div>
           <label style="font-size:.75rem;font-weight:700;color:#0d47a1;display:block;margin-bottom:4px;">Data inicial</label>
@@ -1266,14 +1256,14 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <label style="font-size:.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="cl-p-diurno" checked> Diurno</label>
           <label style="font-size:.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="cl-p-noturno" checked> Noturno</label>
-          <label style="font-size:.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="cl-p-plantao" checked> Plantão</label>
+          <label style="font-size:.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="cl-p-plantao" checked> PlantÃ£o</label>
         </div>
       </div>
       <div id="cl-periodo-msg" style="font-size:.76rem;color:#856404;display:none;"></div>
     </div>
     <div class="modal-footer" style="justify-content:flex-end;gap:8px;">
       <button class="btn btn-sec btn-sm" onclick="document.getElementById('modal-cl-periodo').classList.remove('show')">Cancelar</button>
-      <button class="btn btn-sm" style="background:#6a3fa0;color:white;" onclick="clGerarRelatorioPeriodo()">🖨 Gerar relatório</button>
+      <button class="btn btn-sm" style="background:#6a3fa0;color:white;" onclick="clGerarRelatorioPeriodo()">ðŸ–¨ Gerar relatÃ³rio</button>
     </div>
   </div>
 </div>
