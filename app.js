@@ -8699,13 +8699,96 @@ let _clInputs = {};
 
 // ── Abrir / Fechar ──────────────────────────────────────────────────────────
 
-function abrirChecklistSetorial() {
+async function abrirChecklistSetorial() {
   _clMontarFormulario();
   _clCarregarHistorico();
   clAba('form');
   document.getElementById('modal-checklist-setorial').classList.add('show');
-  // Herdar turno anterior automaticamente após montar o formulário
-  setTimeout(clHerdarTurnoAnterior, 300);
+  // Prioridade: carregar rascunho do TURNO ATUAL (se houver); só herdar do
+  // turno anterior quando não houver rascunho. Isso permite salvar
+  // parcial e retomar depois sem que a herança sobrescreva o trabalho.
+  const carregouAtual = await _clCarregarTurnoAtual();
+  if (!carregouAtual) {
+    setTimeout(clHerdarTurnoAnterior, 100);
+  }
+}
+
+// Carrega o rascunho salvo do turno ATUAL (mesma data + mesmo turno)
+// preenchendo os campos do formulário (tabela + carrossel + observações).
+// Retorna true se encontrou rascunho com pelo menos 1 campo preenchido
+// (ou observação), false caso contrário — neste caso a herança será acionada.
+async function _clCarregarTurnoAtual() {
+  const status = document.getElementById('cl-save-status');
+  const data   = dataDoTurno ? dataDoTurno() : hoje();
+  const chave  = data + '__' + (turno || 'DIURNO');
+
+  let registro = null;
+
+  // 1ª fonte: Firestore
+  if (db && !modoOffline) {
+    try {
+      const doc = await db.collection('checklist_setorial').doc(chave).get();
+      if (doc.exists) registro = doc.data();
+    } catch(e) { console.warn('[Setorial:carregarAtual] Firestore:', e); }
+  }
+  // 2ª fonte: localStorage
+  if (!registro) {
+    try {
+      const local = JSON.parse(localStorage.getItem('cl_setorial') || '{}');
+      if (local[chave]) registro = local[chave];
+    } catch(e) {}
+  }
+  if (!registro || !registro.materiais) return false;
+
+  // Conta campos não-nulos para distinguir rascunho real de registro vazio.
+  let preenchidos = 0;
+  CL_MATERIAIS.forEach(mat => {
+    if (!registro.materiais[mat.id]) return;
+    CL_LEITOS.forEach(l => {
+      const val = registro.materiais[mat.id][l];
+      if (val !== null && val !== undefined) preenchidos++;
+    });
+  });
+  // Registro vazio (zero campos e sem observação) é tratado como "sem rascunho"
+  // para que a herança do turno anterior preencha o formulário.
+  const temObs = registro.observacoes && registro.observacoes.trim().length > 0;
+  if (preenchidos === 0 && !temObs) return false;
+
+  // Preenche tabela + carrossel
+  CL_MATERIAIS.forEach(mat => {
+    if (!registro.materiais[mat.id]) return;
+    CL_LEITOS.forEach(l => {
+      const val = registro.materiais[mat.id][l];
+      if (val === null || val === undefined) return;
+      const key = mat.id + '__' + l.replace(/ /g,'_');
+      const ref = l === 'ARMÁRIO' ? mat.armario : mat.leito;
+      const elTabela = document.getElementById('cl-inp-' + key);
+      if (elTabela) { elTabela.value = val; clColorirInput(elTabela, ref); }
+      const elCard = document.getElementById('cl-m-' + key);
+      if (elCard) { elCard.value = val; clColorirCard(elCard, ref); }
+    });
+  });
+
+  // Observações
+  if (temObs) {
+    const obs = document.getElementById('cl-obs');
+    if (obs) obs.value = registro.observacoes;
+  }
+
+  clCarrAtualizarUI();
+
+  if (status) {
+    status.textContent = '📂 Rascunho do turno atual carregado (' + preenchidos +
+                         ' campo' + (preenchidos === 1 ? '' : 's') +
+                         '). Continue de onde parou.';
+    status.style.color = '#1565c0';
+    setTimeout(() => {
+      if (status.textContent.indexOf('Rascunho do turno atual') !== -1) {
+        status.textContent = '';
+      }
+    }, 6000);
+  }
+  return true;
 }
 
 function fecharChecklistSetorial() {
@@ -9036,31 +9119,52 @@ async function salvarChecklistSetorial() {
   const chave = data + '__' + (turno || 'DIURNO');
   const nomeEnf = _assinaturaTexto ? _assinaturaTexto(usuarioEmail) : usuarioEmail;
 
+  const materiais = _clColetarDados();
+
+  // Contagem para distinguir rascunho (parcial) de conferência completa.
+  let preenchidos = 0, total = 0;
+  CL_MATERIAIS.forEach(mat => {
+    CL_LEITOS.forEach(l => {
+      const ref = l === 'ARMÁRIO' ? mat.armario : mat.leito;
+      if (ref === null) return;                         // célula sem referência → não conta
+      total++;
+      const v = materiais[mat.id] ? materiais[mat.id][l] : null;
+      if (v !== null && v !== undefined) preenchidos++;
+    });
+  });
+  const completo = total > 0 && preenchidos >= total;
+
   const registro = {
     data,
     turno: turno || '',
     enfermeiro: nomeEnf,
     email: usuarioEmail,
     observacoes: document.getElementById('cl-obs').value.trim(),
-    materiais: _clColetarDados(),
+    materiais,
+    parcial: !completo,
+    preenchidos, totalReferencias: total,
     salvoEm: new Date().toISOString()
   };
+
+  const sufixo = completo
+    ? ' (completo)'
+    : ' (rascunho — ' + preenchidos + '/' + total + ' campos)';
 
   // Tentar salvar no Firestore
   if (db && !modoOffline) {
     try {
       await db.collection('checklist_setorial').doc(chave).set(registro);
-      status.textContent = '✅ Conferência salva na nuvem!';
+      status.textContent = '✅ Salvo na nuvem' + sufixo;
       status.style.color = '#1a6b3a';
     } catch (e) {
       console.warn('[ChecklistSetorial] Erro Firestore, usando localStorage:', e);
       _clSalvarLocal(chave, registro);
-      status.textContent = '⚠️ Salvo localmente (sem nuvem)';
+      status.textContent = '⚠️ Salvo localmente' + sufixo + ' (sem nuvem)';
       status.style.color = '#856404';
     }
   } else {
     _clSalvarLocal(chave, registro);
-    status.textContent = '✅ Salvo localmente!';
+    status.textContent = '✅ Salvo localmente' + sufixo;
     status.style.color = '#1a6b3a';
   }
 
