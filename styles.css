@@ -463,15 +463,14 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:8px 
   #modal-checklist-setorial{padding:0!important;}
   #modal-checklist-setorial .modal{border-radius:0!important;max-width:100%!important;max-height:100vh!important;height:100vh!important;width:100%!important;}
 }
+/* Print do checklist agora usa janela dedicada — fallback se pop-up bloqueado */
 @media print{
-  body.printing-checklist>*:not(#modal-checklist-setorial){display:none!important;}
-  body.printing-checklist #modal-checklist-setorial{display:flex!important;position:static;background:none;padding:0;}
-  body.printing-checklist .modal{box-shadow:none!important;max-width:100%!important;max-height:none!important;height:auto!important;}
-  body.printing-checklist .modal-footer,body.printing-checklist .modal-close,body.printing-checklist #cl-tab-form,body.printing-checklist #cl-tab-hist{display:none!important;}
-  body.printing-checklist #cl-aba-form{display:flex!important;}
-  body.printing-checklist #cl-aba-hist{display:none!important;}
-  body.printing-checklist .cl-carrossel-wrap{display:none!important;}
-  body.printing-checklist .cl-tabela-wrap{display:block!important;}
+  body.printing-checklist>*{display:none!important;}
+  body.printing-checklist::after{
+    display:block!important;
+    content:"Para imprimir o checklist, permita pop-ups neste site e clique em Imprimir novamente.";
+    font-size:14px;padding:40px;color:#333;text-align:center;
+  }
 }
 
 /* ── Botões só-desktop no checklist ── */
