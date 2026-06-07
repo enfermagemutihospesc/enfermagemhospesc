@@ -8704,6 +8704,8 @@ function abrirChecklistSetorial() {
   _clCarregarHistorico();
   clAba('form');
   document.getElementById('modal-checklist-setorial').classList.add('show');
+  // Herdar turno anterior automaticamente após montar o formulário
+  setTimeout(clHerdarTurnoAnterior, 300);
 }
 
 function fecharChecklistSetorial() {
@@ -9286,4 +9288,148 @@ async function clHerdarTurnoAnterior() {
   status.textContent = '✅ Herdado de ' + dataFmt + ' (' + turnoFmt + ') — ' + preenchidos + ' campo(s).';
   status.style.color = '#1a6b3a';
   setTimeout(() => { status.textContent = ''; }, 5000);
+}
+
+// ── Imprimir período ─────────────────────────────────────────────────────────
+
+function clImprimirPeriodo() {
+  // Pré-preencher datas: últimos 7 dias por padrão
+  const hoje = new Date();
+  const semanaAtras = new Date(hoje);
+  semanaAtras.setDate(hoje.getDate() - 6);
+  const fmt = d => d.toISOString().split('T')[0];
+  document.getElementById('cl-periodo-ini').value = fmt(semanaAtras);
+  document.getElementById('cl-periodo-fim').value = fmt(hoje);
+  const msg = document.getElementById('cl-periodo-msg');
+  msg.style.display = 'none';
+  document.getElementById('modal-cl-periodo').classList.add('show');
+}
+
+async function clGerarRelatorioPeriodo() {
+  const iniVal = document.getElementById('cl-periodo-ini').value;
+  const fimVal = document.getElementById('cl-periodo-fim').value;
+  const msg    = document.getElementById('cl-periodo-msg');
+
+  if (!iniVal || !fimVal) {
+    msg.textContent = '⚠️ Informe as duas datas.'; msg.style.display = 'block'; return;
+  }
+  if (iniVal > fimVal) {
+    msg.textContent = '⚠️ Data inicial não pode ser maior que a final.'; msg.style.display = 'block'; return;
+  }
+
+  const turnosSel = [];
+  if (document.getElementById('cl-p-diurno').checked)  turnosSel.push('DIURNO');
+  if (document.getElementById('cl-p-noturno').checked) turnosSel.push('NOTURNO');
+  if (document.getElementById('cl-p-plantao').checked) turnosSel.push('PLANTÃO');
+  if (!turnosSel.length) {
+    msg.textContent = '⚠️ Selecione ao menos um turno.'; msg.style.display = 'block'; return;
+  }
+
+  msg.textContent = '⏳ Carregando registros...'; msg.style.color = '#5a6a7a'; msg.style.display = 'block';
+
+  let registros = {};
+
+  if (db && !modoOffline) {
+    try {
+      const snap = await db.collection('checklist_setorial')
+                           .orderBy('data', 'asc')
+                           .get();
+      snap.docs.forEach(d => { registros[d.id] = d.data(); });
+    } catch(e) { console.warn('[Período] Firestore:', e); }
+  }
+  try {
+    const local = JSON.parse(localStorage.getItem('cl_setorial') || '{}');
+    Object.keys(local).forEach(k => { if (!registros[k]) registros[k] = local[k]; });
+  } catch(e) {}
+
+  // Filtrar por data e turno
+  const filtrados = Object.entries(registros)
+    .filter(([chave]) => {
+      const partes = chave.split('__');
+      const data  = partes[0] || '';
+      const t     = (partes[1] || '').toUpperCase();
+      return data >= iniVal && data <= fimVal && turnosSel.includes(t);
+    })
+    .sort((a, b) => a[0] < b[0] ? -1 : 1);
+
+  if (!filtrados.length) {
+    msg.textContent = '⚠️ Nenhum registro encontrado no período.'; msg.style.color = '#856404'; return;
+  }
+
+  msg.style.display = 'none';
+  document.getElementById('modal-cl-periodo').classList.remove('show');
+
+  // Gerar HTML para impressão
+  const dataIniFmt = iniVal.split('-').reverse().join('/');
+  const dataFimFmt = fimVal.split('-').reverse().join('/');
+
+  let html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<title>Conferência UTI — ${dataIniFmt} a ${dataFimFmt}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Arial,sans-serif;font-size:10px;color:#111;padding:12px;}
+  h1{font-size:13px;color:#0d47a1;margin-bottom:2px;}
+  .sub{font-size:9px;color:#555;margin-bottom:12px;}
+  .bloco{margin-bottom:18px;page-break-inside:avoid;}
+  .bloco-header{background:#0d47a1;color:white;padding:5px 8px;font-size:10px;font-weight:bold;border-radius:4px 4px 0 0;}
+  .bloco-header .enf{font-size:8px;font-weight:normal;opacity:.85;}
+  table{width:100%;border-collapse:collapse;font-size:8.5px;}
+  th{background:#dde8f7;color:#0d47a1;padding:3px 5px;border:1px solid #bbb;text-align:center;font-weight:bold;}
+  th:first-child{text-align:left;min-width:100px;}
+  td{border:1px solid #ccc;padding:3px 5px;text-align:center;vertical-align:middle;}
+  td:first-child{text-align:left;background:#f5f9ff;font-weight:600;}
+  .ok{background:#eaf5ee;color:#155724;}
+  .low{background:#fff3e0;color:#92400e;}
+  .zero{background:#fef2f2;color:#721c24;}
+  .obs{background:#fffbea;border:1px solid #ffc107;border-radius:3px;padding:4px 6px;font-size:8.5px;margin-top:4px;}
+  @media print{body{padding:6px;}@page{margin:10mm;size:landscape;}}
+</style></head><body>
+<h1>📋 Conferência de Leitos da UTI</h1>
+<div class="sub">Período: ${dataIniFmt} a ${dataFimFmt} &nbsp;|&nbsp; Turnos: ${turnosSel.join(', ')} &nbsp;|&nbsp; ${filtrados.length} conferência(s)</div>`;
+
+  filtrados.forEach(([chave, r]) => {
+    const partes   = chave.split('__');
+    const dataFmt  = (partes[0] || '').split('-').reverse().join('/');
+    const turnoFmt = partes[1] || '';
+    const enf      = r.enfermeiro || '—';
+
+    html += `<div class="bloco">
+<div class="bloco-header">${dataFmt} &nbsp;—&nbsp; ${turnoFmt} <span class="enf">&nbsp;|&nbsp; Enf.: ${_escHtml(enf)}</span></div>
+<table><thead><tr><th>MATERIAL</th>`;
+    CL_LEITOS.forEach(l => { html += '<th>' + l + '</th>'; });
+    html += '</tr></thead><tbody>';
+
+    CL_MATERIAIS.forEach(mat => {
+      html += '<tr><td>' + mat.nome + '</td>';
+      CL_LEITOS.forEach(l => {
+        const isArmario = l === 'ARMÁRIO';
+        const ref = isArmario ? mat.armario : mat.leito;
+        const val = (r.materiais && r.materiais[mat.id]) ? r.materiais[mat.id][l] : null;
+        let cls = '';
+        if (val !== null && val !== undefined && ref !== null) {
+          if (val >= ref) cls = 'ok';
+          else if (val > 0) cls = 'low';
+          else cls = 'zero';
+        }
+        const exibe = (val !== null && val !== undefined) ? val : '—';
+        html += '<td class="' + cls + '">' + exibe + '</td>';
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    if (r.observacoes) {
+      html += '<div class="obs"><strong>Obs:</strong> ' + _escHtml(r.observacoes) + '</div>';
+    }
+    html += '</div>';
+  });
+
+  html += '</body></html>';
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('Permita pop-ups para gerar o relatório.'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 600);
 }
