@@ -9206,9 +9206,355 @@ function _clRenderMiniTabela(r) {
 // ── Imprimir ─────────────────────────────────────────────────────────────────
 
 function imprimirChecklistSetorial() {
-  document.body.classList.add('printing-checklist');
-  window.print();
-  setTimeout(() => document.body.classList.remove('printing-checklist'), 1500);
+  // ── Coleta dados da tela atual ──────────────────────────────────────────────
+  const dataDisplay  = (document.getElementById('cl-data-display')  || {}).textContent || '—';
+  const turnoDisplay = (document.getElementById('cl-turno-display') || {}).textContent || '—';
+  const enfDisplay   = (document.getElementById('cl-enf-display')   || {}).textContent || '—';
+  const obsDisplay   = (document.getElementById('cl-obs')           || {}).value        || '';
+
+  // ── Lê todos os inputs da tabela (cl-inp-<matId>__<leito>) ─────────────────
+  const dados = {};
+  CL_MATERIAIS.forEach(mat => {
+    dados[mat.id] = {};
+    CL_LEITOS.forEach(l => {
+      const key = mat.id + '__' + l.replace(/ /g,'_');
+      const el  = document.getElementById('cl-inp-' + key);
+      dados[mat.id][l] = el ? el.value.trim() : '';
+    });
+  });
+
+  // ── Determina cor de célula ─────────────────────────────────────────────────
+  function cellClass(val, ref) {
+    if (val === '' || val === null || val === undefined) return '';
+    const n = parseFloat(val);
+    if (isNaN(n) || ref === null) return '';
+    if (n >= ref) return 'ok';
+    if (n >  0)   return 'low';
+    return 'zero';
+  }
+
+  // ── Monta cabeçalho das colunas ─────────────────────────────────────────────
+  let thRow = '<th class="col-mat">MATERIAIS / LEITOS</th>';
+  CL_LEITOS.forEach(l => {
+    thRow += '<th' + (l === 'ARMÁRIO' ? ' class="col-arm"' : '') + '>' + l + '</th>';
+  });
+
+  // ── Monta linhas de dados ───────────────────────────────────────────────────
+  let tbRows = '';
+  CL_MATERIAIS.forEach(mat => {
+    tbRows += '<tr><td class="col-mat">' + _escHtml(mat.nome) + '</td>';
+    CL_LEITOS.forEach(l => {
+      const isArmario = l === 'ARMÁRIO';
+      const ref = isArmario ? mat.armario : mat.leito;
+      const val = dados[mat.id][l];
+      const cls = cellClass(val, ref);
+      const exibe = (val !== '' && val !== null && val !== undefined) ? _escHtml(val) : '—';
+      const refTxt = ref !== null ? '<span class="ref-lbl">Ref: ' + ref + '</span>' : '';
+      tbRows += '<td class="' + cls + (isArmario ? ' col-arm' : '') + '">'
+              + refTxt + '<span class="val-lbl">' + exibe + '</span></td>';
+    });
+    tbRows += '</tr>';
+  });
+
+  // ── Observações ─────────────────────────────────────────────────────────────
+  const obsHtml = obsDisplay.trim()
+    ? '<div class="obs-section"><div class="obs-label">OBSERVAÇÕES / PENDÊNCIAS</div>'
+      + '<div class="obs-text">' + _escHtml(obsDisplay) + '</div></div>'
+    : '';
+
+  // ── HTML completo para impressão ────────────────────────────────────────────
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Conferência Leitos UTI — ${_escHtml(dataDisplay)} ${_escHtml(turnoDisplay)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+
+  body{
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:9.5px;
+    color:#111;
+    background:#fff;
+    padding:0;
+  }
+
+  /* ── CABEÇALHO ── */
+  .page-header{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    border-bottom:3px solid #0d47a1;
+    padding:8px 12px 10px;
+    margin-bottom:8px;
+  }
+  .header-logo{
+    flex-shrink:0;
+    width:62px;
+    height:62px;
+    object-fit:contain;
+  }
+  .header-text{}
+  .header-hospital{
+    font-size:11px;
+    font-weight:700;
+    color:#0d47a1;
+    line-height:1.35;
+    text-transform:uppercase;
+  }
+  .header-subtitle{
+    font-size:9px;
+    color:#444;
+    margin-top:3px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .header-doc{
+    margin-left:auto;
+    text-align:right;
+    flex-shrink:0;
+  }
+  .header-doc-title{
+    font-size:10.5px;
+    font-weight:700;
+    color:#0d47a1;
+    text-transform:uppercase;
+  }
+  .header-doc-sub{
+    font-size:8.5px;
+    color:#555;
+    margin-top:3px;
+    line-height:1.5;
+  }
+
+  /* ── INFO DATA/TURNO/ENF ── */
+  .info-bar{
+    display:grid;
+    grid-template-columns:auto auto 1fr;
+    gap:0;
+    border:1px solid #9ec3e8;
+    border-radius:5px;
+    overflow:hidden;
+    margin-bottom:8px;
+  }
+  .info-cell{
+    padding:5px 10px;
+    border-right:1px solid #9ec3e8;
+  }
+  .info-cell:last-child{border-right:none;}
+  .info-lbl{font-size:7px;font-weight:700;color:#0d47a1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;}
+  .info-val{font-size:10px;font-weight:700;color:#0d2a5e;}
+
+  /* ── TABELA ── */
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:8.5px;
+    table-layout:fixed;
+  }
+  thead{
+    background:#0d47a1;
+    color:#fff;
+  }
+  thead th{
+    padding:4px 3px;
+    border:1px solid #1565c0;
+    text-align:center;
+    font-weight:700;
+    font-size:7.8px;
+    letter-spacing:.02em;
+    white-space:nowrap;
+  }
+  thead th.col-mat{
+    text-align:left;
+    padding-left:5px;
+    background:#0a3a8a;
+    min-width:90px;
+  }
+  thead th.col-arm{
+    background:#1a4a70;
+  }
+
+  tbody tr:nth-child(even){background:#f2f7ff;}
+  tbody tr:nth-child(odd){background:#fff;}
+
+  td{
+    border:1px solid #c8d6e5;
+    padding:3px 2px;
+    text-align:center;
+    vertical-align:middle;
+    height:28px;
+  }
+  td.col-mat{
+    text-align:left;
+    padding-left:6px;
+    font-weight:700;
+    background:#eaf0fa !important;
+    color:#0a2a5a;
+    font-size:8px;
+    white-space:nowrap;
+  }
+  td.col-arm{
+    background:#e8f0f8 !important;
+    border-left:2px solid #7a9ec8;
+  }
+
+  .ref-lbl{
+    display:block;
+    font-size:6.5px;
+    color:#888;
+    line-height:1;
+    margin-bottom:1px;
+  }
+  .val-lbl{
+    display:block;
+    font-size:9.5px;
+    font-weight:700;
+    line-height:1;
+  }
+
+  td.ok  {background:#e8f5ec !important;color:#145a28;}
+  td.low {background:#fff5e0 !important;color:#7a3800;}
+  td.zero{background:#fde8e8 !important;color:#7a1010;}
+  td.col-arm.ok  {background:#d8eeda !important;}
+  td.col-arm.low {background:#faecd0 !important;}
+  td.col-arm.zero{background:#f8d8d8 !important;}
+
+  /* ── OBSERVAÇÕES ── */
+  .obs-section{
+    margin-top:8px;
+    border:1px solid #ffc107;
+    border-radius:5px;
+    padding:6px 10px;
+    background:#fffbea;
+    font-size:8.5px;
+    page-break-inside:avoid;
+  }
+  .obs-label{font-weight:700;color:#856404;font-size:7.5px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+  .obs-text{color:#333;line-height:1.5;}
+
+  /* ── RODAPÉ ── */
+  .page-footer{
+    margin-top:10px;
+    padding-top:6px;
+    border-top:1px dashed #aaa;
+    font-size:7.5px;
+    color:#888;
+    display:flex;
+    justify-content:space-between;
+    page-break-inside:avoid;
+  }
+
+  /* ── LEGENDA ── */
+  .legenda{
+    display:flex;
+    gap:10px;
+    font-size:7.5px;
+    margin-top:6px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .leg-item{display:flex;align-items:center;gap:3px;}
+  .leg-box{width:12px;height:12px;border-radius:2px;border:1px solid #ccc;flex-shrink:0;}
+  .leg-ok  {background:#e8f5ec;}
+  .leg-low {background:#fff5e0;}
+  .leg-zero{background:#fde8e8;}
+
+  /* ── BOTÃO DE IMPRESSÃO (só na tela) ── */
+  .btn-imprimir{
+    display:flex;gap:10px;justify-content:center;padding:12px;
+    background:#f0f0f0;border-bottom:1px solid #ccc;
+  }
+  .btn-imprimir button{
+    padding:8px 20px;border:none;border-radius:6px;cursor:pointer;
+    font-size:13px;font-weight:700;font-family:Arial,sans-serif;
+  }
+  .btn-print{background:#0d47a1;color:white;}
+  .btn-close{background:#555;color:white;}
+
+  @page{margin:10mm 8mm;size:landscape;}
+  @media print{
+    body{padding:0;}
+    .btn-imprimir{display:none!important;}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+
+<div class="btn-imprimir">
+  <button class="btn-print" onclick="window.print()">🖨 Imprimir</button>
+  <button class="btn-close" onclick="window.close()">✕ Fechar</button>
+</div>
+
+<!-- CABEÇALHO -->
+<div class="page-header">
+  <img class="header-logo" src="logo.png" alt="Logo Hospital dos Pescadores"
+       onerror="this.style.display='none'">
+  <div class="header-text">
+    <div class="header-hospital">Prefeitura Municipal do Natal<br>Hospital dos Pescadores</div>
+    <div class="header-subtitle">Unidade de Terapia Intensiva (UTI)</div>
+  </div>
+  <div class="header-doc">
+    <div class="header-doc-title">📋 Conferência: Leitos da UTI</div>
+    <div class="header-doc-sub">
+      Data: ${_escHtml(dataDisplay)}<br>
+      Turno: ${_escHtml(turnoDisplay)}<br>
+      Enf.: ${_escHtml(enfDisplay)}
+    </div>
+  </div>
+</div>
+
+<!-- BARRA DATA / TURNO / ENFERMEIRO -->
+<div class="info-bar">
+  <div class="info-cell">
+    <div class="info-lbl">Data</div>
+    <div class="info-val">${_escHtml(dataDisplay)}</div>
+  </div>
+  <div class="info-cell">
+    <div class="info-lbl">Turno</div>
+    <div class="info-val">${_escHtml(turnoDisplay)}</div>
+  </div>
+  <div class="info-cell">
+    <div class="info-lbl">Enfermeiro(a)</div>
+    <div class="info-val">${_escHtml(enfDisplay)}</div>
+  </div>
+</div>
+
+<!-- TABELA PRINCIPAL -->
+<table>
+  <thead><tr>${thRow}</tr></thead>
+  <tbody>${tbRows}</tbody>
+</table>
+
+<!-- LEGENDA -->
+<div class="legenda">
+  <strong style="font-size:7.5px;color:#444;">Legenda:</strong>
+  <div class="leg-item"><div class="leg-box leg-ok"></div> Quantidade OK</div>
+  <div class="leg-item"><div class="leg-box leg-low"></div> Abaixo do referencial</div>
+  <div class="leg-item"><div class="leg-box leg-zero"></div> Zerado / Sem estoque</div>
+  <div class="leg-item" style="margin-left:auto;color:#888;">Ref: quantidade de referência por leito</div>
+</div>
+
+${obsHtml}
+
+<!-- RODAPÉ -->
+<div class="page-footer">
+  <span>Hospital dos Pescadores — UTI | Sistema de Evolução do Enfermeiro</span>
+  <span>Impresso em: ${new Date().toLocaleString('pt-BR')}</span>
+</div>
+
+</body>
+</html>`;
+
+  // ── Abre janela e imprime ────────────────────────────────────────────────────
+  const win = window.open('', '_blank', 'width=1100,height=750,scrollbars=yes');
+  if (!win) { alert('Permita pop-ups para imprimir o checklist.'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  // Atraso para garantir que a logo carregue antes de disparar o print
+  setTimeout(() => win.print(), 900);
 }
 
 // ── Utilitário: escape HTML ──────────────────────────────────────────────────
@@ -9367,7 +9713,13 @@ async function clGerarRelatorioPeriodo() {
 <title>Conferência UTI — ${dataIniFmt} a ${dataFimFmt}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:Arial,sans-serif;font-size:10px;color:#111;padding:12px;}
+  body{font-family:Arial,sans-serif;font-size:10px;color:#111;padding:12px;background:#fff;}
+  .page-header{display:flex;align-items:center;gap:12px;border-bottom:3px solid #0d47a1;padding:6px 4px 10px;margin-bottom:12px;}
+  .header-logo{flex-shrink:0;width:54px;height:54px;object-fit:contain;}
+  .header-hospital{font-size:11px;font-weight:700;color:#0d47a1;line-height:1.35;text-transform:uppercase;}
+  .header-subtitle{font-size:8.5px;color:#444;margin-top:2px;text-transform:uppercase;letter-spacing:.04em;}
+  .header-doc{margin-left:auto;text-align:right;font-size:9px;color:#555;line-height:1.5;}
+  .header-doc strong{display:block;font-size:10.5px;font-weight:700;color:#0d47a1;}
   h1{font-size:13px;color:#0d47a1;margin-bottom:2px;}
   .sub{font-size:9px;color:#555;margin-bottom:12px;}
   .bloco{margin-bottom:18px;page-break-inside:avoid;}
@@ -9382,10 +9734,30 @@ async function clGerarRelatorioPeriodo() {
   .low{background:#fff3e0;color:#92400e;}
   .zero{background:#fef2f2;color:#721c24;}
   .obs{background:#fffbea;border:1px solid #ffc107;border-radius:3px;padding:4px 6px;font-size:8.5px;margin-top:4px;}
-  @media print{body{padding:6px;}@page{margin:10mm;size:landscape;}}
+  .btn-imprimir{display:flex;gap:10px;justify-content:center;padding:10px;background:#f0f0f0;border-bottom:1px solid #ccc;margin-bottom:12px;}
+  .btn-imprimir button{padding:7px 18px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;font-family:Arial,sans-serif;}
+  .btn-print{background:#0d47a1;color:white;}
+  .btn-close{background:#555;color:white;}
+  @media print{body{padding:6px;}.btn-imprimir{display:none!important;}@page{margin:10mm;size:landscape;}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 </style></head><body>
-<h1>📋 Conferência de Leitos da UTI</h1>
-<div class="sub">Período: ${dataIniFmt} a ${dataFimFmt} &nbsp;|&nbsp; Turnos: ${turnosSel.join(', ')} &nbsp;|&nbsp; ${filtrados.length} conferência(s)</div>`;
+
+<div class="btn-imprimir">
+  <button class="btn-print" onclick="window.print()">🖨 Imprimir tudo</button>
+  <button class="btn-close" onclick="window.close()">✕ Fechar</button>
+</div>
+
+<div class="page-header">
+  <img class="header-logo" src="logo.png" alt="Logo" onerror="this.style.display='none'">
+  <div>
+    <div class="header-hospital">Prefeitura Municipal do Natal<br>Hospital dos Pescadores</div>
+    <div class="header-subtitle">Unidade de Terapia Intensiva (UTI)</div>
+  </div>
+  <div class="header-doc">
+    <strong>📋 Conferência de Leitos da UTI</strong>
+    Período: ${dataIniFmt} a ${dataFimFmt}<br>
+    Turnos: ${turnosSel.join(', ')} &nbsp;|&nbsp; ${filtrados.length} conferência(s)
+  </div>
+</div>`;
 
   filtrados.forEach(([chave, r]) => {
     const partes   = chave.split('__');
