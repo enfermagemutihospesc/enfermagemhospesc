@@ -9218,3 +9218,72 @@ function _escHtml(str) {
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;');
 }
+
+// ── Herdar turno anterior ────────────────────────────────────────────────────
+async function clHerdarTurnoAnterior() {
+  const status = document.getElementById('cl-save-status');
+  status.textContent = '⏳ Buscando turno anterior...';
+  status.style.color = '#5a6a7a';
+
+  let registros = {};
+
+  if (db && !modoOffline) {
+    try {
+      const snap = await db.collection('checklist_setorial')
+                           .orderBy('data', 'desc')
+                           .limit(10)
+                           .get();
+      snap.docs.forEach(d => { registros[d.id] = d.data(); });
+    } catch(e) { console.warn('[Herdar] Firestore:', e); }
+  }
+
+  try {
+    const local = JSON.parse(localStorage.getItem('cl_setorial') || '{}');
+    Object.keys(local).forEach(k => { if (!registros[k]) registros[k] = local[k]; });
+  } catch(e) {}
+
+  const chaveAtual = (dataDoTurno ? dataDoTurno() : hoje()) + '__' + (turno || 'DIURNO');
+  const chaves = Object.keys(registros).sort().reverse();
+  const chaveAnterior = chaves.find(k => k !== chaveAtual);
+
+  if (!chaveAnterior || !registros[chaveAnterior] || !registros[chaveAnterior].materiais) {
+    status.textContent = '⚠️ Nenhum turno anterior encontrado.';
+    status.style.color = '#856404';
+    setTimeout(() => { status.textContent = ''; }, 3000);
+    return;
+  }
+
+  const anterior = registros[chaveAnterior];
+  const partes = chaveAnterior.split('__');
+  const dataFmt = (partes[0] || '').split('-').reverse().join('/');
+  const turnoFmt = partes[1] || '';
+
+  let preenchidos = 0;
+  CL_MATERIAIS.forEach(mat => {
+    if (!anterior.materiais[mat.id]) return;
+    CL_LEITOS.forEach(l => {
+      const val = anterior.materiais[mat.id][l];
+      if (val === null || val === undefined) return;
+      const key = mat.id + '__' + l.replace(/ /g,'_');
+      const ref = l === 'ARMÁRIO' ? mat.armario : mat.leito;
+
+      const elTabela = document.getElementById('cl-inp-' + key);
+      if (elTabela && elTabela.value.trim() === '') {
+        elTabela.value = val;
+        clColorirInput(elTabela, ref);
+        preenchidos++;
+      }
+      const elCard = document.getElementById('cl-m-' + key);
+      if (elCard && elCard.value.trim() === '') {
+        elCard.value = val;
+        clColorirCard(elCard, ref);
+      }
+    });
+  });
+
+  clCarrAtualizarUI();
+
+  status.textContent = '✅ Herdado de ' + dataFmt + ' (' + turnoFmt + ') — ' + preenchidos + ' campo(s).';
+  status.style.color = '#1a6b3a';
+  setTimeout(() => { status.textContent = ''; }, 5000);
+}
