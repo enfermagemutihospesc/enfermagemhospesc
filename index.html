@@ -1217,13 +1217,15 @@
       </div>
     </div>
 
-    <div id="cl-footer" style="background:#e8f4fd;border-top:1px solid #bbdefb;padding:12px 16px;display:flex;gap:8px;justify-content:space-between;align-items:center;flex-shrink:0;">
-      <div id="cl-save-status" style="font-size:.76rem;color:#1565c0;"></div>
-      <div id="cl-footer-btns" style="display:flex;gap:8px;">
+    <div id="cl-footer" style="background:#e8f4fd;border-top:1px solid #bbdefb;padding:10px 14px;display:flex;gap:8px;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <div id="cl-save-status" style="font-size:.72rem;color:#1565c0;min-width:0;flex:1;"></div>
+      <div id="cl-footer-btns" style="display:flex;gap:6px;flex-shrink:0;">
         <button class="btn btn-sec btn-sm" onclick="fecharChecklistSetorial()">Fechar</button>
-        <button class="btn btn-sm" style="background:#6a3fa0;color:white;" onclick="clHerdarTurnoAnterior()">⬆️ Herdar anterior</button>
+        <!-- Imprimir período: só desktop -->
+        <button class="btn btn-sm cl-btn-desktop-only" style="background:#6a3fa0;color:white;" onclick="clImprimirPeriodo()">📅 Imprimir período</button>
+        <!-- Imprimir turno atual: só desktop -->
+        <button class="btn btn-sm cl-btn-desktop-only" style="background:#1a6b3a;color:white;" onclick="imprimirChecklistSetorial()">🖨 Imprimir</button>
         <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="salvarChecklistSetorial()">💾 Salvar</button>
-        <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirChecklistSetorial()">🖨 Imprimir</button>
       </div>
     </div>
   </div>
@@ -1237,6 +1239,42 @@
       <button class="modal-close" onclick="fecharEscala()">×</button>
     </div>
     <div class="modal-body" id="escala-body" style="padding:0;max-height:80vh;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- MODAL IMPRIMIR PERÍODO CHECKLIST -->
+<div class="overlay" id="modal-cl-periodo" style="z-index:1100;">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#6a3fa0,#8b5cf6);">
+      <h3 style="color:white;">📅 Imprimir Período</h3>
+      <button class="modal-close" style="color:white;" onclick="document.getElementById('modal-cl-periodo').classList.remove('show')">×</button>
+    </div>
+    <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+      <p style="font-size:.82rem;color:#5a6a7a;margin:0;">Selecione o intervalo de datas para gerar o relatório consolidado de conferências.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label style="font-size:.75rem;font-weight:700;color:#0d47a1;display:block;margin-bottom:4px;">Data inicial</label>
+          <input type="date" id="cl-periodo-ini" style="width:100%;padding:8px;border:1.5px solid #bbdefb;border-radius:7px;font-family:inherit;font-size:.84rem;">
+        </div>
+        <div>
+          <label style="font-size:.75rem;font-weight:700;color:#0d47a1;display:block;margin-bottom:4px;">Data final</label>
+          <input type="date" id="cl-periodo-fim" style="width:100%;padding:8px;border:1.5px solid #bbdefb;border-radius:7px;font-family:inherit;font-size:.84rem;">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:.75rem;font-weight:700;color:#0d47a1;display:block;margin-bottom:6px;">Turno(s)</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <label style="font-size:.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="cl-p-diurno" checked> Diurno</label>
+          <label style="font-size:.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="cl-p-noturno" checked> Noturno</label>
+          <label style="font-size:.8rem;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="cl-p-plantao" checked> Plantão</label>
+        </div>
+      </div>
+      <div id="cl-periodo-msg" style="font-size:.76rem;color:#856404;display:none;"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end;gap:8px;">
+      <button class="btn btn-sec btn-sm" onclick="document.getElementById('modal-cl-periodo').classList.remove('show')">Cancelar</button>
+      <button class="btn btn-sm" style="background:#6a3fa0;color:white;" onclick="clGerarRelatorioPeriodo()">🖨 Gerar relatório</button>
+    </div>
   </div>
 </div>
 
