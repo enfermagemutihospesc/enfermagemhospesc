@@ -8668,3 +8668,349 @@ function abrirEscala(tipo) {
 function fecharEscala() {
   document.getElementById('modal-escala').classList.remove('show');
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CHECK-LIST SETORIAL UTI
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Definição dos materiais com quantidades de referência por leito e armário
+const CL_MATERIAIS = [
+  { id: 'bic_par',   nome: 'BIC PARENTERAL',  leito: 3,    armario: null  },
+  { id: 'bic_ent',   nome: 'BIC ENTERAL',      leito: 1,    armario: null  },
+  { id: 'monitor',   nome: 'MONITOR + ECG',    leito: 1,    armario: null  },
+  { id: 'oximetro',  nome: 'OXÍMETRO',          leito: 1,    armario: null  },
+  { id: 'vent_mec',  nome: 'VENT. MECÂNICO',   leito: 1,    armario: null  },
+  { id: 'pni',       nome: 'PNI',               leito: 1,    armario: null  },
+  { id: 'vacuomet',  nome: 'VACUÔMETRO',        leito: 1,    armario: null  },
+  { id: 'latex',     nome: 'LATEX',             leito: 1,    armario: 3     },
+  { id: 'circ_vm',   nome: 'CIRCUITO VM',       leito: 1,    armario: 1     },
+  { id: 'ambu',      nome: 'AMBU',              leito: 1,    armario: null  },
+  { id: 'umidif',    nome: 'UMIDIFICADOR',      leito: 1,    armario: 2     },
+  { id: 'masc_ven',  nome: 'MASC. VENTURI',     leito: null, armario: 2     },
+  { id: 'nbz',       nome: 'NBZ',               leito: null, armario: 2     },
+  { id: 'masc_hud',  nome: 'MASC. HUDSON',      leito: null, armario: 2     }
+];
+
+const CL_LEITOS = ['LEITO 01','LEITO 02','LEITO 03','LEITO 04','LEITO 05',
+                   'LEITO 06','LEITO 07','LEITO 08','LEITO 09','LEITO 10','ARMÁRIO'];
+
+// Armazena os inputs do formulário atual (key → input element)
+let _clInputs = {};
+
+// ── Abrir / Fechar ──────────────────────────────────────────────────────────
+
+function abrirChecklistSetorial() {
+  _clMontarFormulario();
+  _clCarregarHistorico();
+  clAba('form');
+  document.getElementById('modal-checklist-setorial').classList.add('show');
+}
+
+function fecharChecklistSetorial() {
+  document.getElementById('modal-checklist-setorial').classList.remove('show');
+}
+
+function clAba(aba) {
+  const abas = ['form', 'hist'];
+  abas.forEach(a => {
+    document.getElementById('cl-aba-' + a).style.display = a === aba ? 'flex' : 'none';
+    const btn = document.getElementById('cl-tab-' + a);
+    if (a === aba) {
+      btn.style.background = 'white';
+      btn.style.color = '#0d47a1';
+      btn.style.borderBottom = '3px solid #0d47a1';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = '#5a6a7a';
+      btn.style.borderBottom = '3px solid transparent';
+    }
+  });
+  if (aba === 'hist') _clCarregarHistorico();
+}
+
+// ── Montar formulário ────────────────────────────────────────────────────────
+
+function _clMontarFormulario() {
+  // Preencher cabeçalho automático
+  const data = dataDoTurno ? dataDoTurno() : hoje();
+  const partes = data.split('-');
+  const dataFmt = partes[2] + '/' + partes[1] + '/' + partes[0];
+  document.getElementById('cl-data-display').textContent = dataFmt;
+  document.getElementById('cl-turno-display').textContent = turno || '—';
+
+  // Nome do enfermeiro
+  const nomeEnf = _assinaturaTexto ? _assinaturaTexto(usuarioEmail) : (usuarioEmail || '—');
+  document.getElementById('cl-enf-display').textContent = nomeEnf;
+
+  document.getElementById('cl-header-info').textContent =
+    'Data: ' + dataFmt + ' | Turno: ' + (turno || '—') + ' | Enf.: ' + nomeEnf;
+
+  // Montar tabela
+  const thead = document.getElementById('cl-thead');
+  const tbody = document.getElementById('cl-tbody');
+  _clInputs = {};
+
+  // Cabeçalho
+  let thHtml = '<tr><th style="text-align:left;position:sticky;left:0;z-index:3;">MATERIAIS / LEITOS</th>';
+  CL_LEITOS.forEach((l, i) => {
+    const isArmario = l === 'ARMÁRIO';
+    thHtml += '<th' + (isArmario ? ' class="armario-col"' : '') + '>' + l + '</th>';
+  });
+  thHtml += '</tr>';
+  thead.innerHTML = thHtml;
+
+  // Linhas dos materiais
+  let tbHtml = '';
+  CL_MATERIAIS.forEach(mat => {
+    tbHtml += '<tr>';
+    tbHtml += '<td style="position:sticky;left:0;z-index:1;">' + mat.nome + '</td>';
+
+    CL_LEITOS.forEach(l => {
+      const isArmario = l === 'ARMÁRIO';
+      const ref = isArmario ? mat.armario : mat.leito;
+      const key = mat.id + '__' + l.replace(/ /g,'_');
+
+      if (ref === null) {
+        // Sem referência para este leito: campo livre sem indicação
+        tbHtml += '<td><div class="cl-qty-wrap">' +
+          '<input type="number" min="0" class="cl-qty-input sem-ref" id="cl-inp-' + key + '" placeholder="—" ' +
+          'oninput="clColorirInput(this,null)">' +
+          '</div></td>';
+      } else {
+        tbHtml += '<td><div class="cl-qty-wrap">' +
+          '<span class="cl-qty-ref">Ref: ' + ref + '</span>' +
+          '<input type="number" min="0" class="cl-qty-input" id="cl-inp-' + key + '" placeholder="' + ref + '" ' +
+          'oninput="clColorirInput(this,' + ref + ')">' +
+          '</div></td>';
+      }
+    });
+    tbHtml += '</tr>';
+  });
+  tbody.innerHTML = tbHtml;
+
+  // Limpar observação e status
+  document.getElementById('cl-obs').value = '';
+  document.getElementById('cl-save-status').textContent = '';
+}
+
+function clColorirInput(el, ref) {
+  const val = el.value.trim();
+  if (val === '') { el.className = 'cl-qty-input ' + (ref === null ? 'sem-ref' : ''); return; }
+  const n = parseInt(val, 10);
+  if (ref === null) { el.className = 'cl-qty-input sem-ref'; return; }
+  if (n >= ref) el.className = 'cl-qty-input ok';
+  else if (n > 0) el.className = 'cl-qty-input low';
+  else el.className = 'cl-qty-input zero';
+}
+
+// ── Coletar dados do formulário ──────────────────────────────────────────────
+
+function _clColetarDados() {
+  const dados = {};
+  CL_MATERIAIS.forEach(mat => {
+    dados[mat.id] = {};
+    CL_LEITOS.forEach(l => {
+      const key = mat.id + '__' + l.replace(/ /g,'_');
+      const el = document.getElementById('cl-inp-' + key);
+      const val = el ? el.value.trim() : '';
+      dados[mat.id][l] = val === '' ? null : parseInt(val, 10);
+    });
+  });
+  return dados;
+}
+
+// ── Salvar ───────────────────────────────────────────────────────────────────
+
+async function salvarChecklistSetorial() {
+  const status = document.getElementById('cl-save-status');
+  status.textContent = '⏳ Salvando...';
+  status.style.color = '#0d47a1';
+
+  const data = dataDoTurno ? dataDoTurno() : hoje();
+  const chave = data + '__' + (turno || 'DIURNO');
+  const nomeEnf = _assinaturaTexto ? _assinaturaTexto(usuarioEmail) : usuarioEmail;
+
+  const registro = {
+    data,
+    turno: turno || '',
+    enfermeiro: nomeEnf,
+    email: usuarioEmail,
+    observacoes: document.getElementById('cl-obs').value.trim(),
+    materiais: _clColetarDados(),
+    salvoEm: new Date().toISOString()
+  };
+
+  // Tentar salvar no Firestore
+  if (db && !modoOffline) {
+    try {
+      await db.collection('checklist_setorial').doc(chave).set(registro);
+      status.textContent = '✅ Conferência salva na nuvem!';
+      status.style.color = '#1a6b3a';
+    } catch (e) {
+      console.warn('[ChecklistSetorial] Erro Firestore, usando localStorage:', e);
+      _clSalvarLocal(chave, registro);
+      status.textContent = '⚠️ Salvo localmente (sem nuvem)';
+      status.style.color = '#856404';
+    }
+  } else {
+    _clSalvarLocal(chave, registro);
+    status.textContent = '✅ Salvo localmente!';
+    status.style.color = '#1a6b3a';
+  }
+
+  // Atualizar histórico se estiver aberto
+  setTimeout(() => { _clCarregarHistorico(); }, 600);
+}
+
+function _clSalvarLocal(chave, registro) {
+  try {
+    const todos = JSON.parse(localStorage.getItem('cl_setorial') || '{}');
+    todos[chave] = registro;
+    localStorage.setItem('cl_setorial', JSON.stringify(todos));
+  } catch(e) { console.warn('[ChecklistSetorial] localStorage:', e); }
+}
+
+// ── Histórico ────────────────────────────────────────────────────────────────
+
+async function _clCarregarHistorico() {
+  const lista = document.getElementById('cl-hist-lista');
+  if (!lista) return;
+  lista.innerHTML = '<div style="text-align:center;color:var(--muted);padding:1.5rem;font-size:.82rem;">⏳ Carregando...</div>';
+
+  let registros = {};
+
+  // Tentar Firestore
+  if (db && !modoOffline) {
+    try {
+      const snap = await db.collection('checklist_setorial')
+                           .orderBy('data', 'desc')
+                           .limit(30)
+                           .get();
+      snap.docs.forEach(d => { registros[d.id] = d.data(); });
+    } catch(e) {
+      console.warn('[ChecklistSetorial] histórico Firestore:', e);
+    }
+  }
+
+  // Complementar com localStorage
+  try {
+    const local = JSON.parse(localStorage.getItem('cl_setorial') || '{}');
+    Object.keys(local).forEach(k => { if (!registros[k]) registros[k] = local[k]; });
+  } catch(e) {}
+
+  const chaves = Object.keys(registros).sort().reverse();
+
+  if (chaves.length === 0) {
+    lista.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;font-size:.84rem;">Nenhuma conferência registrada ainda.</div>';
+    return;
+  }
+
+  let html = '';
+  chaves.forEach((k, idx) => {
+    const r = registros[k];
+    const dataFmt = r.data ? r.data.split('-').reverse().join('/') : k;
+    const pendencias = _clContarPendencias(r);
+    const salvoEm = r.salvoEm ? new Date(r.salvoEm).toLocaleString('pt-BR') : '';
+
+    html += '<div class="cl-hist-card">';
+    html += '<div class="cl-hist-header" onclick="clToggleHistCard(this)">';
+    html += '<div>';
+    html += '<div style="font-weight:700;font-size:.88rem;">📅 ' + dataFmt + ' — Turno ' + (r.turno || '—') + '</div>';
+    html += '<div class="cl-hist-info">Enf.: ' + (r.enfermeiro || r.email || '—') + ' · Salvo: ' + salvoEm + '</div>';
+    if (pendencias > 0) {
+      html += '<span style="background:rgba(255,193,7,.3);color:#fff3cd;border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:2px 9px;font-size:.7rem;font-weight:700;margin-top:4px;display:inline-block;">⚠️ ' + pendencias + ' item(s) abaixo do ideal</span>';
+    } else {
+      html += '<span style="background:rgba(40,167,69,.3);color:#d4edda;border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:2px 9px;font-size:.7rem;font-weight:700;margin-top:4px;display:inline-block;">✅ Conferência OK</span>';
+    }
+    html += '</div>';
+    html += '<span style="font-size:1.2rem;color:rgba(255,255,255,.7);transition:transform .2s;" id="cl-chev-' + idx + '">›</span>';
+    html += '</div>';
+
+    // Corpo colapsado
+    html += '<div class="cl-hist-body" id="cl-body-' + idx + '">';
+    html += _clRenderMiniTabela(r);
+    if (r.observacoes) {
+      html += '<div class="cl-obs-badge">📝 <strong>Obs:</strong> ' + _escHtml(r.observacoes) + '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  });
+
+  lista.innerHTML = html;
+}
+
+function clToggleHistCard(header) {
+  const idx = header.querySelector('[id^="cl-chev-"]').id.replace('cl-chev-','');
+  const body = document.getElementById('cl-body-' + idx);
+  const chev = document.getElementById('cl-chev-' + idx);
+  const open = body.classList.toggle('open');
+  chev.style.transform = open ? 'rotate(90deg)' : '';
+}
+
+function _clContarPendencias(r) {
+  if (!r.materiais) return 0;
+  let count = 0;
+  CL_MATERIAIS.forEach(mat => {
+    if (!r.materiais[mat.id]) return;
+    CL_LEITOS.forEach(l => {
+      const isArmario = l === 'ARMÁRIO';
+      const ref = isArmario ? mat.armario : mat.leito;
+      if (ref === null) return;
+      const val = r.materiais[mat.id][l];
+      if (val !== null && val !== undefined && val < ref) count++;
+    });
+  });
+  return count;
+}
+
+function _clRenderMiniTabela(r) {
+  if (!r.materiais) return '<p style="color:var(--muted);font-size:.78rem;">Sem dados de materiais.</p>';
+
+  let h = '<div style="overflow-x:auto;"><table class="cl-hist-mini-table"><thead><tr>';
+  h += '<th>MATERIAL</th>';
+  CL_LEITOS.forEach(l => { h += '<th>' + l + '</th>'; });
+  h += '</tr></thead><tbody>';
+
+  CL_MATERIAIS.forEach(mat => {
+    h += '<tr><td>' + mat.nome + '</td>';
+    CL_LEITOS.forEach(l => {
+      const isArmario = l === 'ARMÁRIO';
+      const ref = isArmario ? mat.armario : mat.leito;
+      const val = r.materiais[mat.id] ? r.materiais[mat.id][l] : null;
+
+      if (val === null || val === undefined) {
+        h += '<td style="color:#bbb;">—</td>';
+      } else if (ref === null) {
+        h += '<td style="font-weight:600;">' + val + '</td>';
+      } else if (val >= ref) {
+        h += '<td style="background:#eaf5ee;color:#155724;font-weight:700;">' + val + '</td>';
+      } else if (val > 0) {
+        h += '<td style="background:#fff3e0;color:#92400e;font-weight:700;">' + val + ' ⚠️</td>';
+      } else {
+        h += '<td style="background:#fef2f2;color:#721c24;font-weight:700;">0 ❌</td>';
+      }
+    });
+    h += '</tr>';
+  });
+
+  h += '</tbody></table></div>';
+  return h;
+}
+
+// ── Imprimir ─────────────────────────────────────────────────────────────────
+
+function imprimirChecklistSetorial() {
+  document.body.classList.add('printing-checklist');
+  window.print();
+  setTimeout(() => document.body.classList.remove('printing-checklist'), 1500);
+}
+
+// ── Utilitário: escape HTML ──────────────────────────────────────────────────
+
+function _escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
