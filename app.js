@@ -19,6 +19,9 @@ function _aplicarBloqueioAdmissao() {
   const btnEditar = document.getElementById('btn-editar-admissao');
   const campos = document.querySelectorAll('[data-adm-field]');
   if (btnEditar) btnEditar.style.display = isAdmin ? '' : 'none';
+  const btnAddDiag = document.getElementById('f-diags-add');
+  if (btnAddDiag) btnAddDiag.style.display = isAdmin ? '' : 'none';
+  document.querySelectorAll('.diag-remove-btn').forEach(b => b.style.display = isAdmin ? '' : 'none');
   campos.forEach(el => {
     if (isAdmin) {
       el.removeAttribute('readonly');
@@ -4035,8 +4038,7 @@ async function abrirModal(n) {
   const l = d[n];
   document.getElementById('modal-titulo').textContent = `Leito ${pad(n)} – ${l.ocupado?'Editar dados':'Admissão'}`;
   document.getElementById('m-pac').value   = (l.pac||'').toUpperCase();
-  document.getElementById('m-diag').value  = (l.diag||'').toUpperCase();
-  document.getElementById('m-cid').value   = (l.cid||'').toUpperCase();
+  _loadDiagsToForm('m', l);
   document.getElementById('m-dn').value    = l.dn||'';
   _calcIdadeDisplay('m-dn','m-idade');
   document.getElementById('m-adm').value   = l.adm||hoje();
@@ -4068,7 +4070,7 @@ async function salvarAdmissao() {
   const novaAdmissao = !leitoExistente.ocupado;
   d[modalLeito] = {
     ocupado:true,
-    pac:gf('m-pac'), diag:gf('m-diag'), cid:gf('m-cid').toUpperCase(), dn:gf('m-dn'),
+    pac:gf('m-pac'), ...(_mDiagsAdm()), dn:gf('m-dn'),
     adm:gf('m-adm'), admHosp:gf('m-adm-hosp'),
     comor:gf('m-comor'), alergia:gf('m-alergia'),
     origem: origem,
@@ -4086,8 +4088,8 @@ async function salvarAdmissao() {
       log.push({
         leito: modalLeito,
         paciente: gf('m-pac'),
-        diagnostico: gf('m-diag'),
-        cid: gf('m-cid').toUpperCase(),
+        diagnostico: _mDiagsAdm().diag,
+        cid: _mDiagsAdm().cid,
         dn: gf('m-dn'),
         sexo: gf('m-sexo'),
         admUTI: gf('m-adm'),
@@ -4435,6 +4437,62 @@ function _calcPAM(){
 
 function toggleVMI(){ const v=document.querySelector('input[name="vent"]:checked'); const isVMI=v&&(v.value==='TOT – VMI'||v.value==='TQT – VMI'); document.getElementById('vmi-box').className='vmi-box'+(isVMI?' show':''); document.getElementById('spo2-avulso').style.display=isVMI?'none':'flex'; }
 
+// ── MÚLTIPLOS DIAGNÓSTICOS ────────────────────────────────────────────────────
+function _addDiagRow(prefix, diag='', cid='') {
+  const wrap = document.getElementById(prefix+'-diags-wrap');
+  if (!wrap) return;
+  const idx = wrap.children.length;
+  const isFirst = idx === 0;
+  const diagId   = prefix+'-diag-'+idx;
+  const cidId    = prefix+'-cid-'+idx;
+  const statusId = cidId+'-status';
+  const adm = prefix==='f' ? ' data-adm-field' : '';
+  const row = document.createElement('div');
+  row.dataset.diagRow = idx;
+  row.style.cssText = 'display:flex;gap:6px;align-items:flex-start;';
+  row.innerHTML =
+    `<input type="text" id="${diagId}" placeholder="${isFirst?'Diagnóstico principal':'Diagnóstico secundário'}" style="flex:1;" onblur="_sugerirCID('${diagId}','${cidId}')"${adm}>` +
+    `<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;min-width:110px;">` +
+      `<input type="text" id="${cidId}" placeholder="CID-10" style="width:100%;font-family:monospace;font-weight:600;" maxlength="8"${adm}>` +
+      `<span id="${statusId}" style="font-size:.6rem;color:var(--muted);text-align:center;min-height:12px;"></span>` +
+    `</div>` +
+    (!isFirst ? `<button type="button" onclick="this.closest('[data-diag-row]').remove()" class="diag-remove-btn" style="flex-shrink:0;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;line-height:1;padding:0 4px;" title="Remover">×</button>` : '');
+  wrap.appendChild(row);
+  if (diag) document.getElementById(diagId).value = diag;
+  if (cid)  document.getElementById(cidId).value  = cid;
+  _aplicarBloqueioAdmissao();
+}
+
+function _getDiagsFromContainer(prefix) {
+  const wrap = document.getElementById(prefix+'-diags-wrap');
+  if (!wrap || !wrap.children.length) return [{diag:'',cid:''}];
+  const result = [];
+  wrap.querySelectorAll('[data-diag-row]').forEach(row => {
+    const i   = row.dataset.diagRow;
+    const d   = (document.getElementById(prefix+'-diag-'+i)?.value||'').trim();
+    const c   = (document.getElementById(prefix+'-cid-'+i)?.value||'').trim().toUpperCase();
+    if (d || c) result.push({diag:d, cid:c});
+  });
+  return result.length ? result : [{diag:'',cid:''}];
+}
+
+function _loadDiagsToForm(prefix, leito) {
+  const wrap = document.getElementById(prefix+'-diags-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const diags = leito.diags && leito.diags.length
+    ? leito.diags
+    : [{diag: leito.diag||'', cid: leito.cid||''}];
+  diags.forEach(d => _addDiagRow(prefix, (d.diag||'').toUpperCase(), (d.cid||'').toUpperCase()));
+  if (!diags.length) _addDiagRow(prefix);
+}
+
+function _mDiagsAdm() {
+  const diags = _getDiagsFromContainer('m');
+  const first = diags[0] || {diag:'',cid:''};
+  return { diag: first.diag, cid: first.cid, diags };
+}
+
 // ── SUGESTÃO AUTOMÁTICA DE CID-10 VIA GROQ ───────────────────────────────────
 async function _sugerirCID(idDiag, idCID){
   const diag = document.getElementById(idDiag)?.value?.trim();
@@ -4743,7 +4801,11 @@ async function abrirForm(n) {
 
   setF('f-pac',pac.pac); setF('f-dn',pac.dn); setF('f-adm',pac.adm);
   _calcIdadeDisplay('f-dn','f-idade');
-  setF('f-diag',pac.diag); setF('f-cid',(pac.cid||(anterior&&anterior.cid)||(evHoje&&evHoje.cid)||'').toUpperCase()); setF('f-comor',pac.comor);
+  // diagnósticos: usa array `diags` se disponível, senão monta a partir de diag/cid
+  const _diagsSource = pac.diags && pac.diags.length ? pac
+    : { diags: null, diag: pac.diag||'', cid: (pac.cid||(anterior&&anterior.cid)||(evHoje&&evHoje.cid)||'') };
+  _loadDiagsToForm('f', _diagsSource);
+  setF('f-comor',pac.comor);
   // admHosp e alergia: usa leito primeiro, cai pro evolução anterior se o leito não tem
   setF('f-adm-hosp', pac.admHosp || (anterior && anterior.admHosp) || (evHoje && evHoje.admHosp) || '');
   setF('f-alergia',  pac.alergia || (anterior && anterior.alergia) || (evHoje && evHoje.alergia) || '');
@@ -4895,7 +4957,7 @@ async function abrirForm(n) {
 function coletarDados() {
   const isVMI = document.getElementById('vmi-box').classList.contains('show');
   return {
-    leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), diag:gf('f-diag'), cid:gf('f-cid').toUpperCase(), comor:gf('f-comor'),admHosp:    gf('f-adm-hosp'),
+    leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), ...(() => { const ds=_getDiagsFromContainer('f'); const f=ds[0]||{diag:'',cid:''}; return {diag:f.diag, cid:f.cid, diags:ds}; })(), comor:gf('f-comor'),admHosp:    gf('f-adm-hosp'),
 alergia:    gf('f-alergia'),
 sexo:       gf('f-sexo'),
 pulseira:   gRadio('pulseira'),
@@ -5038,7 +5100,10 @@ function renderPreview(d) {
   h+=`<div class="ph" style="display:flex;align-items:center;gap:14px;"><img src="logo.png?v=20260522g" alt="HOSPESC" style="height:48px;width:auto;flex-shrink:0;"><div style="flex:1;"><h2 style="margin:0;">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</h2><h3 style="margin:0;">SETOR – UNIDADE DE TERAPIA INTENSIVA (UTI)</h3><p style="margin:0;">EVOLUÇÃO DO ENFERMEIRO</p></div></div><div class="pb">`;
   h+=`<div class="pr"><span class="pl">PACIENTE</span><span class="pv">${d.pac||'–'}</span><span class="pl" style="margin-left:1rem;">DATA</span><span class="pv">${fmtD(d.data)}</span><span class="pl" style="margin-left:1rem;">LEITO</span><span class="pv">${pad(d.leito)} – UTI Geral</span><span class="pl" style="margin-left:1rem;">TURNO</span><span class="pv">${d.turno}</span></div>`;
   h+=`<div class="pr"><span class="pl">DN</span><span class="pv">${fmtD(d.dn)}${_calcIdade(d.dn)!==null?' ('+_calcIdade(d.dn)+' anos)':''}</span><span class="pl" style="margin-left:1rem;">ADMISSÃO UTI</span><span class="pv">${fmtD(d.adm)}</span>${d.sexo?`<span class="pl" style="margin-left:1rem;">SEXO</span><span class="pv">${d.sexo==='M'?'Masculino':'Feminino'}</span>`:''}</div>`;
-  h+=br('DIAGNÓSTICO', d.diag + (d.cid ? '  –  CID: '+d.cid : '')); h+=br('COMORBIDADES',d.comor);
+  const _diagsStr = (d.diags && d.diags.length > 1)
+    ? d.diags.map((dx,i) => (i>0?'  |  ':'')+dx.diag+(dx.cid?' – CID: '+dx.cid:'')).join('')
+    : (d.diag + (d.cid ? '  –  CID: '+d.cid : ''));
+  h+=br('DIAGNÓSTICO', _diagsStr); h+=br('COMORBIDADES',d.comor);
   h+=br('ALERGIAS', d.alergia||'NKDA');
 h+=st('Segurança do Paciente');
 h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseira||'–'}</span>
