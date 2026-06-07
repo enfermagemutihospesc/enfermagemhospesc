@@ -8730,6 +8730,9 @@ function clAba(aba) {
 
 // ── Montar formulário ────────────────────────────────────────────────────────
 
+// Índice atual do carrossel
+let _clCarrIdx = 0;
+
 function _clMontarFormulario() {
   // Preencher cabeçalho automático
   const data = dataDoTurno ? dataDoTurno() : hoje();
@@ -8738,59 +8741,257 @@ function _clMontarFormulario() {
   document.getElementById('cl-data-display').textContent = dataFmt;
   document.getElementById('cl-turno-display').textContent = turno || '—';
 
-  // Nome do enfermeiro
   const nomeEnf = _assinaturaTexto ? _assinaturaTexto(usuarioEmail) : (usuarioEmail || '—');
   document.getElementById('cl-enf-display').textContent = nomeEnf;
-
   document.getElementById('cl-header-info').textContent =
     'Data: ' + dataFmt + ' | Turno: ' + (turno || '—') + ' | Enf.: ' + nomeEnf;
 
-  // Montar tabela
+  _clInputs = {};
+  _clCarrIdx = 0;
+
+  // ── TABELA (desktop) ──────────────────────────────────────────────────────
   const thead = document.getElementById('cl-thead');
   const tbody = document.getElementById('cl-tbody');
-  _clInputs = {};
 
-  // Cabeçalho
   let thHtml = '<tr><th style="text-align:left;position:sticky;left:0;z-index:3;">MATERIAIS / LEITOS</th>';
-  CL_LEITOS.forEach((l, i) => {
+  CL_LEITOS.forEach(l => {
     const isArmario = l === 'ARMÁRIO';
     thHtml += '<th' + (isArmario ? ' class="armario-col"' : '') + '>' + l + '</th>';
   });
   thHtml += '</tr>';
   thead.innerHTML = thHtml;
 
-  // Linhas dos materiais
   let tbHtml = '';
   CL_MATERIAIS.forEach(mat => {
-    tbHtml += '<tr>';
-    tbHtml += '<td style="position:sticky;left:0;z-index:1;">' + mat.nome + '</td>';
-
+    tbHtml += '<tr><td style="position:sticky;left:0;z-index:1;">' + mat.nome + '</td>';
     CL_LEITOS.forEach(l => {
       const isArmario = l === 'ARMÁRIO';
       const ref = isArmario ? mat.armario : mat.leito;
       const key = mat.id + '__' + l.replace(/ /g,'_');
-
       if (ref === null) {
-        // Sem referência para este leito: campo livre sem indicação
-        tbHtml += '<td><div class="cl-qty-wrap">' +
-          '<input type="number" min="0" class="cl-qty-input sem-ref" id="cl-inp-' + key + '" placeholder="—" ' +
-          'oninput="clColorirInput(this,null)">' +
-          '</div></td>';
+        tbHtml += '<td><div class="cl-qty-wrap"><input type="number" min="0" class="cl-qty-input sem-ref" id="cl-inp-' + key + '" placeholder="—" oninput="clColorirInput(this,null)"></div></td>';
       } else {
-        tbHtml += '<td><div class="cl-qty-wrap">' +
-          '<span class="cl-qty-ref">Ref: ' + ref + '</span>' +
-          '<input type="number" min="0" class="cl-qty-input" id="cl-inp-' + key + '" placeholder="' + ref + '" ' +
-          'oninput="clColorirInput(this,' + ref + ')">' +
-          '</div></td>';
+        tbHtml += '<td><div class="cl-qty-wrap"><span class="cl-qty-ref">Ref: ' + ref + '</span><input type="number" min="0" class="cl-qty-input" id="cl-inp-' + key + '" placeholder="' + ref + '" oninput="clColorirInput(this,' + ref + ')"></div></td>';
       }
     });
     tbHtml += '</tr>';
   });
   tbody.innerHTML = tbHtml;
 
+  // ── CARROSSEL (mobile) ────────────────────────────────────────────────────
+  const carrBody = document.getElementById('cl-carr-body');
+  const dotsEl   = document.getElementById('cl-dots');
+  let cardsHtml = '';
+  let dotsHtml  = '';
+
+  CL_LEITOS.forEach((l, li) => {
+    const isArmario = l === 'ARMÁRIO';
+    const cardClass = 'cl-card-leito' + (li === 0 ? ' ativo' : '') + (isArmario ? ' armario' : '');
+    cardsHtml += '<div class="' + cardClass + '" id="cl-card-' + li + '">';
+
+    CL_MATERIAIS.forEach(mat => {
+      const ref = isArmario ? mat.armario : mat.leito;
+      const key = mat.id + '__' + l.replace(/ /g,'_');
+      // Para o carrossel usamos IDs com sufixo "-m" para não colidir com a tabela
+      const mid = 'cl-m-' + key;
+
+      cardsHtml += '<div class="cl-card-item">';
+      cardsHtml += '<div class="cl-card-item-nome">' + mat.nome;
+      if (ref !== null) {
+        cardsHtml += '<div class="cl-card-item-ref">Ref: ' + ref + '</div>';
+      }
+      cardsHtml += '</div>';
+      cardsHtml += '<div class="cl-card-item-input">';
+      if (ref === null) {
+        cardsHtml += '<input type="number" min="0" inputmode="numeric" enterkeyhint="next" class="cl-card-qty sem-ref" id="' + mid + '" placeholder="—" oninput="clColorirCard(this,null)">';
+      } else {
+        cardsHtml += '<input type="number" min="0" inputmode="numeric" enterkeyhint="next" class="cl-card-qty" id="' + mid + '" placeholder="' + ref + '" oninput="clColorirCard(this,' + ref + ')">';
+      }
+      cardsHtml += '</div></div>';
+    });
+
+    cardsHtml += '</div>';
+
+    // Dot
+    const dotClass = 'cl-dot' + (li === 0 ? ' ativo' : '') + (isArmario ? ' armario' : '');
+    dotsHtml += '<span class="' + dotClass + '" id="cl-dot-' + li + '" onclick="clCarrIr(' + li + ')" title="' + l + '"></span>';
+  });
+
+  carrBody.innerHTML  = cardsHtml;
+  dotsEl.innerHTML    = dotsHtml;
+
+  // Inicializar estado do carrossel
+  clCarrAtualizarUI();
+
+  // ── Swipe (touch) no carrossel ────────────────────────────────────────────
+  let _tsX = null;
+  carrBody.addEventListener('touchstart', e => { _tsX = e.touches[0].clientX; }, { passive: true });
+  carrBody.addEventListener('touchend', e => {
+    if (_tsX === null) return;
+    const dx = e.changedTouches[0].clientX - _tsX;
+    _tsX = null;
+    if (Math.abs(dx) < 40) return;
+    clCarrNavegar(dx < 0 ? 1 : -1);
+  }, { passive: true });
+
+  // ── Navegação Enter no carrossel ──────────────────────────────────────────
+  // Recriada toda vez que o formulário é montado, por isso não acumula listeners.
+  // Delegamos ao document e filtramos por cl-card-qty.
+  document.getElementById('cl-carr-body').addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    const el = e.target;
+    if (!el.classList.contains('cl-card-qty')) return;
+    e.preventDefault();
+
+    // Achar todos os inputs do card atual, na ordem DOM
+    const card = document.getElementById('cl-card-' + _clCarrIdx);
+    if (!card) return;
+    const inputs = Array.from(card.querySelectorAll('.cl-card-qty'));
+    const pos = inputs.indexOf(el);
+
+    if (pos < inputs.length - 1) {
+      // Próximo material do mesmo leito
+      const prox = inputs[pos + 1];
+      prox.focus(); prox.select();
+      prox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      // Último material do leito → avança para o próximo leito
+      if (_clCarrIdx < CL_LEITOS.length - 1) {
+        clCarrNavegar(1);
+        // Focar o primeiro input do novo card após transição
+        setTimeout(() => {
+          const novoCard = document.getElementById('cl-card-' + _clCarrIdx);
+          if (novoCard) {
+            const primeiro = novoCard.querySelector('.cl-card-qty');
+            if (primeiro) { primeiro.focus(); primeiro.select(); }
+          }
+        }, 200);
+      } else {
+        // Último leito → vai para Observações
+        const obs = document.getElementById('cl-obs');
+        if (obs) { obs.focus(); obs.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      }
+    }
+  });
+
+  // ── Navegação Enter na tabela (desktop) ──────────────────────────────────
+  const _clOrdemNavegacao = [];
+  CL_LEITOS.forEach(l => {
+    CL_MATERIAIS.forEach(mat => {
+      const key = mat.id + '__' + l.replace(/ /g,'_');
+      const el = document.getElementById('cl-inp-' + key);
+      if (el) _clOrdemNavegacao.push(el);
+    });
+  });
+  _clOrdemNavegacao.forEach((inp, idx) => {
+    inp.setAttribute('enterkeyhint', 'next');
+    inp.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const prox = _clOrdemNavegacao[idx + 1];
+      if (prox) { prox.focus(); prox.select(); prox.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); }
+      else { const obs = document.getElementById('cl-obs'); if (obs) { obs.focus(); obs.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }
+    });
+  });
+
   // Limpar observação e status
   document.getElementById('cl-obs').value = '';
   document.getElementById('cl-save-status').textContent = '';
+}
+
+// ── Carrossel: navegar ────────────────────────────────────────────────────────
+
+function clCarrNavegar(delta) {
+  const novo = _clCarrIdx + delta;
+  if (novo < 0 || novo >= CL_LEITOS.length) return;
+  clCarrIr(novo);
+}
+
+function clCarrIr(idx) {
+  if (idx === _clCarrIdx) return;
+
+  // Esconde card atual
+  const cardAtual = document.getElementById('cl-card-' + _clCarrIdx);
+  if (cardAtual) cardAtual.classList.remove('ativo');
+  const dotAtual = document.getElementById('cl-dot-' + _clCarrIdx);
+  if (dotAtual) dotAtual.classList.remove('ativo');
+
+  _clCarrIdx = idx;
+
+  // Mostra novo card
+  const cardNovo = document.getElementById('cl-card-' + _clCarrIdx);
+  if (cardNovo) cardNovo.classList.add('ativo');
+  const dotNovo = document.getElementById('cl-dot-' + _clCarrIdx);
+  if (dotNovo) dotNovo.classList.add('ativo');
+
+  clCarrAtualizarUI();
+
+  // Sincronizar valores com a tabela (bidireccional)
+  _clSincronizarCard(_clCarrIdx);
+}
+
+function clCarrAtualizarUI() {
+  const l = CL_LEITOS[_clCarrIdx];
+  const isArmario = l === 'ARMÁRIO';
+  const nomeEl = document.getElementById('cl-carr-nome');
+  if (nomeEl) { nomeEl.textContent = l; nomeEl.className = 'cl-carr-leito' + (isArmario ? ' armario' : ''); }
+
+  const progEl = document.getElementById('cl-carr-prog');
+  if (progEl) progEl.textContent = (_clCarrIdx + 1) + ' de ' + CL_LEITOS.length;
+
+  const prev = document.getElementById('cl-carr-prev');
+  const next = document.getElementById('cl-carr-next');
+  if (prev) prev.disabled = _clCarrIdx === 0;
+  if (next) next.disabled = _clCarrIdx === CL_LEITOS.length - 1;
+
+  // Barra de progresso (quanto do leito foi preenchido)
+  const fillEl = document.getElementById('cl-carr-fill');
+  if (fillEl) {
+    const card = document.getElementById('cl-card-' + _clCarrIdx);
+    if (card) {
+      const inputs = card.querySelectorAll('.cl-card-qty');
+      const total = inputs.length;
+      const preenchidos = Array.from(inputs).filter(i => i.value.trim() !== '').length;
+      fillEl.style.width = total ? (preenchidos / total * 100) + '%' : '0%';
+      fillEl.style.background = isArmario ? '#1a6b3a' : '#0d47a1';
+    }
+  }
+}
+
+// Sincroniza os valores do card mobile ↔ tabela desktop (mantém dados consistentes)
+function _clSincronizarCard(li) {
+  const l = CL_LEITOS[li];
+  CL_MATERIAIS.forEach(mat => {
+    const key = mat.id + '__' + l.replace(/ /g,'_');
+    const tabelaInp = document.getElementById('cl-inp-' + key);
+    const cardInp   = document.getElementById('cl-m-' + key);
+    if (!tabelaInp || !cardInp) return;
+    // Se tabela tem valor e card não, copia tabela → card
+    if (tabelaInp.value && !cardInp.value) cardInp.value = tabelaInp.value;
+    // Se card tem valor e tabela não, copia card → tabela
+    if (cardInp.value && !tabelaInp.value) tabelaInp.value = cardInp.value;
+  });
+}
+
+function clColorirCard(el, ref) {
+  const val = el.value.trim();
+  // Sincronizar com input da tabela
+  const mid = el.id; // "cl-m-{mat.id}__{leito}"
+  const tabelaId = 'cl-inp-' + mid.replace('cl-m-', '');
+  const tabelaInp = document.getElementById(tabelaId);
+  if (tabelaInp) {
+    tabelaInp.value = val;
+    clColorirInput(tabelaInp, ref);
+  }
+  // Atualizar barra de progresso do card
+  clCarrAtualizarUI();
+  // Colorir o input do card
+  if (val === '') { el.className = 'cl-card-qty' + (ref === null ? ' sem-ref' : ''); return; }
+  const n = parseInt(val, 10);
+  if (ref === null) { el.className = 'cl-card-qty sem-ref'; return; }
+  if (n >= ref) el.className = 'cl-card-qty ok';
+  else if (n > 0) el.className = 'cl-card-qty low';
+  else el.className = 'cl-card-qty zero';
 }
 
 function clColorirInput(el, ref) {
@@ -8811,8 +9012,11 @@ function _clColetarDados() {
     dados[mat.id] = {};
     CL_LEITOS.forEach(l => {
       const key = mat.id + '__' + l.replace(/ /g,'_');
-      const el = document.getElementById('cl-inp-' + key);
-      const val = el ? el.value.trim() : '';
+      // Tenta ler do input da tabela; se vazio, tenta do card do carrossel
+      const elTabela = document.getElementById('cl-inp-' + key);
+      const elCard   = document.getElementById('cl-m-' + key);
+      let val = elTabela ? elTabela.value.trim() : '';
+      if (val === '' && elCard) val = elCard.value.trim();
       dados[mat.id][l] = val === '' ? null : parseInt(val, 10);
     });
   });
