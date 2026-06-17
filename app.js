@@ -4087,7 +4087,8 @@ async function renderLeitos() {
         ${l.ocupado && evHoje ? _morseBadge(evHoje.morseScore) : ''}
         ${l.ocupado ? _nasBadge(nasHoje) : ''}
       </div>
-      ${l.ocupado ? `<button class="leito-iras-btn" data-leito="${i}" title="Abrir Checklist de Bundles IRAS deste leito">📋 BUNDLES IRAS</button>` : ''}`;
+      ${l.ocupado ? `<button class="leito-iras-btn" data-leito="${i}" title="Abrir Checklist de Bundles IRAS deste leito">📋 BUNDLES IRAS</button>` : ''}
+      ${l.ocupado ? `<button class="leito-rx-hor-btn" data-leito="${i}" title="Ver e editar horários da prescrição médica">💊 PRESCRIÇÃO</button>` : ''}`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
     // Listener separado para o botão IRAS — para de propagar para o card
     if(l.ocupado){
@@ -4096,6 +4097,13 @@ async function renderLeitos() {
         irasBtn.addEventListener('click', (ev) => {
           ev.stopPropagation();
           abrirIRAS(i);
+        });
+      }
+      const rxHorBtn = card.querySelector('.leito-rx-hor-btn');
+      if(rxHorBtn){
+        rxHorBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          abrirRxHor(i);
         });
       }
     }
@@ -5018,8 +5026,7 @@ async function abrirForm(n) {
   if(pac.pac){
     setTimeout(() => _buscarCulturasAuto(pac.pac, leitoAtual), 800);
   }
-  // Carrega prescrição médica em background para edição de horários
-  setTimeout(() => _carregarRxMed(), 400);
+
   } catch(e) {
     console.error('abrirForm:', e);
     hideLoading();
@@ -5031,12 +5038,27 @@ async function abrirForm(n) {
 const _RX_HORAS     = ['20','22','24','02','04','06','08','10','12','14','16','18'];
 const _RX_ESPECIAIS = ['SN','SND','ACM','EM USO'];
 
-async function _carregarRxMed() {
+async function abrirRxHor(leito) {
+  leitoAtual = leito;
+  const modal = document.getElementById('modal-rx-hor');
+  const leitos = await leitosData();
+  const pac = (leitos[leito] || {}).pac || '';
+  document.getElementById('rx-hor-pac-info').textContent =
+    `Leito ${pad(leito)}${pac ? ' · ' + pac : ''}`;
+  modal.classList.add('show');
+  _carregarRxMed(leito);
+}
+
+function fecharRxHor() {
+  document.getElementById('modal-rx-hor').classList.remove('show');
+}
+
+async function _carregarRxMed(leito) {
   const corpo = document.getElementById('rx-med-corpo');
   if (!corpo) return;
   corpo.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:8px 0;">Buscando prescrição médica...</div>';
   _rxMedItens = []; _rxMedHorarios = {}; _rxMedDataAtual = null;
-  const rx = await _rxMedLer(leitoAtual);
+  const rx = await _rxMedLer(leito);
   if (!rx) {
     corpo.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:8px 0;">Nenhuma prescrição médica encontrada para hoje.</div>';
     return;
@@ -5076,11 +5098,9 @@ function _renderRxMedTabela() {
     h += `</tr>`;
   });
   h += '</tbody></table></div>';
-  h += '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
-  h += '<button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="_rxMedSalvarHorarios()">💾 Salvar Horários</button>';
-  if (_rxMedDataAtual) h += `<span style="font-size:.72rem;color:var(--muted);">Prescrição de ${fmtD(_rxMedDataAtual)}</span>`;
-  h += '<span id="rx-med-status" style="font-size:.78rem;color:var(--muted);margin-left:auto;"></span>';
-  h += '</div>';
+  if (_rxMedDataAtual) {
+    h += `<div style="margin-top:10px;font-size:.72rem;color:var(--muted);">Prescrição de ${fmtD(_rxMedDataAtual)}</div>`;
+  }
   corpo.innerHTML = h;
 }
 
