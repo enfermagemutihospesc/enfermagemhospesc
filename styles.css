@@ -498,3 +498,21 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:8px 
   }
   #cl-footer-btns .btn { padding: 8px 14px !important; font-size: .8rem !important; }
 }
+
+/* ── Prescrição Médica · Horários (edição pela enfermagem) ─────────────────── */
+.enf-rx-tabela th, .enf-rx-tabela td { padding: 5px 6px; border-bottom: 1px solid #e8edf2; font-size: .78rem; }
+.enf-rx-tabela th { background: #f0f4f8; font-weight: 700; text-align: left; border-bottom: 2px solid #c8d8e8; }
+.enf-rx-tabela tr:nth-child(even) td { background: #f8fafc; }
+.enf-rx-tabela .farm { font-weight: 600; }
+.enf-rx-tabela .farm-det { font-size: .7rem; color: var(--muted); font-weight: 400; }
+
+.enf-rx-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px 6px; border-radius: 4px; font-size: .7rem; font-weight: 700;
+  cursor: pointer; user-select: none;
+  border: 1.5px solid #b0bec5; background: #f5f7fa; color: #546e7a;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.enf-rx-chip.on { background: #1a6b3a; color: #fff; border-color: #1a6b3a; }
+.enf-rx-chip-sn { border-color: #90a4ae; background: #eceff1; color: #455a64; }
+.enf-rx-chip-sn.on { background: #0d47a1; color: #fff; border-color: #0d47a1; }
