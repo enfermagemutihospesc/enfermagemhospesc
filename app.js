@@ -1,6 +1,10 @@
 // ── ESTADO ──────────────────────────────────────────────────────────────────
 let turno = '', leitoAtual = 0, usuarioEmail = '';
 let db = null, auth = null, modoOffline = false;
+
+// ── BRIDGE FIREBASE MÉDICO (prescrição) ──────────────────────────────────────
+let medApp = null, medDb = null, _medAuthPromise = null;
+let _rxMedItens = [], _rxMedHorarios = {}, _rxMedDataAtual = null;
 const TOTAL = 10;
 
 // ── CONTROLE DE ACESSO ───────────────────────────────────────────────────────
@@ -84,6 +88,72 @@ function initFirebase() {
     console.error('Erro crítico no Firebase:', e);
     return false;
   }
+}
+
+// ── SEGUNDO FIREBASE: PROJETO MÉDICO ────────────────────────────────────────
+// A chave pública já está exposta no frontend médico (GitHub Pages).
+// O login anônimo é necessário caso as Security Rules exijam request.auth != null.
+const _MED_CONFIG = {
+  apiKey:            'AIzaSyDryRL7zbTfO2T4xpzIiug4YVjP04ZoJ3k',
+  authDomain:        'utihospesc-3ebf4.firebaseapp.com',
+  projectId:         'utihospesc-3ebf4',
+  storageBucket:     'utihospesc-3ebf4.firebasestorage.app',
+  messagingSenderId: '113839432711',
+  appId:             '1:113839432711:web:d439ffe7e89c4a3798f6a2'
+};
+
+function _medDbInit() {
+  if (medDb) return { db: medDb, authReady: _medAuthPromise };
+  medApp           = firebase.initializeApp(_MED_CONFIG, 'med');
+  medDb            = medApp.firestore();
+  _medAuthPromise  = medApp.auth().signInAnonymously()
+                           .catch(e => console.warn('medAuth anônimo:', e));
+  return { db: medDb, authReady: _medAuthPromise };
+}
+
+// Lê a prescrição médica do leito. Tenta a data do turno e a vizinha como fallback.
+async function _rxMedLer(leito) {
+  const { db } = _medDbInit();
+  const candidatos = [dataDoTurno()];
+  // Noturno antes das 7h: dataDoTurno() = ontem; tenta também hoje
+  // Diurno: dataDoTurno() = hoje; tenta também ontem
+  candidatos.push(dataDoTurno() !== hoje() ? hoje() : ontem());
+  for (const data of candidatos) {
+    try {
+      const snap = await db.collection('uti_med_kv').doc(`uti_med_rx_${leito}_${data}`).get();
+      if (snap.exists) {
+        const val = snap.data().value;
+        if (val && val.itens && val.itens.length) return { ...val, _data: data };
+      }
+    } catch(e) { console.warn('_rxMedLer[' + data + ']:', e); }
+  }
+  return null;
+}
+
+// Salva apenas os horários de volta na prescrição médica usando transação Firestore.
+// horariosMap = { [String(itemId)]: ['08','20', ...] }
+// Só altera o campo hor de cada item; todos os outros campos são preservados.
+async function _rxMedSalvarHor(leito, data, horariosMap) {
+  const { db, authReady } = _medDbInit();
+  await authReady; // garante que o login anônimo concluiu antes de escrever
+  const ref = db.collection('uti_med_kv').doc(`uti_med_rx_${leito}_${data}`);
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new Error('Prescrição não encontrada — leito ' + leito + ' / ' + data);
+    const val   = snap.data().value;
+    const itens = (val.itens || []).map(it => ({
+      ...it,
+      hor: Object.prototype.hasOwnProperty.call(horariosMap, String(it.id))
+           ? horariosMap[String(it.id)]
+           : (it.hor || [])
+    }));
+    tx.update(ref, {
+      'value.itens':        itens,
+      'value.horEditEnf':   usuarioEmail,
+      'value.horEditEnfEm': new Date().toISOString(),
+      updatedAt:            new Date().toISOString()
+    });
+  });
 }
 
 // ── PERFIS DE USUÁRIO (Firestore: coleção 'usuarios', docId = e-mail) ─────────
@@ -188,6 +258,8 @@ function ontem(){ const d=new Date(); d.setDate(d.getDate()-1); return d.getFull
 // A janela 0–6 cobre a madrugada do plantão noturno, que termina às 07:00.
 function dataDoTurno(){ const h=new Date().getHours(); if(turno==='NOTURNO' && h>=0 && h<7) return ontem(); return hoje(); }
 function fmtD(s){ if(!s||s==='–') return '–'; try{ const[y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }catch(e){ return s; } }
+// Escapa HTML para evitar XSS em innerHTML
+function esc(s){ const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML; }
 function gf(id){ const e=document.getElementById(id); return e?e.value:''; }
 function gChecked(cls){ return Array.from(document.querySelectorAll('.'+cls+':checked')).map(e=>e.value); }
 function gRadio(name){ const e=document.querySelector('input[name="'+name+'"]:checked'); return e?e.value:''; }
@@ -4946,10 +5018,101 @@ async function abrirForm(n) {
   if(pac.pac){
     setTimeout(() => _buscarCulturasAuto(pac.pac, leitoAtual), 800);
   }
+  // Carrega prescrição médica em background para edição de horários
+  setTimeout(() => _carregarRxMed(), 400);
   } catch(e) {
     console.error('abrirForm:', e);
     hideLoading();
     toast('Erro ao abrir evolução: '+(e.message||'tente novamente'), true);
+  }
+}
+
+// ── PRESCRIÇÃO MÉDICA · HORÁRIOS (edição pela enfermagem) ───────────────────
+const _RX_HORAS     = ['20','22','24','02','04','06','08','10','12','14','16','18'];
+const _RX_ESPECIAIS = ['SN','SND','ACM','EM USO'];
+
+async function _carregarRxMed() {
+  const corpo = document.getElementById('rx-med-corpo');
+  if (!corpo) return;
+  corpo.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:8px 0;">Buscando prescrição médica...</div>';
+  _rxMedItens = []; _rxMedHorarios = {}; _rxMedDataAtual = null;
+  const rx = await _rxMedLer(leitoAtual);
+  if (!rx) {
+    corpo.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:8px 0;">Nenhuma prescrição médica encontrada para hoje.</div>';
+    return;
+  }
+  _rxMedDataAtual = rx._data;
+  _rxMedItens     = rx.itens;
+  _rxMedHorarios  = {};
+  rx.itens.forEach(it => { _rxMedHorarios[String(it.id)] = [...(it.hor || [])]; });
+  _renderRxMedTabela();
+}
+
+function _renderRxMedTabela() {
+  const corpo = document.getElementById('rx-med-corpo');
+  if (!corpo) return;
+  let h = '<div style="overflow-x:auto;">';
+  h += '<table class="enf-rx-tabela" style="width:100%;border-collapse:collapse;">';
+  h += '<thead><tr><th>#</th><th>Fármaco / Item</th><th>Via</th><th>Freq.</th><th>Horários</th></tr></thead><tbody>';
+  _rxMedItens.forEach((it, idx) => {
+    const sid    = String(it.id);
+    const ativos = _rxMedHorarios[sid] || [];
+    const chips  =
+      _RX_HORAS.map(hora =>
+        `<span class="enf-rx-chip ${ativos.includes(hora)?'on':''}" onclick="_rxMedToggleHor('${sid}','${hora}')">${hora}</span>`
+      ).join('') +
+      _RX_ESPECIAIS.map(e =>
+        `<span class="enf-rx-chip enf-rx-chip-sn ${ativos.includes(e)?'on':''}" onclick="_rxMedToggleHor('${sid}','${e}')">${e}</span>`
+      ).join('');
+    h += `<tr>`;
+    h += `<td style="color:var(--muted);font-size:.72rem;">${idx + 1}</td>`;
+    h += `<td><span class="farm">${esc(it.farm || '—')}</span>`;
+    if (it.dose)     h += ` <span class="farm-det">${esc(it.dose)}</span>`;
+    if (it.diluicao) h += `<br><span class="farm-det">${esc(it.diluicao)}</span>`;
+    h += `</td>`;
+    h += `<td style="text-align:center;">${esc(it.via  || '—')}</td>`;
+    h += `<td style="text-align:center;">${esc(it.freq || '—')}</td>`;
+    h += `<td><div style="display:flex;flex-wrap:wrap;gap:3px;">${chips}</div></td>`;
+    h += `</tr>`;
+  });
+  h += '</tbody></table></div>';
+  h += '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+  h += '<button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="_rxMedSalvarHorarios()">💾 Salvar Horários</button>';
+  if (_rxMedDataAtual) h += `<span style="font-size:.72rem;color:var(--muted);">Prescrição de ${fmtD(_rxMedDataAtual)}</span>`;
+  h += '<span id="rx-med-status" style="font-size:.78rem;color:var(--muted);margin-left:auto;"></span>';
+  h += '</div>';
+  corpo.innerHTML = h;
+}
+
+function _rxMedToggleHor(sid, hora) {
+  if (!_rxMedHorarios[sid]) _rxMedHorarios[sid] = [];
+  if (_RX_ESPECIAIS.includes(hora)) {
+    // especial: seleção exclusiva (um de cada vez, ou nenhum)
+    _rxMedHorarios[sid] = _rxMedHorarios[sid].includes(hora) ? [] : [hora];
+  } else {
+    // hora normal: remove especiais antes de toggle
+    _rxMedHorarios[sid] = _rxMedHorarios[sid].filter(h => !_RX_ESPECIAIS.includes(h));
+    const idx = _rxMedHorarios[sid].indexOf(hora);
+    if (idx >= 0) _rxMedHorarios[sid].splice(idx, 1);
+    else _rxMedHorarios[sid].push(hora);
+    _rxMedHorarios[sid].sort();
+  }
+  _renderRxMedTabela();
+}
+
+async function _rxMedSalvarHorarios() {
+  if (!_rxMedDataAtual) { toast('Nenhuma prescrição carregada.', true); return; }
+  const status = document.getElementById('rx-med-status');
+  if (status) status.textContent = 'Salvando...';
+  try {
+    await _rxMedSalvarHor(leitoAtual, _rxMedDataAtual, _rxMedHorarios);
+    if (status) status.textContent = '✔ Salvo!';
+    setTimeout(() => { const s = document.getElementById('rx-med-status'); if (s) s.textContent = ''; }, 3000);
+    toast('Horários salvos na prescrição médica.');
+  } catch(e) {
+    const msg = e.message || String(e);
+    if (status) status.textContent = 'Erro: ' + msg;
+    toast('Erro ao salvar horários: ' + msg, true);
   }
 }
 
