@@ -97,6 +97,9 @@ body{font-family:var(--fonte);background:var(--grad-bg);background-attachment:fi
 .leito-iras-btn{display:block;width:calc(100% - 16px);margin:0 8px 8px;padding:5px 8px;font-size:.7rem;font-weight:600;background:#e8f4fd;color:#0d47a1;border:1px solid rgba(13,71,161,.25);border-radius:7px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast),transform var(--t-fast);}
 .leito-iras-btn:hover{background:var(--azul);color:white;transform:translateY(-1px);}
 .leito-iras-btn:active{transform:scale(.97);}
+.leito-rx-hor-btn{display:block;width:calc(100% - 16px);margin:0 8px 8px;padding:5px 8px;font-size:.7rem;font-weight:600;background:#eaf5ee;color:#1a6b3a;border:1px solid rgba(26,107,58,.25);border-radius:7px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast),transform var(--t-fast);}
+.leito-rx-hor-btn:hover{background:#1a6b3a;color:white;transform:translateY(-1px);}
+.leito-rx-hor-btn:active{transform:scale(.97);}
  
 .nas-card{border:1.5px solid var(--borda);border-radius:11px;overflow:hidden;margin-bottom:6px;box-shadow:var(--sh-xs);transition:box-shadow var(--t-mid);}
 .nas-card:hover{box-shadow:var(--sh-s);}
