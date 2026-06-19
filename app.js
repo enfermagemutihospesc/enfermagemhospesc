@@ -2834,99 +2834,193 @@ function _indIRAS(periodo){
     </tr>`;
   });
   h += '</tbody></table></div>';
-  h += '<div class="ind-hint" style="margin-top:12px;">💡 <strong>Tudo ou nada (IHI):</strong> o bundle só é considerado aderente (✓) quando 100% dos itens aplicáveis (não-N/A) estão conformes. ✗ = falhou algum item · … = checklist incompleto · – = bundle não aplicável (sem o dispositivo). Meta institucional recomendada: ≥ 95%.</div>';
+  h += '<div class="ind-hint" style="margin-top:8px;">💡 <strong>Tudo ou nada (IHI):</strong> o bundle só é considerado aderente (✓) quando 100% dos itens aplicáveis (não-N/A) estão conformes. ✗ = falhou algum item · … = checklist incompleto · – = bundle não aplicável (sem o dispositivo). Meta institucional recomendada: ≥ 95%.</div>';
+
+  // ── Conformidade por Item (conforme/não conforme item a item) ──
+  // Quando a adesão geral de um bundle está baixa, esta seção mostra qual(is)
+  // item(ns) específico(s) estão falhando — não basta saber que o bundle falhou.
+  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">🔎 Conformidade por Item</div>';
+  h += '<div class="ind-hint" style="margin-bottom:10px;">Quando a adesão geral está abaixo da meta, identifique aqui quais itens específicos do bundle estão falhando.</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:6px;">';
+
+  IRAS_BUNDLES.forEach(b => {
+    const st = bundleStats[b.id];
+    if(!st.checklistsTotal) return;
+
+    // Acumula resultados por item ao longo dos checklists do período
+    const itemStats = {};
+    b.itens.forEach(it => { itemStats[it.id] = { texto: it.texto, ad: 0, naoAd: 0, na: 0, sr: 0 }; });
+    checklists.forEach(ck => {
+      if(!ck.respostas) return;
+      const ctx = _irasReconstruirContextoCk(ck);
+      b.itens.forEach(it => {
+        const av = _irasAvaliarItem(it, ck.respostas, ctx);
+        if(av === 'aderente')          itemStats[it.id].ad++;
+        else if(av === 'nao_aderente') itemStats[it.id].naoAd++;
+        else if(av === 'na')           itemStats[it.id].na++;
+        else                           itemStats[it.id].sr++;
+      });
+    });
+
+    h += `<details style="background:white;border:1px solid #e0e0e0;border-radius:8px;">
+      <summary style="cursor:pointer;padding:8px 12px;font-size:.82rem;font-weight:600;">${b.icone} ${b.titulo.replace(/Bundle de Prevenção de /,'')}</summary>
+      <div style="padding:6px 12px 10px;">`;
+    b.itens.forEach(it => {
+      const s = itemStats[it.id];
+      const denom = s.ad + s.naoAd; // exclui N/A e sem resposta
+      const pct = denom > 0 ? Math.round(s.ad*100/denom) : null;
+      const cor = pct === null ? '#999' : pct >= 95 ? '#1a6b3a' : pct >= 80 ? '#856404' : '#dc3545';
+      h += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:.76rem;padding:4px 0;border-bottom:1px dashed #eee;">
+        <span style="flex:1;color:#333;">${_esc(it.texto)}</span>
+        <span style="color:${cor};font-weight:700;min-width:90px;text-align:right;">${pct === null ? '—' : pct+'% ('+s.ad+'/'+denom+')'}</span>
+      </div>`;
+    });
+    h += '</div></details>';
+  });
+
+  h += '</div>';
+  h += '<div class="ind-hint" style="margin-top:12px;">💡 <strong>Conformidade por item:</strong> percentual de respostas conformes entre os itens respondidos (exclui N/A e itens sem resposta).</div>';
   return h;
 }
 
 // ── Exportação em PDF dos bundles preenchidos por data (4 datas por página) ──
+// IMPORTANTE: jsPDF com a fonte padrão (helvetica) só suporta o conjunto
+// Latin-1/CP1252 — emojis (🩸💉🫘🫁) e símbolos como ✓/✗ saem corrompidos
+// ("Ø>Þx" etc.). Por isso aqui usamos SOMENTE texto ASCII/Latin-1: siglas para
+// os bundles (CDL, AVP, SVD, PAV) e abreviações de status (OK/FALHA/INC/–).
+// Também agrupamos por DATA (não por checklist/leito) — uma data pode ter
+// vários leitos, e "4 datas por página" significa 4 blocos-DATA, cada um
+// listando todos os leitos daquele dia em linhas compactas.
 function _exportarPDFBundlesIRAS(){
   try {
     const periodo = _indPeriodo();
     if(!periodo){ toast('Informe o período personalizado', true); return; }
 
     const checklists = (_indCache.irasChecklists || [])
-      .filter(v => v && v.data && _dentroPeriodo(v.data, periodo))
-      .sort((a,b) => (a.data === b.data ? (a.turno||'').localeCompare(b.turno||'') : (a.data < b.data ? -1 : 1)));
+      .filter(v => v && v.data && _dentroPeriodo(v.data, periodo));
 
     if(!checklists.length){ toast('Nenhum checklist IRAS no período selecionado', true); return; }
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
-    const W = 210, H = 297, M = 14, L = W - 2*M;
-    const _trans = (s) => String(s ?? '–');
+    // Sigla curta por bundle (ASCII, cabe em coluna estreita)
+    const SIGLA = { cdl:'CDL', avp:'AVP', svd:'SVD', pav:'PAV' };
 
-    // ── Cabeçalho institucional (1x) ──
-    doc.setFillColor(26,107,58); doc.rect(0,0,W,24,'F');
-    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13);
-    doc.text('Bundles IRAS / CCIH — Preenchimento por Data', M, 11);
-    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-    doc.text(`Hospital dos Pescadores · UTI Adulto · ${periodo.rotulo}`, M, 18);
-    doc.setTextColor(0,0,0);
-
-    // 4 "datas" (checklists) por página → bloco de altura fixa
-    const TOPO = 30;
-    const ALTURA_BLOCO = (H - TOPO - 12) / 4; // 4 blocos por página
-    let y = TOPO;
-    let idxNaPagina = 0;
-
-    const _statusTxt = (s) => s === 'aderente' ? 'Aderente'
-                             : s === 'nao_aderente' ? 'Nao aderente'
-                             : s === 'incompleto' ? 'Incompleto'
-                             : 'N/A';
-    const _statusCor = (s) => s === 'aderente' ? [26,107,58]
-                             : s === 'nao_aderente' ? [220,53,69]
-                             : s === 'incompleto' ? [133,100,4]
-                             : [150,150,150];
-
-    checklists.forEach((ck, i) => {
-      if(idxNaPagina === 4){
-        doc.addPage();
-        y = M; idxNaPagina = 0;
-      }
-
+    // Agrupa por data → dentro de cada data, uma linha por checklist (leito/turno)
+    const porData = {};
+    checklists.forEach(ck => {
       const ctx = _irasReconstruirContextoCk(ck);
-      const linhasBundle = [];
+      const statusPorBundle = {};
       IRAS_BUNDLES.forEach(b => {
         let av;
         if(ck.respostas) av = _irasAvaliarBundle(b, ck.respostas, ctx);
         else if(ck.scores && ck.scores[b.id]) av = { status: ck.scores[b.id].status || 'incompleto' };
-        else return;
-        linhasBundle.push({ titulo: b.titulo.replace(/Bundle de Prevenção de /,''), icone: b.icone, status: av.status });
+        else { statusPorBundle[b.id] = null; return; }
+        statusPorBundle[b.id] = av.status;
       });
+      (porData[ck.data] = porData[ck.data] || []).push({
+        turno: ck.turno || '-', leito: ck.leito || '-', pac: ck.pac || '', statusPorBundle
+      });
+    });
+
+    // Ordena datas (mais recente primeiro) e, dentro de cada data, por turno/leito
+    const datasOrdenadas = Object.keys(porData).sort((a,b) => b.localeCompare(a));
+    datasOrdenadas.forEach(d => {
+      porData[d].sort((a,b) => (a.turno+a.leito).localeCompare(b.turno+b.leito));
+    });
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+    const W = 210, H = 297, M = 14, L = W - 2*M;
+    const _trans = (s) => String(s ?? '-')
+      .replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"')
+      .replace(/\u2013/g,'-').replace(/\u2014/g,'-').replace(/\u2026/g,'...');
+
+    const _statusTxt = (s) => s === 'aderente' ? 'OK'
+                             : s === 'nao_aderente' ? 'FALHA'
+                             : s === 'incompleto' ? 'INC'
+                             : '-';
+    const _statusCor = (s) => s === 'aderente' ? [26,107,58]
+                             : s === 'nao_aderente' ? [220,53,69]
+                             : s === 'incompleto' ? [133,100,4]
+                             : [170,170,170];
+
+    // ── Cabeçalho institucional (1x, fixo no topo de cada página) ──
+    const desenharCabecalhoPagina = () => {
+      doc.setFillColor(26,107,58); doc.rect(0,0,W,20,'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12);
+      doc.text(_trans('Bundles IRAS / CCIH - Preenchimento por Data'), M, 9);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.text(_trans(`Hospital dos Pescadores - UTI Adulto - ${periodo.rotulo}`), M, 15.5);
+      doc.setTextColor(0,0,0);
+    };
+
+    const TOPO = 26;
+    const RODAPE = 16; // reserva espaço para legenda + numeração de página
+    const ALTURA_BLOCO_PADRAO = (H - TOPO - RODAPE) / 4; // referência: 4 blocos/página quando o dia tem poucos leitos
+    const HCAB = 7, HLINHA = 5;
+    let y = TOPO;
+
+    desenharCabecalhoPagina();
+
+    datasOrdenadas.forEach(data => {
+      const linhas = porData[data];
+      // Altura REAL necessária para este bloco (cresce se o dia tiver muitos leitos) —
+      // nunca menor que o padrão de 1/4 de página, para manter blocos uniformes
+      // quando o conteúdo é típico (poucos leitos por dia).
+      const alturaNecessaria = HCAB + linhas.length * HLINHA + 3;
+      const alturaBloco = Math.max(ALTURA_BLOCO_PADRAO, alturaNecessaria);
+
+      // Quebra de página por ESPAÇO DISPONÍVEL (não por contagem fixa de 4) —
+      // evita que um dia com muitos leitos sobreponha o bloco da próxima data.
+      if(y + alturaBloco > H - RODAPE){
+        doc.addPage();
+        desenharCabecalhoPagina();
+        y = TOPO;
+      }
 
       // Caixa do bloco
       doc.setDrawColor(220,220,220);
-      doc.rect(M, y, L, ALTURA_BLOCO - 3);
+      doc.rect(M, y, L, alturaBloco - 2);
 
-      // Cabeçalho do bloco: data / turno / leito / paciente
-      doc.setFillColor(13,71,161); doc.rect(M, y, L, 7, 'F');
+      // Cabeçalho do bloco: DATA + colunas de sigla dos bundles
+      doc.setFillColor(13,71,161); doc.rect(M, y, L, HCAB, 'F');
       doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255);
-      doc.text(_trans(`${ck.data}  ·  ${ck.turno||'–'}  ·  Leito ${ck.leito||'–'}  ·  ${ck.pac||''}`), M+2, y+5);
+      doc.text(_trans(data), M+2, y+HCAB-2);
+      // Colunas fixas à direita: Leito | CDL | AVP | SVD | PAV
+      const colLeitoX = M + 62;
+      const colsBundleX = [colLeitoX+16, colLeitoX+34, colLeitoX+52, colLeitoX+70];
+      doc.setFontSize(7.5);
+      doc.text('LEITO', colLeitoX, y+HCAB-2);
+      IRAS_BUNDLES.forEach((b,bi) => doc.text(SIGLA[b.id], colsBundleX[bi], y+HCAB-2));
       doc.setTextColor(0,0,0);
 
-      // Linhas resumidas: um bundle por linha, dentro do bloco
-      const yInicioLinhas = y + 9;
-      const hLinha = (ALTURA_BLOCO - 3 - 9) / Math.max(linhasBundle.length, 1);
-      linhasBundle.forEach((lb, li) => {
-        const ly = yInicioLinhas + li * hLinha + hLinha/2 + 1;
-        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(40,40,40);
-        doc.text(_trans(`${lb.icone} ${lb.titulo}`), M+3, ly);
-        const cor = _statusCor(lb.status);
-        doc.setFont('helvetica','bold'); doc.setTextColor(...cor);
-        doc.text(_trans(_statusTxt(lb.status)), M+L-30, ly);
+      // Linhas: uma por leito/turno daquele dia
+      let ly = y + HCAB + 3.5;
+      linhas.forEach((l, li) => {
+        if(li % 2 === 0){ doc.setFillColor(245,247,250); doc.rect(M, ly-3.7, L, HLINHA, 'F'); }
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(40,40,40);
+        doc.text(_trans(`${l.turno} - ${l.pac}`), M+2, ly);
+        doc.text(_trans(l.leito), colLeitoX, ly);
+        IRAS_BUNDLES.forEach((b,bi) => {
+          const st = l.statusPorBundle[b.id];
+          const cor = _statusCor(st);
+          doc.setFont('helvetica','bold'); doc.setTextColor(...cor);
+          doc.text(_statusTxt(st), colsBundleX[bi], ly);
+        });
         doc.setTextColor(0,0,0);
+        ly += HLINHA;
       });
 
-      y += ALTURA_BLOCO;
-      idxNaPagina++;
+      y += alturaBloco;
     });
 
-    // Rodapé
+    // Rodapé + legenda das siglas em todas as páginas
     const totalPag = doc.internal.getNumberOfPages();
     for(let p=1;p<=totalPag;p++){
       doc.setPage(p);
+      doc.setFontSize(6.5); doc.setTextColor(120,120,120);
+      doc.text(_trans('CDL=Cateter Central  AVP=Cateter Periferico  SVD=Sonda Vesical  PAV=Ventilacao Mecanica  |  OK=Aderente  FALHA=Nao aderente  INC=Incompleto  -=Nao aplicavel'), M, 287);
       doc.setFontSize(7); doc.setTextColor(150,150,150);
-      doc.text(`Pag ${p}/${totalPag} · Gerado em ${new Date().toLocaleDateString('pt-BR')} · Sistema UTI HOSPESC`, M, 291);
+      doc.text(_trans(`Pag ${p}/${totalPag} - Gerado em ${new Date().toLocaleDateString('pt-BR')} - Sistema UTI HOSPESC`), M, 291);
     }
 
     doc.save('Bundles_IRAS_'+periodo.rotulo.replace(/\s+/g,'_').replace(/[\/]/g,'-')+'.pdf');
