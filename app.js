@@ -1004,6 +1004,7 @@ async function _carregarDadosInd(){
     const dinamicas = new Set();
     const resumosEv = new Set();   // uti_ev_resumo_<dia>
     const resumosNas = new Set();  // uti_nas_resumo_<dia>
+    const irasChaves = new Set();  // uti_iras_<leito>_<turno>_<data>
 
     // localStorage — percorre uma vez
     for (let i = 0; i < localStorage.length; i++) {
@@ -1011,6 +1012,7 @@ async function _carregarDadosInd(){
       if (!k) continue;
       if (k.startsWith('uti_ev_resumo_'))  resumosEv.add(k);
       else if (k.startsWith('uti_nas_resumo_')) resumosNas.add(k);
+      else if (k.startsWith('uti_iras_')) irasChaves.add(k);
       else if (k.startsWith('uti_ev_') || k.startsWith('uti_nas_')) dinamicas.add(k);
     }
     // Firestore — UMA única varredura da coleção
@@ -1021,19 +1023,20 @@ async function _carregarDadosInd(){
           const id = doc.id;
           if (id.startsWith('uti_ev_resumo_'))  resumosEv.add(id);
           else if (id.startsWith('uti_nas_resumo_')) resumosNas.add(id);
+          else if (id.startsWith('uti_iras_')) irasChaves.add(id);
           else if (id.startsWith('uti_ev_') || id.startsWith('uti_nas_')) dinamicas.add(id);
         });
       } catch(e) { console.warn('_carregarDadosInd: varredura:', e); }
     }
 
-    // Busca tudo em paralelo: fixas + dinâmicas + resumos
-    const todasChaves = [...fixas, ...Array.from(dinamicas), ...Array.from(resumosEv), ...Array.from(resumosNas)];
+    // Busca tudo em paralelo: fixas + dinâmicas + resumos + IRAS
+    const todasChaves = [...fixas, ...Array.from(dinamicas), ...Array.from(resumosEv), ...Array.from(resumosNas), ...Array.from(irasChaves)];
     const dataMap = await dbGetMany(todasChaves);
 
     const admissoes = dataMap['uti_admissao_log'] || [];
     const altas     = dataMap['uti_alta_log']     || [];
     const dispLog   = dataMap['uti_disp_log']     || [];
-    const evolucoes = [], nasList = [];
+    const evolucoes = [], nasList = [], irasChecklists = [];
 
     // Evoluções/NAS recentes (completas)
     for (const k of dinamicas) {
@@ -1052,8 +1055,14 @@ async function _carregarDadosInd(){
       const v = dataMap[k];
       if (v && Array.isArray(v.nas)) v.nas.forEach(n => nasList.push(n));
     }
+    // Checklists IRAS/Bundles — antes só eram lidos do localStorage (nunca
+    // apareciam quando salvos via Firestore por outro dispositivo/usuário).
+    for (const k of irasChaves) {
+      const v = dataMap[k];
+      if (v) irasChecklists.push(v);
+    }
 
-    _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList };
+    _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList, irasChecklists };
   } finally {
     hideLoading();
   }
@@ -2704,20 +2713,13 @@ function _indCruzamentos(periodo){
 }
 
 // ── 17. IRAS / BUNDLES ────────────────────────────────────────────────────────
+// Mostra SOMENTE os bundles (sem densidade de incidência / culturas — isso já
+// existe na aba CCIH). Cada checklist preenchido é rastreável por data, em
+// uma linha resumida por data, e pode ser exportado em PDF (4 datas/página).
 function _indIRAS(periodo){
-  const { evolucoes } = _indCache;
-
-  // Busca todos os checklists IRAS do período no Firestore/localStorage
-  // Os dados estão salvos como uti_iras_<leito>_<turno>_<data>
-  const checklists = [];
-  for(let i=0;i<localStorage.length;i++){
-    const k = localStorage.key(i);
-    if(!k || !k.startsWith('uti_iras_')) continue;
-    try {
-      const v = JSON.parse(localStorage.getItem(k));
-      if(v && v.data && _dentroPeriodo(v.data, periodo)) checklists.push(v);
-    } catch(e){}
-  }
+  const checklists = (_indCache.irasChecklists || [])
+    .filter(v => v && v.data && _dentroPeriodo(v.data, periodo))
+    .sort((a,b) => (a.data === b.data ? 0 : (a.data < b.data ? 1 : -1))); // mais recente primeiro
 
   const totalCheck = checklists.length;
 
@@ -2734,125 +2736,53 @@ function _indIRAS(periodo){
   const bundleStats = {};
   IRAS_BUNDLES.forEach(b => {
     bundleStats[b.id] = {
-      titulo: b.titulo, icone: b.icone, totalItens: b.itens.length,
+      titulo: b.titulo, icone: b.icone,
       checklistsAvaliados: 0,    // observados (denominador) — exclui os com status NA
       checklistsAderentes: 0,    // numerador all-or-nothing
-      itensAderentes: 0, itensNaoAderentes: 0, itensNA: 0,
       checklistsTotal: 0
     };
   });
 
-  let pacientesAvaliados = 0, pacientesTodosAderentes = 0;
+  // Uma linha por checklist (leito+turno+data), com o status de cada bundle —
+  // isso é o que permite "rastrear os bundles preenchidos por data".
+  const linhasPorData = [];
 
   checklists.forEach(ck => {
-    let pacienteTemBundleAvaliavel = false;
-    let pacienteFalhouAlgum = false;
+    const ctx = _irasReconstruirContextoCk(ck);
+    const statusPorBundle = {};
 
     IRAS_BUNDLES.forEach(b => {
       let av;
-      // Preferimos re-avaliar a partir das respostas (caso novos critérios tenham sido aplicados)
       if(ck.respostas){
-        // Reconstrói contexto da evolução a partir dos dispositivos salvos no payload.
-        // Para checklists antigos sem essa info, assume dispositivo presente
-        // (postura conservadora: melhor exigir preenchimento do que ignorar).
-        const ctx = _irasReconstruirContextoCk(ck);
         av = _irasAvaliarBundle(b, ck.respostas, ctx);
       } else if(ck.scores && ck.scores[b.id]){
         // Compatibilidade com formato antigo: status já calculado
         const sc = ck.scores[b.id];
-        av = {
-          status: sc.status || (sc.sim === sc.respondidos && sc.respondidos > 0 ? 'aderente' : 'nao_aderente'),
-          aderentes: sc.itensAderentes ?? sc.sim ?? 0,
-          naoAderentes: sc.itensNaoAderentes ?? Math.max(0,(sc.respondidos||0)-(sc.sim||0)),
-          na: sc.itensNA ?? 0,
-          semResposta: sc.itensSemResposta ?? Math.max(0,(sc.total||0)-(sc.respondidos||0)),
-          total: sc.total || b.itens.length
-        };
+        av = { status: sc.status || (sc.sim === sc.respondidos && sc.respondidos > 0 ? 'aderente' : 'nao_aderente') };
       } else {
         return;
       }
 
+      statusPorBundle[b.id] = av.status;
       bundleStats[b.id].checklistsTotal++;
-      bundleStats[b.id].itensAderentes    += av.aderentes;
-      bundleStats[b.id].itensNaoAderentes += av.naoAderentes;
-      bundleStats[b.id].itensNA           += av.na;
-
-      // No critério tudo-ou-nada, só contam bundles efetivamente avaliados
       if(av.status === 'na' || av.status === 'incompleto') return;
       bundleStats[b.id].checklistsAvaliados++;
       if(av.status === 'aderente') bundleStats[b.id].checklistsAderentes++;
-
-      pacienteTemBundleAvaliavel = true;
-      if(av.status === 'nao_aderente') pacienteFalhouAlgum = true;
     });
 
-    if(pacienteTemBundleAvaliavel){
-      pacientesAvaliados++;
-      if(!pacienteFalhouAlgum) pacientesTodosAderentes++;
-    }
+    linhasPorData.push({
+      data: ck.data, turno: ck.turno, leito: ck.leito, pac: ck.pac || '',
+      statusPorBundle
+    });
   });
 
-  const pctGlobal = pacientesAvaliados > 0 ? Math.round(pacientesTodosAderentes*100/pacientesAvaliados) : 0;
-  const corGlobal = pctGlobal >= 95 ? '' : pctGlobal >= 80 ? 'amarelo' : 'vermelho';
-
-  // ── DENSIDADE DE INCIDÊNCIA DE IRAS (por 1000 dispositivo-dia) ─────────────
-  // Numerador: CULTURAS POSITIVAS cujo sítio mapeia para a topografia (PAV/ITU/IPCS),
-  //            buscadas automaticamente do módulo de culturas (agregado da planilha
-  //            quando carregado; senão, das evoluções locais). Sem digitação manual.
-  // Denominador: dispositivo-dia apurado nas evoluções do período (mesma base
-  //            dos indicadores de dispositivo/VMI). Padrão de vigilância ANVISA/CDC.
-  // NOTA: é uma estimativa por culturas-sentinela. Uma cultura positiva no sítio
-  //       não é necessariamente IRAS confirmada (pode ser colonização); por isso
-  //       o card sinaliza "proxy por cultura".
-  const evPerIRAS = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
-  const _dispDia = (pred) => new Set(
-    evPerIRAS.filter(e => e.leito && e.data && pred(e)).map(e => e.leito + '|' + e.data)
-  ).size;
-  const vmiDia = _dispDia(_emVMI);
-  const svdDia = _dispDia(e => !!e.svd_n);
-  const cvcDia = _dispDia(e => !!(e.avc_l || e.dial_l)); // cateter central: AVC ou CDL
-
-  // Coleta culturas positivas e classifica por sítio → topografia
-  const culturasIRAS = _coletarCulturasIRAS(periodo);
-  const notif = { PAV:0, ITU_AC:0, IPCS_AC:0 };
-  culturasIRAS.forEach(c => { if(notif[c.topografia] != null) notif[c.topografia]++; });
-  const totalNotif = notif.PAV + notif.ITU_AC + notif.IPCS_AC;
-  const fonteCult = culturasIRAS.fonte; // 'agregado' | 'local' | 'nenhuma'
-
-  const _dens = (num, den) => den > 0 ? +(num*1000/den).toFixed(2) : null;
-  const densPAV  = _dens(notif.PAV, vmiDia);
-  const densITU  = _dens(notif.ITU_AC, svdDia);
-  const densIPCS = _dens(notif.IPCS_AC, cvcDia);
-
+  // ── Cards-resumo (somente bundles, sem densidade/culturas) ──
   let h = '<div class="ind-grid">';
   h += _cardInd('Checklists IRAS', totalCheck, 'no período', '', 'iras_total');
-  h += _cardInd('Adesão global (tudo ou nada)', pctGlobal+'%',
-                `${pacientesTodosAderentes}/${pacientesAvaliados} checklists 100% aderentes`, corGlobal, 'iras_pct');
-  h += _cardInd('Culturas-sentinela', totalNotif, 'positivas em sítio de IRAS', totalNotif>0?'laranja':'verde', 'iras_notif');
   h += '</div>';
 
-  // ── Cards de densidade de incidência ──
-  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">🦠 Densidade de incidência estimada (por 1000 dispositivo-dia)</div>';
-  h += '<div class="ind-grid">';
-  const _densCard = (titulo, dens, num, den, fichaId) => {
-    const txt = dens === null ? '–' : dens.toFixed(2);
-    const cor = dens === null ? '' : dens > 0 ? 'laranja' : 'verde';
-    return _cardInd(titulo, txt, den>0 ? `${num} cultura(s) / ${den} disp.-dia` : 'sem dispositivo-dia', cor, fichaId);
-  };
-  h += _densCard('PAV / 1000 VMI-dia', densPAV, notif.PAV, vmiDia, 'iras_dens_pav');
-  h += _densCard('ITU-AC / 1000 SVD-dia', densITU, notif.ITU_AC, svdDia, 'iras_dens_itu');
-  h += _densCard('IPCS-AC / 1000 cateter-dia', densIPCS, notif.IPCS_AC, cvcDia, 'iras_dens_ipcs');
-  h += '</div>';
-  const _fonteTxt = fonteCult === 'agregado' ? 'planilha de culturas (CCIH)'
-                  : fonteCult === 'local' ? 'culturas registradas nas evoluções'
-                  : 'nenhuma fonte de culturas disponível';
-  if(fonteCult === 'nenhuma'){
-    h += '<div class="ind-hint">⚠️ Sem culturas no período. Carregue a planilha de culturas na aba CCIH ou registre culturas nas evoluções para estimar as densidades.</div>';
-  }
-  h += `<div class="ind-hint">📌 Densidade = (culturas positivas no sítio ÷ dispositivo-dia) × 1000. Numerador derivado automaticamente de: <strong>${_fonteTxt}</strong>. É uma <strong>estimativa por culturas-sentinela</strong> — cultura positiva no sítio pode incluir colonização, então o valor superestima a IRAS confirmada pela CCIH. Use para tendência e triagem, não como notificação oficial.</div>`;
-
-  // Score por bundle (aderência all-or-nothing por bundle)
-  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">📊 Adesão por Bundle (tudo ou nada)</div>';
+  // ── Adesão por bundle (tudo ou nada) ──
+  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">📊 Adesão por Bundle (tudo ou nada — IHI)</div>';
   h += '<div style="display:flex;flex-direction:column;gap:8px;">';
 
   IRAS_BUNDLES.forEach(b => {
@@ -2875,54 +2805,137 @@ function _indIRAS(periodo){
       </div>
     </div>`;
   });
-
   h += '</div>';
 
-  // Conformidade individual por item — quando a adesão é baixa, mostra onde estão as falhas
-  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:14px 0 8px;color:var(--azul);">🔎 Conformidade por Item</div>';
-  h += '<div class="ind-hint" style="margin-bottom:10px;">Quando a adesão geral está abaixo da meta, identifique aqui quais itens específicos do bundle estão falhando.</div>';
-  h += '<div style="display:flex;flex-direction:column;gap:6px;">';
+  // ── Rastreamento por data (uma linha resumida por checklist) ──
+  const bundlesUsados = IRAS_BUNDLES.filter(b => bundleStats[b.id].checklistsTotal > 0);
+  const _statusIcone = (s) => s === 'aderente' ? '<span style="color:#1a6b3a;font-weight:700;" title="Aderente">✓</span>'
+                             : s === 'nao_aderente' ? '<span style="color:#dc3545;font-weight:700;" title="Não aderente">✗</span>'
+                             : s === 'incompleto' ? '<span style="color:#856404;font-weight:700;" title="Incompleto">…</span>'
+                             : '<span style="color:#bbb;" title="Não aplicável">–</span>';
 
-  IRAS_BUNDLES.forEach(b => {
-    const st = bundleStats[b.id];
-    if(!st.checklistsTotal) return;
-
-    // Acumula resultados por item ao longo dos checklists
-    const itemStats = {};
-    b.itens.forEach(it => { itemStats[it.id] = { texto: it.texto, ad: 0, naoAd: 0, na: 0, sr: 0 }; });
-    checklists.forEach(ck => {
-      if(!ck.respostas) return;
-      const ctx = _irasReconstruirContextoCk(ck);
-      b.itens.forEach(it => {
-        const av = _irasAvaliarItem(it, ck.respostas, ctx);
-        if(av === 'aderente')         itemStats[it.id].ad++;
-        else if(av === 'nao_aderente') itemStats[it.id].naoAd++;
-        else if(av === 'na')           itemStats[it.id].na++;
-        else                           itemStats[it.id].sr++;
-      });
-    });
-
-    h += `<details style="background:white;border:1px solid #e0e0e0;border-radius:8px;">
-      <summary style="cursor:pointer;padding:8px 12px;font-size:.82rem;font-weight:600;">${b.icone} ${b.titulo.replace(/Bundle de Prevenção de /,'')}</summary>
-      <div style="padding:6px 12px 10px;">`;
-    b.itens.forEach(it => {
-      const s = itemStats[it.id];
-      const denom = s.ad + s.naoAd; // exclui N/A e sem resposta
-      const pct = denom > 0 ? Math.round(s.ad*100/denom) : null;
-      const cor = pct === null ? '#999' : pct >= 95 ? '#1a6b3a' : pct >= 80 ? '#856404' : '#dc3545';
-      h += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:.76rem;padding:4px 0;border-bottom:1px dashed #eee;">
-        <span style="flex:1;color:#333;">${it.texto}</span>
-        <span style="color:${cor};font-weight:700;min-width:90px;text-align:right;">${pct === null ? '—' : pct+'% ('+s.ad+'/'+denom+')'}</span>
-      </div>`;
-    });
-    h += '</div></details>';
+  h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">🗓️ Bundles preenchidos por data</div>';
+  h += `<div style="margin-bottom:8px;">
+    <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="_exportarPDFBundlesIRAS()">📄 Exportar PDF (bundles por data)</button>
+  </div>`;
+  h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.76rem;background:white;">';
+  h += `<thead><tr style="background:#0d47a1;color:white;">
+    <th style="padding:6px 8px;text-align:left;">Data</th>
+    <th style="padding:6px 8px;text-align:left;">Turno</th>
+    <th style="padding:6px 8px;text-align:left;">Leito</th>
+    ${bundlesUsados.map(b => `<th style="padding:6px 8px;text-align:center;" title="${_esc(b.titulo)}">${b.icone}</th>`).join('')}
+  </tr></thead><tbody>`;
+  linhasPorData.forEach((l, i) => {
+    h += `<tr style="${i%2===0?'background:#f5f7fa;':''}border-bottom:1px solid #eee;">
+      <td style="padding:5px 8px;">${_esc(l.data)}</td>
+      <td style="padding:5px 8px;">${_esc(l.turno||'–')}</td>
+      <td style="padding:5px 8px;">${_esc(l.leito||'–')}</td>
+      ${bundlesUsados.map(b => `<td style="padding:5px 8px;text-align:center;">${_statusIcone(l.statusPorBundle[b.id])}</td>`).join('')}
+    </tr>`;
   });
-
-  h += '</div>';
-  h += '<div class="ind-hint" style="margin-top:12px;">💡 <strong>Tudo ou nada (IHI):</strong> o bundle só é considerado aderente quando 100% dos itens aplicáveis (não-N/A) estão conformes. Meta institucional recomendada: ≥ 95%.</div>';
+  h += '</tbody></table></div>';
+  h += '<div class="ind-hint" style="margin-top:12px;">💡 <strong>Tudo ou nada (IHI):</strong> o bundle só é considerado aderente (✓) quando 100% dos itens aplicáveis (não-N/A) estão conformes. ✗ = falhou algum item · … = checklist incompleto · – = bundle não aplicável (sem o dispositivo). Meta institucional recomendada: ≥ 95%.</div>';
   return h;
 }
 
+// ── Exportação em PDF dos bundles preenchidos por data (4 datas por página) ──
+function _exportarPDFBundlesIRAS(){
+  try {
+    const periodo = _indPeriodo();
+    if(!periodo){ toast('Informe o período personalizado', true); return; }
+
+    const checklists = (_indCache.irasChecklists || [])
+      .filter(v => v && v.data && _dentroPeriodo(v.data, periodo))
+      .sort((a,b) => (a.data === b.data ? (a.turno||'').localeCompare(b.turno||'') : (a.data < b.data ? -1 : 1)));
+
+    if(!checklists.length){ toast('Nenhum checklist IRAS no período selecionado', true); return; }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+    const W = 210, H = 297, M = 14, L = W - 2*M;
+    const _trans = (s) => String(s ?? '–');
+
+    // ── Cabeçalho institucional (1x) ──
+    doc.setFillColor(26,107,58); doc.rect(0,0,W,24,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text('Bundles IRAS / CCIH — Preenchimento por Data', M, 11);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    doc.text(`Hospital dos Pescadores · UTI Adulto · ${periodo.rotulo}`, M, 18);
+    doc.setTextColor(0,0,0);
+
+    // 4 "datas" (checklists) por página → bloco de altura fixa
+    const TOPO = 30;
+    const ALTURA_BLOCO = (H - TOPO - 12) / 4; // 4 blocos por página
+    let y = TOPO;
+    let idxNaPagina = 0;
+
+    const _statusTxt = (s) => s === 'aderente' ? 'Aderente'
+                             : s === 'nao_aderente' ? 'Nao aderente'
+                             : s === 'incompleto' ? 'Incompleto'
+                             : 'N/A';
+    const _statusCor = (s) => s === 'aderente' ? [26,107,58]
+                             : s === 'nao_aderente' ? [220,53,69]
+                             : s === 'incompleto' ? [133,100,4]
+                             : [150,150,150];
+
+    checklists.forEach((ck, i) => {
+      if(idxNaPagina === 4){
+        doc.addPage();
+        y = M; idxNaPagina = 0;
+      }
+
+      const ctx = _irasReconstruirContextoCk(ck);
+      const linhasBundle = [];
+      IRAS_BUNDLES.forEach(b => {
+        let av;
+        if(ck.respostas) av = _irasAvaliarBundle(b, ck.respostas, ctx);
+        else if(ck.scores && ck.scores[b.id]) av = { status: ck.scores[b.id].status || 'incompleto' };
+        else return;
+        linhasBundle.push({ titulo: b.titulo.replace(/Bundle de Prevenção de /,''), icone: b.icone, status: av.status });
+      });
+
+      // Caixa do bloco
+      doc.setDrawColor(220,220,220);
+      doc.rect(M, y, L, ALTURA_BLOCO - 3);
+
+      // Cabeçalho do bloco: data / turno / leito / paciente
+      doc.setFillColor(13,71,161); doc.rect(M, y, L, 7, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255);
+      doc.text(_trans(`${ck.data}  ·  ${ck.turno||'–'}  ·  Leito ${ck.leito||'–'}  ·  ${ck.pac||''}`), M+2, y+5);
+      doc.setTextColor(0,0,0);
+
+      // Linhas resumidas: um bundle por linha, dentro do bloco
+      const yInicioLinhas = y + 9;
+      const hLinha = (ALTURA_BLOCO - 3 - 9) / Math.max(linhasBundle.length, 1);
+      linhasBundle.forEach((lb, li) => {
+        const ly = yInicioLinhas + li * hLinha + hLinha/2 + 1;
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(40,40,40);
+        doc.text(_trans(`${lb.icone} ${lb.titulo}`), M+3, ly);
+        const cor = _statusCor(lb.status);
+        doc.setFont('helvetica','bold'); doc.setTextColor(...cor);
+        doc.text(_trans(_statusTxt(lb.status)), M+L-30, ly);
+        doc.setTextColor(0,0,0);
+      });
+
+      y += ALTURA_BLOCO;
+      idxNaPagina++;
+    });
+
+    // Rodapé
+    const totalPag = doc.internal.getNumberOfPages();
+    for(let p=1;p<=totalPag;p++){
+      doc.setPage(p);
+      doc.setFontSize(7); doc.setTextColor(150,150,150);
+      doc.text(`Pag ${p}/${totalPag} · Gerado em ${new Date().toLocaleDateString('pt-BR')} · Sistema UTI HOSPESC`, M, 291);
+    }
+
+    doc.save('Bundles_IRAS_'+periodo.rotulo.replace(/\s+/g,'_').replace(/[\/]/g,'-')+'.pdf');
+    toast('✓ PDF de bundles gerado');
+  } catch(e){
+    console.warn('[PDF Bundles IRAS]', e);
+    toast('Erro ao gerar PDF: '+e.message, true);
+  }
+}
 // ── 16. DIAGNÓSTICOS / CID-10 ────────────────────────────────────────────────
 function _indDiagnosticos(periodo){
   const { evolucoes, admissoes } = _indCache;
@@ -7141,7 +7154,7 @@ function _sanitizarDadosRelatorio(obj){
 }
 
 function _coletarDadosRelatorio(periodo, secoes){
-  const { admissoes, altas, dispLog, evolucoes, nas } = _indCache;
+  const { admissoes, altas, dispLog, evolucoes, nas, irasChecklists } = _indCache;
   const dados = { periodo: periodo.rotulo, secoes: {} };
   const pct = (n, t) => t > 0 ? +(n*100/t).toFixed(1) : null;
   const med = arr => arr.length ? +(arr.reduce((s,x)=>s+x,0)/arr.length).toFixed(1) : null;
@@ -7450,12 +7463,7 @@ function _coletarDadosRelatorio(periodo, secoes){
 
   // ── IRAS / BUNDLES ────────────────────────────────────────────────────────
   if(secoes.includes('iras')){
-    const checklists = [];
-    for(let i=0;i<localStorage.length;i++){
-      const k = localStorage.key(i);
-      if(!k||!k.startsWith('uti_iras_')) continue;
-      try{ const v=JSON.parse(localStorage.getItem(k)); if(v&&_dentroPeriodo(v.data||k.split('_').pop(),periodo)) checklists.push(v); }catch(e){}
-    }
+    const checklists = (irasChecklists || []).filter(v => v && _dentroPeriodo(v.data, periodo));
     // Agrega por bundle usando metodologia all-or-nothing (IHI)
     const bundleStats = {};
     IRAS_BUNDLES.forEach(b=>{
