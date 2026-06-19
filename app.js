@@ -2885,7 +2885,7 @@ function _indIRAS(periodo){
 
 // ── Exportação em PDF dos bundles preenchidos por data (4 datas por página) ──
 // IMPORTANTE: jsPDF com a fonte padrão (helvetica) só suporta o conjunto
-// Latin-1/CP1252 — emojis (🩸💉🫘🫁) e símbolos como ✓/✗ saem corrompidos
+// Latin-1/CP1252 — emojis e símbolos como ✓/✗ saem corrompidos
 // ("Ø>Þx" etc.). Por isso aqui usamos SOMENTE texto ASCII/Latin-1: siglas para
 // os bundles (CDL, AVP, SVD, PAV) e abreviações de status (OK/FALHA/INC/–).
 // Também agrupamos por DATA (não por checklist/leito) — uma data pode ter
@@ -8190,7 +8190,7 @@ const IRAS_BUNDLES = [
   {
     id: 'svd',
     titulo: 'Bundle de Prevenção de IUAC – Sonda Vesical (SVD)',
-    icone: '🫘',
+    icone: '🚽',
     condicao: (d) => !!(d.svd_n || d.svd_d),
     itens: [
       { id:'svd_data',           texto:'Possui identificação da data da instalação?',                                   criterio:'sim_disp' },
@@ -8204,7 +8204,7 @@ const IRAS_BUNDLES = [
   {
     id: 'pav',
     titulo: 'Bundle de Prevenção de PAV – Ventilação Mecânica',
-    icone: '🫁',
+    icone: '💨',
     condicao: (d) => !!(d.vent && (d.vent.includes('VMI') || d.vent.includes('TOT') || d.vent.includes('TQT'))),
     itens: [
       { id:'pav_higiene_oral',   texto:'Realizada HIGIENE ORAL?',                                                       criterio:'sim_disp' },
