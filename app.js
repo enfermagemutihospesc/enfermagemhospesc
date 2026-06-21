@@ -5026,6 +5026,9 @@ async function abrirForm(n) {
     // (só campos legados), converte automaticamente preservando datas/dias.
     _dispLista = _camposLegadoParaDisp(fonte);
     _dispRenderLista();
+    // Religa checklists de inserção (uti_ckins_*) já salvos a este leito/paciente,
+    // mesmo que a evolução ainda não tenha sido salva após o preenchimento.
+    _ckInsReconciliarCards(n, gf('f-pac')).catch(e=>console.warn('reconciliar ck:', e));
     // Nº do tubo na seção de Ventilação (campo independente dos cards)
     setF('f-tot-n', fonte.tot_n||''); setF('f-tqt-n', fonte.tqt_n||'');
     if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
@@ -10865,11 +10868,16 @@ async function _ckInsSalvar(){
   const ts = _ckInsAtual.criadoEm ? new Date(_ckInsAtual.criadoEm).getTime() : Date.now();
   const chave = _ckInsAtual.chave || `uti_ckins_${ckTipo}_${leito}_${data}_${ts}`;
 
+  // Data de inserção do dispositivo vinculado — usada para religar o selo ao card
+  // ao reabrir o formulário, mesmo sem a evolução ter sido salva.
+  const dispVinc = dispId ? _dispLista.find(x=>x.id===dispId) : null;
+  const dispData = dispVinc ? (dispVinc.dataInsercao||'') : '';
+
   const payload = {
     tipo: ckTipo, tipoDisp: def.tipoDisp,
     leito, data, pac: _ckInsAtual.pac, dn: _ckInsAtual.dn,
     setor: _ckInsAtual.setor, adm: _ckInsAtual.adm,
-    turno, dispId: dispId||null,
+    turno, dispId: dispId||null, dispData,
     cabecalho, respostas,
     observacoes: _ckInsResp.observacoes||'',
     profExecutor: _ckInsResp.profExecutor||'', profAplicador: _ckInsResp.profAplicador||'',
@@ -10892,6 +10900,49 @@ async function _ckInsSalvar(){
   } catch(e){
     toast('Erro ao salvar checklist: '+e.message, true);
   }
+}
+
+// ── Religa cards de CVC/SVD aos checklists de inserção já salvos ─────────────
+// Chamada ao abrir o formulário. Garante que o selo "✓ checklist" persista mesmo
+// que a evolução não tenha sido salva após o preenchimento do checklist, pois o
+// checklist é gravado imediatamente em uti_ckins_* (fonte de verdade do vínculo).
+async function _ckInsReconciliarCards(leito, pac){
+  // Só há o que religar se existir CVC/SVD no formulário
+  const alvos = _dispLista.filter(d=>{ const def=_dispDef(d.tipo); return def.checklist; });
+  if(!alvos.length) return;
+
+  let todos;
+  try { todos = await _ckInsCarregarTodos(); } catch(e){ return; }
+  const doLeito = todos.filter(r=> String(r.leito)===String(leito) && (!pac || !r.pac || r.pac===pac));
+  if(!doLeito.length) return;
+
+  let mudou = false;
+  alvos.forEach(d=>{
+    const def = _dispDef(d.tipo);
+    const tipoCk = def.checklist;                 // 'cvc' | 'svd'
+    const candidatos = doLeito.filter(r=> r.tipo===tipoCk);
+    if(!candidatos.length) return;
+
+    // 1ª escolha: checklist explicitamente vinculado a este card por dispId
+    let escolhido = candidatos.find(r=> r.dispId && r.dispId===d.id);
+    // 2ª escolha: mesma data de inserção do dispositivo
+    if(!escolhido && d.dataInsercao){
+      escolhido = candidatos.find(r=> (r.dispData===d.dataInsercao) || (r.data===d.dataInsercao));
+    }
+    // 3ª escolha: o checklist mais recente daquele tipo no leito (sem outro card já usando)
+    if(!escolhido){
+      const usados = new Set(alvos.map(x=>x.checklistId).filter(Boolean));
+      const livres = candidatos
+        .filter(r=> !usados.has(r.__chave))
+        .sort((a,b)=> (b.salvoEm||'').localeCompare(a.salvoEm||''));
+      escolhido = livres[0];
+    }
+    if(escolhido && d.checklistId !== escolhido.__chave){
+      d.checklistId = escolhido.__chave;
+      mudou = true;
+    }
+  });
+  if(mudou) _dispRenderLista();
 }
 
 // ── Imprimir checklist a partir do id (selo "✓ checklist" no card) ───────────
