@@ -441,6 +441,15 @@ function _nasBadge(nas){
 }
 
 // ── NAS – NAVEGAÇÃO E RENDERIZAÇÃO ────────────────────────────────────────────
+// ── Notificação ao Núcleo de Segurança do Paciente (NSP) ─────────────────────
+// Abre, em nova aba, o formulário oficial de notificação de eventos do NSP.
+// Pede confirmação antes de sair do sistema, já que é um link externo (Google Forms).
+function abrirNotificacaoNSP(){
+  if(confirm('Você será direcionado para o formulário de notificação do NÚCLEO DE SEGURANÇA DO PACIENTE (NSP), fora deste sistema.\n\nDeseja continuar?')){
+    window.open('https://docs.google.com/forms/d/e/1FAIpQLSfpuEkVu7xLfbX8aUYa1rG-Oo77w3ae9DDBFvSRxvAomWAYgQ/viewform', '_blank');
+  }
+}
+
 function irNAS(){
   mostrarTela('t-nas');
   const b=document.getElementById('badge-nas');
