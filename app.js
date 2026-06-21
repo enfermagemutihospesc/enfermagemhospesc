@@ -10431,7 +10431,7 @@ const DISP_CATALOGO = [
   { tipo:'CVC',    nome:'Cateter Venoso Central (CVC/AVC)', icone:'🩸', cor:'#0d47a1', checklist:'cvc',
     legado:{ local:'avc_l', data:'avc_d', ret:'avc_ret' },
     campos:['localizacao','lado','lumens','calibre'] },
-  { tipo:'DIALISE',nome:'Cateter de Diálise (CDL)',         icone:'🩺', cor:'#00695c',
+  { tipo:'DIALISE',nome:'Cateter de Diálise (CDL)',         icone:'🩺', cor:'#00695c', checklist:'cvc',
     legado:{ local:'dial_l', data:'dial_d', ret:'dial_ret' },
     campos:['localizacao','lado','lumens'] },
   { tipo:'AVP',    nome:'Acesso Venoso Periférico (AVP)',   icone:'💉', cor:'#6a1b9a',
@@ -10440,9 +10440,9 @@ const DISP_CATALOGO = [
   { tipo:'SVD',    nome:'Sonda Vesical de Demora (SVD)',    icone:'🚽', cor:'#b26a00', checklist:'svd',
     legado:{ numero:'svd_n', data:'svd_d', ret:'svd_ret' },
     campos:['numero'] },
-  { tipo:'SNE',    nome:'Sonda Nasoenteral (SNE)',          icone:'🍽️', cor:'#5d4037',
+  { tipo:'SONDA',  nome:'Sonda Enteral / Gástrica (SNE, SOE, SNG, SOG)', icone:'🍽️', cor:'#5d4037',
     legado:{ numero:'sne_n', data:'sne_d', ret:'sne_ret' },
-    campos:['numero'] },
+    campos:['sondaTipo','numero'] },
   { tipo:'TOT',    nome:'Tubo Orotraqueal (TOT)',           icone:'🫁', cor:'#c62828',
     legado:{ numero:'tot_n', data:'tot_d', ret:'tot_ret' },
     campos:['numero'] },
@@ -10458,8 +10458,26 @@ const DISP_CATALOGO = [
 ];
 function _dispDef(tipo){ return DISP_CATALOGO.find(c=>c.tipo===tipo) || DISP_CATALOGO[DISP_CATALOGO.length-1]; }
 
-// Opções dos selects dinâmicos
-const DISP_LOCALIZACOES = ['JUGULAR','SUBCLÁVIA','FEMORAL','BASÍLICA','CEFÁLICA','BRAQUIAL','RADIAL','ANT. CUBITAL','DORSO DA MÃO','TÓRAX','ABDOME','OUTRO'];
+// Sub-tipos de sonda enteral/gástrica
+const SONDA_TIPOS = [
+  { v:'SNE', l:'SNE – Sonda Nasoenteral' },
+  { v:'SOE', l:'SOE – Sonda Oroenteral' },
+  { v:'SNG', l:'SNG – Sonda Nasogástrica' },
+  { v:'SOG', l:'SOG – Sonda Orogástrica' },
+];
+
+// Opções de localização — específicas por tipo de dispositivo.
+// CVC e Diálise (acesso venoso central): só os 3 sítios centrais.
+const DISP_LOCALIZACOES_CENTRAL = ['JUGULAR INTERNA','SUBCLÁVIA','FEMURAL'];
+// AVP (acesso periférico): sítios periféricos + "Outro" com texto livre.
+const DISP_LOCALIZACOES_AVP = ['JUGULAR','CEFÁLICA','BASÍLICA','MEMBRO SUPERIOR','MEMBRO INFERIOR','OUTRO'];
+// Dreno / Outro dispositivo: lista genérica (mantém como estava).
+const DISP_LOCALIZACOES_GERAL = ['TÓRAX','ABDOME','OUTRO'];
+function _dispLocalizacoesPara(tipo){
+  if(tipo==='CVC' || tipo==='DIALISE') return DISP_LOCALIZACOES_CENTRAL;
+  if(tipo==='AVP') return DISP_LOCALIZACOES_AVP;
+  return DISP_LOCALIZACOES_GERAL;
+}
 const DISP_LADOS = ['D','E','—'];
 const DISP_LUMENS = ['1 (mono)','2 (duplo)','3 (triplo)'];
 
@@ -10481,7 +10499,8 @@ function _camposLegadoParaDisp(fonte){
   if(fonte.avc_l || fonte.avc_d)   add('CVC',    { localizacao:fonte.avc_l||'', dataInsercao:fonte.avc_d||'' });
   if(fonte.dial_l || fonte.dial_d) add('DIALISE',{ localizacao:fonte.dial_l||'', dataInsercao:fonte.dial_d||'' });
   if(fonte.svd_n || fonte.svd_d)   add('SVD',    { numero:fonte.svd_n||'', dataInsercao:fonte.svd_d||'' });
-  if(fonte.sne_n || fonte.sne_d)   add('SNE',    { numero:fonte.sne_n||'', dataInsercao:fonte.sne_d||'' });
+  // SNE legado vira SONDA com sub-tipo SNE (era o único tipo de sonda enteral/gástrica antes desta atualização)
+  if(fonte.sne_n || fonte.sne_d)   add('SONDA',  { sondaTipo:'SNE', numero:fonte.sne_n||'', dataInsercao:fonte.sne_d||'' });
   // TOT/TQT: exige DATA de inserção. Em dados legados, `tot_n`/`tqt_n` podiam vir
   // apenas do nº do tubo digitado na seção de Ventilação (sem dispositivo real),
   // o que geraria um card fantasma. A data é o campo que define o dispositivo.
@@ -10500,6 +10519,13 @@ function _camposLegadoParaDisp(fonte){
 }
 
 function _dispNovoId(){ return 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+// Rótulo de exibição do dispositivo: usa a sigla específica da sonda
+// (SNE/SOE/SNG/SOG) quando aplicável; senão, o tipo do catálogo.
+function _dispRotulo(d){
+  const def = _dispDef(d.tipo);
+  return (d.tipo==='SONDA' && d.sondaTipo) ? d.sondaTipo : def.tipo;
+}
 
 // ── CONVERSÃO ARRAY → CAMPOS LEGADO (ao salvar) ──────────────────────────────
 // Devolve um objeto com os campos antigos preenchidos, para mesclar em coletarDados().
@@ -10558,6 +10584,8 @@ function _dispRenderLista(){
     if(d.numero) detalhes.push('nº '+d.numero);
     if(d.calibre) detalhes.push(d.calibre);
     if(d.lumens) detalhes.push(d.lumens.replace(/\s*\(.*\)/,'')+' lúmen'+(parseInt(d.lumens)>1?'s':''));
+    // Sonda enteral/gástrica: mostra a sigla específica (SNE/SOE/SNG/SOG) no lugar do rótulo genérico
+    const rotuloTipo = _dispRotulo(d);
     const dtStr = d.dataInsercao ? fmtD(d.dataInsercao) : '—';
     // selo de checklist (apenas CVC/SVD)
     let selo = '';
@@ -10575,7 +10603,7 @@ function _dispRenderLista(){
       <div class="disp-card" data-id="${d.id}" style="border:1.5px solid ${ativo?def.cor+'55':'#ddd'};border-left:4px solid ${ativo?def.cor:'#bbb'};border-radius:9px;padding:8px 11px;margin-bottom:7px;background:${ativo?'#fff':'#fafafa'};opacity:${ativo?1:.7};">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span style="font-size:1rem;">${def.icone}</span>
-          <span style="font-weight:800;color:${def.cor};font-size:.82rem;">${def.tipo}</span>
+          <span style="font-weight:800;color:${def.cor};font-size:.82rem;">${rotuloTipo}</span>
           <span style="font-size:.76rem;color:#444;">${_esc(detalhes.join(' · ')||'—')}</span>
           <span style="font-size:.7rem;color:var(--muted);">inserido ${dtStr}</span>
           ${retInfo}
@@ -10624,10 +10652,23 @@ function _dispRenderCampos(valores){
     h += campo('disp-c-subtipo','Tipo / detalhe',
       `<input type="text" id="disp-c-subtipo" placeholder="Ex: tórax, abdominal, Blake..." value="${_esc(v.subtipo||'')}" style="width:100%;">`);
   }
+  if(cs.includes('sondaTipo')){
+    const opts = SONDA_TIPOS.map(o=>`<option value="${o.v}" ${(v.sondaTipo||'')===o.v?'selected':''}>${o.l}</option>`).join('');
+    h += campo('disp-c-sondatipo','Tipo de sonda *',
+      `<select id="disp-c-sondatipo" style="width:100%;"><option value="">— selecione —</option>${opts}</select>`);
+  }
   if(cs.includes('localizacao')){
-    const opts = DISP_LOCALIZACOES.map(o=>`<option value="${o}" ${(v.localizacao||'').toUpperCase()===o?'selected':''}>${o}</option>`).join('');
+    const lista = _dispLocalizacoesPara(tipo);
+    const valorAtual = (v.localizacao||'').toUpperCase();
+    const ehOutroValor = valorAtual && !lista.includes(valorAtual);
+    const opts = lista.map(o=>`<option value="${o}" ${(valorAtual===o || (o==='OUTRO' && ehOutroValor))?'selected':''}>${o}</option>`).join('');
     h += campo('disp-c-loc','Localização / sítio',
-      `<select id="disp-c-loc" style="width:100%;"><option value="">—</option>${opts}</select>`);
+      `<select id="disp-c-loc" style="width:100%;" onchange="_dispToggleLocOutro()"><option value="">—</option>${opts}</select>`);
+    if(lista.includes('OUTRO')){
+      h += `<div id="disp-c-loc-outro-wrap" style="display:${ehOutroValor?'block':'none'};margin-top:6px;">
+        <input type="text" id="disp-c-loc-outro" placeholder="Especifique a localização" value="${ehOutroValor?_esc(v.localizacao):''}" style="width:100%;">
+      </div>`;
+    }
   }
   if(cs.includes('lado')){
     const opts = DISP_LADOS.map(o=>`<option value="${o}" ${(v.lado||'')===o?'selected':''}>${o==='D'?'Direito':o==='E'?'Esquerdo':'N/A'}</option>`).join('');
@@ -10650,12 +10691,22 @@ function _dispRenderCampos(valores){
   // Data de inserção sempre presente
   h += campo('disp-c-data','Data de inserção *',
     `<input type="date" id="disp-c-data" value="${v.dataInsercao||hoje()}" style="width:170px;max-width:100%;">`);
-  // Aviso de checklist para CVC/SVD
+  // Aviso de checklist para CVC/Diálise/SVD
   if(def.checklist){
+    const nomeCk = def.checklist==='cvc' ? 'Acesso Venoso Central' : 'Sonda Vesical de Demora';
+    const obsDial = (tipo==='DIALISE') ? ' (o cateter de diálise usa o mesmo checklist de inserção do CVC, pois a técnica é a mesma)' : '';
     h += `<div style="font-size:.72rem;color:#856404;background:#fff8e1;border:1px solid #ffe082;border-radius:7px;padding:7px 10px;margin-top:4px;">
-      📋 Após salvar, será sugerido o preenchimento do <strong>Checklist de Inserção (CCIH)</strong> deste dispositivo.</div>`;
+      📋 Após salvar, será sugerido o preenchimento do <strong>Checklist de Inserção de ${nomeCk} (CCIH)</strong>${obsDial}.</div>`;
   }
   cont.innerHTML = h;
+}
+
+// Mostra/esconde o campo de texto livre quando a localização selecionada é "OUTRO"
+function _dispToggleLocOutro(){
+  const sel = document.getElementById('disp-c-loc');
+  const wrap = document.getElementById('disp-c-loc-outro-wrap');
+  if(!sel || !wrap) return;
+  wrap.style.display = (sel.value === 'OUTRO') ? 'block' : 'none';
 }
 
 // Lê os campos do modal e salva (cria ou atualiza) o dispositivo
@@ -10664,18 +10715,24 @@ function _dispSalvarModal(){
   if(!tipo){ toast('Selecione o tipo de dispositivo', true); return; }
   const def = _dispDef(tipo);
   const g = id => { const e=document.getElementById(id); return e? (e.value||'').trim() : ''; };
+  // Se a localização escolhida foi "OUTRO", usa o texto digitado no campo livre.
+  const locSel = g('disp-c-loc');
+  const localizacao = (locSel === 'OUTRO') ? g('disp-c-loc-outro') : locSel;
   const obj = {
     tipo,
-    localizacao: g('disp-c-loc') ? g('disp-c-loc').toUpperCase() : '',
+    localizacao: localizacao ? localizacao.toUpperCase() : '',
     lado: g('disp-c-lado'),
     lumens: g('disp-c-lumens'),
     calibre: g('disp-c-calibre') ? g('disp-c-calibre').toUpperCase() : '',
     numero: g('disp-c-numero'),
     subtipo: g('disp-c-subtipo'),
+    sondaTipo: g('disp-c-sondatipo'),
     descricao: g('disp-c-descricao'),
     dataInsercao: g('disp-c-data'),
   };
   if(def.campos.includes('descricao') && !obj.descricao){ toast('Informe a descrição do dispositivo', true); return; }
+  if(def.campos.includes('sondaTipo') && !obj.sondaTipo){ toast('Selecione o tipo de sonda (SNE, SOE, SNG ou SOG)', true); return; }
+  if(locSel === 'OUTRO' && !obj.localizacao){ toast('Especifique a localização', true); return; }
   if(!obj.dataInsercao){ toast('Informe a data de inserção', true); return; }
 
   let salvo;
@@ -10691,17 +10748,17 @@ function _dispSalvarModal(){
 
   // Gatilho SOFT do checklist de inserção (apenas CVC/SVD, e apenas se ainda não houver)
   if(salvo && def.checklist && !salvo.checklistId){
-    toast('✓ '+def.tipo+' registrado');
+    toast('✓ '+_dispRotulo(salvo)+' registrado');
     setTimeout(()=>_ckInsSugerir(salvo), 250);
   } else {
-    toast('✓ '+def.tipo+(_dispEditId?' atualizado':' registrado'));
+    toast('✓ '+(salvo?_dispRotulo(salvo):def.tipo)+(_dispEditId?' atualizado':' registrado'));
   }
 }
 
 function _dispRemover(id){
   const d = _dispLista.find(x=>x.id===id); if(!d) return;
   const def = _dispDef(d.tipo);
-  if(!confirm(`Remover o ${def.tipo} da lista?\n\nObs: isso apaga o registro do dispositivo nesta evolução (não é o mesmo que "retirar" — use Retirar para registrar a data de retirada).`)) return;
+  if(!confirm(`Remover o ${_dispRotulo(d)} da lista?\n\nObs: isso apaga o registro do dispositivo nesta evolução (não é o mesmo que "retirar" — use Retirar para registrar a data de retirada).`)) return;
   _dispLista = _dispLista.filter(x=>x.id!==id);
   _dispRenderLista();
 }
@@ -10709,14 +10766,14 @@ function _dispRemover(id){
 async function _dispRetirar(id){
   const d = _dispLista.find(x=>x.id===id); if(!d) return;
   const def = _dispDef(d.tipo);
-  if(!confirm(`Confirma a retirada do ${def.tipo}${d.localizacao?(' ('+d.localizacao+')'):''}?`)) return;
+  if(!confirm(`Confirma a retirada do ${_dispRotulo(d)}${d.localizacao?(' ('+d.localizacao+')'):''}?`)) return;
   d.dataRetirada = hoje();
   // Log de retirada (mesma chave usada pelo histórico existente)
   try {
     const key = 'uti_disp_log';
     const log = (await dbGet(key)) || [];
     log.push({
-      leito: leitoAtual, paciente: gf('f-pac')||'', tipo: def.tipo,
+      leito: leitoAtual, paciente: gf('f-pac')||'', tipo: _dispRotulo(d),
       local_ou_numero: d.localizacao || d.numero || d.descricao || '',
       data_instalacao: d.dataInsercao||'', data_retirada: d.dataRetirada,
       turno, autor: usuarioEmail, registradoEm:new Date().toISOString()
@@ -10724,7 +10781,7 @@ async function _dispRetirar(id){
     await dbSet(key, log);
   } catch(e){ console.warn('Log retirada disp:', e); }
   _dispRenderLista();
-  toast('✓ '+def.tipo+' retirado em '+d.dataRetirada.split('-').reverse().join('/'));
+  toast('✓ '+_dispRotulo(d)+' retirado em '+d.dataRetirada.split('-').reverse().join('/'));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -10824,7 +10881,8 @@ function _ckInsMetaPaciente(){
 function _ckInsSugerir(disp){
   const def = _dispDef(disp.tipo);
   if(!def.checklist) return;
-  const nome = def.tipo==='CVC' ? 'acesso venoso central' : 'sonda vesical de demora';
+  const nomes = { CVC:'acesso venoso central', DIALISE:'cateter de diálise (checklist do CVC)', SVD:'sonda vesical de demora' };
+  const nome = nomes[def.tipo] || def.nome.toLowerCase();
   if(confirm(`Deseja preencher agora o Checklist de Inserção (CCIH) do ${nome}?\n\n(Você pode preencher depois pelo selo "checklist pendente" no card do dispositivo.)`)){
     _ckInsAbrir(def.checklist, disp.id);
   }
@@ -10852,12 +10910,15 @@ async function _ckInsAbrir(ckTipo, dispId, registroExistente){
                   criadoEm: registroExistente ? registroExistente.criadoEm : null };
   _ckInsResp = registroExistente ? { ...(registroExistente.respostas||{}), ...(_ckInsCabFromReg(registroExistente)) } : {};
 
-  // Se há um dispositivo vinculado, pré-popula localização (CVC) a partir do card
+  // Se há um dispositivo vinculado, pré-popula localização (CVC/Diálise) a partir do card
   if(dispId && !registroExistente){
     const d = _dispLista.find(x=>x.id===dispId);
     if(d){
       if(ckTipo==='cvc' && d.localizacao && !_ckInsResp['cab_localizacao']){
-        const match = def.cabecalho.find(c=>c.id==='localizacao').opcoes.find(o=>d.localizacao.includes(o.split(' ')[0]));
+        // Mapeamento explícito: opções do dispositivo (JUGULAR INTERNA/SUBCLÁVIA/FEMURAL)
+        // → opções do cabeçalho do checklist CCIH (JUGULAR/SUBCLÁVIA/FEMORAL/PERIFÉRICA)
+        const MAPA_LOC = { 'JUGULAR INTERNA':'JUGULAR', 'SUBCLÁVIA':'SUBCLÁVIA', 'FEMURAL':'FEMORAL' };
+        const match = MAPA_LOC[d.localizacao] || null;
         if(match) _ckInsResp['cab_localizacao'] = match;
       }
     }
