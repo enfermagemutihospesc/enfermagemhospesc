@@ -2728,6 +2728,7 @@ function _indIRAS(periodo){
     h += _cardInd('Checklists IRAS', '0', 'no período', 'vermelho', 'iras_total');
     h += '</div>';
     h += '<div class="ind-hint">⚠️ Nenhum checklist IRAS preenchido no período. Use o botão "📋 Checklist IRAS" nas evoluções.</div>';
+    h += _ckInsPainelHTML(periodo);
     return h;
   }
 
@@ -2880,6 +2881,7 @@ function _indIRAS(periodo){
 
   h += '</div>';
   h += '<div class="ind-hint" style="margin-top:12px;">💡 <strong>Conformidade por item:</strong> percentual de respostas conformes entre os itens respondidos (exclui N/A e itens sem resposta).</div>';
+  h += _ckInsPainelHTML(periodo);
   return h;
 }
 
@@ -4932,18 +4934,12 @@ function limparForm(){
   document.getElementById('m-sc').textContent='–'; document.getElementById('m-r').textContent='';
   document.getElementById('vmi-box').className='vmi-box';
   document.getElementById('spo2-avulso').style.display='flex';
-  document.getElementById('avp-lista').innerHTML='';
+  _dispLista = []; _dispRenderLista();
   document.getElementById('atb-lista').innerHTML='';
   document.getElementById('dva-outros').innerHTML='';
   document.getElementById('sedo-outros').innerHTML='';
   const cultLista = document.getElementById('culturas-lista');
   if(cultLista) cultLista.innerHTML='';
-  // Esconde wraps de retirada e limpa datas (evita herança indevida)
-  ['retirada-avc-wrap','retirada-cdl-wrap','retirada-svd-wrap','retirada-sne-wrap','retirada-tot-wrap','retirada-tqt-wrap'].forEach(id=>{
-    const el = document.getElementById(id);
-    if(el) el.style.display = 'none';
-  });
-  ['f-avc-ret','f-dial-ret','f-svd-ret','f-sne-ret','f-tot-ret','f-tqt-ret'].forEach(id => setF(id,''));
 }
 
 async function getAnterior(n) {
@@ -5025,21 +5021,13 @@ async function abrirForm(n) {
 
   const fonte = evHoje || anterior;
   if (fonte) {
-    setF('f-avc-l',fonte.avc_l); setF('f-avc-d',fonte.avc_d);
-    // Retirada: só exibe o wrap se o dispositivo foi de fato retirado (sem local/número e sem data de instalação ativa)
-    if(fonte.avc_ret && !fonte.avc_l && !fonte.avc_d){ setF('f-avc-ret',fonte.avc_ret); document.getElementById('retirada-avc-wrap').style.display='flex'; }
-    setF('f-dial-l',fonte.dial_l); setF('f-dial-d',fonte.dial_d);
-    if(fonte.dial_ret && !fonte.dial_l && !fonte.dial_d){ setF('f-dial-ret',fonte.dial_ret); document.getElementById('retirada-cdl-wrap').style.display='flex'; }
-    setF('f-svd-n',fonte.svd_n); setF('f-svd-d',fonte.svd_d);
-    if(fonte.svd_ret && !fonte.svd_n && !fonte.svd_d){ setF('f-svd-ret',fonte.svd_ret); document.getElementById('retirada-svd-wrap').style.display='flex'; }
-    setF('f-sne-n',fonte.sne_n); setF('f-sne-d',fonte.sne_d);
-    if(fonte.sne_ret && !fonte.sne_n && !fonte.sne_d){ setF('f-sne-ret',fonte.sne_ret); document.getElementById('retirada-sne-wrap').style.display='flex'; }
-    setF('f-tot-n',fonte.tot_n||''); setF('f-tot-n2',fonte.tot_n||''); setF('f-tot-d',fonte.tot_d||'');
-    if(fonte.tot_ret && !fonte.tot_n && !fonte.tot_d){ setF('f-tot-ret',fonte.tot_ret); document.getElementById('retirada-tot-wrap').style.display='flex'; }
-    setF('f-tqt-n',fonte.tqt_n||''); setF('f-tqt-n2',fonte.tqt_n||''); setF('f-tqt-d',fonte.tqt_d||'');
-    if(fonte.tqt_ret && !fonte.tqt_n && !fonte.tqt_d){ setF('f-tqt-ret',fonte.tqt_ret); document.getElementById('retirada-tqt-wrap').style.display='flex'; }
-    setF('f-disp-o',fonte.disp_o);
-    if(fonte.avps&&fonte.avps.length) fonte.avps.forEach(a=>addAVP(a.local,a.data)); else addAVP();
+    // ── DISPOSITIVOS (array unificado) ──────────────────────────────────────
+    // Carrega `dispositivos[]` da evolução; se ainda for uma evolução antiga
+    // (só campos legados), converte automaticamente preservando datas/dias.
+    _dispLista = _camposLegadoParaDisp(fonte);
+    _dispRenderLista();
+    // Nº do tubo na seção de Ventilação (campo independente dos cards)
+    setF('f-tot-n', fonte.tot_n||''); setF('f-tqt-n', fonte.tqt_n||'');
     if(fonte.atbs&&fonte.atbs.length) fonte.atbs.forEach(a=>addATB(a.nome,a.inicio)); else addATB();
     if(fonte.braden){ document.querySelectorAll('.bs').forEach((s,i)=>{if(fonte.braden[i])s.value=fonte.braden[i];}); calcB(); }
     if(fonte.morse){ ['m1','m2','m3','m4','m5','m6'].forEach((nm,i)=>{const r=document.querySelector('input[name="'+nm+'"][value="'+fonte.morse[i]+'"]');if(r)r.checked=true;}); calcM(); }
@@ -5095,14 +5083,7 @@ async function abrirForm(n) {
     setF('f-obs', fonte.obs||'');
     // HV outras infusões
     if(fonte.hvOutras&&fonte.hvOutras.length) fonte.hvOutras.forEach(o=>addHVOutra(o.nome,o.vol));
-    // Atualiza dias dos dispositivos fixos
-    if(fonte.avc_d)  { _atualizarDiasDisp('f-avc-d',  'dias-avc');  }
-    if(fonte.dial_d) { _atualizarDiasDisp('f-dial-d', 'dias-dial'); }
-    if(fonte.svd_d)  { _atualizarDiasDisp('f-svd-d',  'dias-svd');  }
-    if(fonte.sne_d)  { _atualizarDiasDisp('f-sne-d',  'dias-sne');  }
-    if(fonte.tot_d)  { _atualizarDiasDisp('f-tot-d',  'dias-tot');  }
-    if(fonte.tqt_d)  { _atualizarDiasDisp('f-tqt-d',  'dias-tqt');  }
-  } else { addAVP(); addATB(); }
+  } else { _dispLista = []; _dispRenderLista(); addATB(); }
 
   document.getElementById('form-titulo').textContent = 'Evolução – Leito '+pad(n);
   document.getElementById('form-sub').textContent = 'Hospital dos Pescadores · UTI · '+pac.pac;
@@ -5274,13 +5255,15 @@ examesSolic:gf('f-exames-solic'),
     dva:getDVAData('dva-l'), dvaOutros:getOutrasInfusoes('dva-outros'),
     sedo:getDVAData('sedo-l'), sedoOutros:getOutrasInfusoes('sedo-outros'),
     prev:gChecked('f-prev'),
-    avps:getAVPs(), avc_l:gf('f-avc-l'), avc_d:gf('f-avc-d'), avc_ret:gf('f-avc-ret'),
-    dial_l:gf('f-dial-l'), dial_d:gf('f-dial-d'), dial_ret:gf('f-dial-ret'),
-    svd_n:gf('f-svd-n'), svd_d:gf('f-svd-d'), svd_ret:gf('f-svd-ret'),
-    sne_n:gf('f-sne-n'), sne_d:gf('f-sne-d'), sne_ret:gf('f-sne-ret'),
-    tot_n:gf('f-tot-n')||gf('f-tot-n2'), tot_d:gf('f-tot-d'), tot_ret:gf('f-tot-ret'),
-    tqt_n:gf('f-tqt-n')||gf('f-tqt-n2'), tqt_d:gf('f-tqt-d'), tqt_ret:gf('f-tqt-ret'),
-    disp_o:gf('f-disp-o'),
+    ...(() => {
+      const leg = _dispParaCamposLegado(_dispLista);
+      // Nº do TOT/TQT digitado na seção de Ventilação (campo independente do card):
+      // se preenchido e ainda não houver número vindo do dispositivo, propaga.
+      const totVent = gf('f-tot-n'), tqtVent = gf('f-tqt-n');
+      if(totVent && !leg.tot_n) leg.tot_n = totVent;
+      if(tqtVent && !leg.tqt_n) leg.tqt_n = tqtVent;
+      return leg;
+    })(),
     atbs:getATBs(),
     braden:getBraden(), bradScore:document.getElementById('b-sc').textContent, bradRisco:document.getElementById('b-r').textContent,
     morse:getMorse(), morseScore:document.getElementById('m-sc').textContent, morseRisco:document.getElementById('m-r').textContent,
@@ -10258,4 +10241,953 @@ async function clGerarRelatorioPeriodo() {
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 600);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MÓDULO: DISPOSITIVOS UNIFICADOS + CHECKLISTS DE INSERÇÃO (CVC/SVD) – CCIH
+// ────────────────────────────────────────────────────────────────────────────
+// Visão geral
+//   • Botão "+ Adicionar Dispositivo" abre um modal com seletor de tipo e campos
+//     dinâmicos conforme o tipo. Cada dispositivo registrado vira um card no
+//     formulário de evolução, com contador de dias e botões Trocar/Retirar.
+//   • O array unificado vive em `dispositivos: [{...}]` dentro da evolução, no
+//     mesmo espírito de `avps[]` e do `vias[]` da Fisioterapia. Ao salvar, um
+//     "tradutor" (_dispParaCamposLegado) continua populando os campos antigos
+//     (avc_l, dial_l, svd_n, sne_d, tot_n, tqt_n, avps[], disp_o), de modo que
+//     PDF, indicadores, bundles IRAS e exportação seguem funcionando sem
+//     alteração. Evoluções antigas (sem `dispositivos[]`) são convertidas on the
+//     fly por _camposLegadoParaDisp() ao abrir o formulário.
+//   • Ao salvar um CVC (acesso venoso central) ou um SVD (sonda vesical de
+//     demora), o sistema SUGERE (não bloqueia) o preenchimento do checklist de
+//     inserção correspondente, no leiaute dos formulários da CCIH. O checklist
+//     fica salvo em `uti_ckins_<tipo>_<leito>_<YYYY-MM-DD>_<ts>` e acessível para
+//     impressão direto do card do dispositivo (selo "✓ checklist").
+//   • Indicadores: os checklists de inserção alimentam uma sub-aba dentro de
+//     "IRAS / Bundles", com adesão por item (bundle de inserção, all-or-nothing)
+//     e busca retroativa por paciente e intervalo de datas.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── CATÁLOGO DE TIPOS DE DISPOSITIVO ─────────────────────────────────────────
+// `legado` mapeia o tipo novo para os campos antigos da evolução (compatibilidade).
+// `campos` define quais inputs o modal mostra para cada tipo.
+const DISP_CATALOGO = [
+  { tipo:'CVC',    nome:'Cateter Venoso Central (CVC/AVC)', icone:'🩸', cor:'#0d47a1', checklist:'cvc',
+    legado:{ local:'avc_l', data:'avc_d', ret:'avc_ret' },
+    campos:['localizacao','lado','lumens','calibre'] },
+  { tipo:'DIALISE',nome:'Cateter de Diálise (CDL)',         icone:'🩺', cor:'#00695c',
+    legado:{ local:'dial_l', data:'dial_d', ret:'dial_ret' },
+    campos:['localizacao','lado','lumens'] },
+  { tipo:'AVP',    nome:'Acesso Venoso Periférico (AVP)',   icone:'💉', cor:'#6a1b9a',
+    legado:{ avpArray:true },
+    campos:['localizacao','lado','calibre'] },
+  { tipo:'SVD',    nome:'Sonda Vesical de Demora (SVD)',    icone:'🚽', cor:'#b26a00', checklist:'svd',
+    legado:{ numero:'svd_n', data:'svd_d', ret:'svd_ret' },
+    campos:['numero'] },
+  { tipo:'SNE',    nome:'Sonda Nasoenteral (SNE)',          icone:'🍽️', cor:'#5d4037',
+    legado:{ numero:'sne_n', data:'sne_d', ret:'sne_ret' },
+    campos:['numero'] },
+  { tipo:'TOT',    nome:'Tubo Orotraqueal (TOT)',           icone:'🫁', cor:'#c62828',
+    legado:{ numero:'tot_n', data:'tot_d', ret:'tot_ret' },
+    campos:['numero'] },
+  { tipo:'TQT',    nome:'Traqueostomia (TQT)',              icone:'💨', cor:'#ad1457',
+    legado:{ numero:'tqt_n', data:'tqt_d', ret:'tqt_ret' },
+    campos:['numero'] },
+  { tipo:'DRENO',  nome:'Dreno',                            icone:'💧', cor:'#1565c0',
+    legado:{ outros:true },
+    campos:['localizacao','subtipo'] },
+  { tipo:'OUTRO',  nome:'Outro dispositivo',                icone:'➕', cor:'#455a64',
+    legado:{ outros:true },
+    campos:['descricao','localizacao'] },
+];
+function _dispDef(tipo){ return DISP_CATALOGO.find(c=>c.tipo===tipo) || DISP_CATALOGO[DISP_CATALOGO.length-1]; }
+
+// Opções dos selects dinâmicos
+const DISP_LOCALIZACOES = ['JUGULAR','SUBCLÁVIA','FEMORAL','BASÍLICA','CEFÁLICA','BRAQUIAL','RADIAL','ANT. CUBITAL','DORSO DA MÃO','TÓRAX','ABDOME','OUTRO'];
+const DISP_LADOS = ['D','E','—'];
+const DISP_LUMENS = ['1 (mono)','2 (duplo)','3 (triplo)'];
+
+// Estado em memória dos dispositivos do formulário atual
+let _dispLista = [];          // [{id,tipo,...}]
+let _dispEditId = null;       // id em edição no modal (null = novo)
+
+// ── CONVERSÃO LEGADO → ARRAY (ao abrir uma evolução antiga) ──────────────────
+// Constrói `dispositivos[]` a partir dos campos antigos quando a evolução salva
+// ainda não tem o array. Idempotente: se já houver array salvo, usa-o.
+function _camposLegadoParaDisp(fonte){
+  if(!fonte) return [];
+  if(Array.isArray(fonte.dispositivos) && fonte.dispositivos.length) {
+    // Já no formato novo — só garante ids.
+    return fonte.dispositivos.map(d=>({ id:d.id||_dispNovoId(), ...d }));
+  }
+  const out = [];
+  const add = (tipo, extra) => out.push({ id:_dispNovoId(), tipo, ...extra });
+  if(fonte.avc_l || fonte.avc_d)   add('CVC',    { localizacao:fonte.avc_l||'', dataInsercao:fonte.avc_d||'' });
+  if(fonte.dial_l || fonte.dial_d) add('DIALISE',{ localizacao:fonte.dial_l||'', dataInsercao:fonte.dial_d||'' });
+  if(fonte.svd_n || fonte.svd_d)   add('SVD',    { numero:fonte.svd_n||'', dataInsercao:fonte.svd_d||'' });
+  if(fonte.sne_n || fonte.sne_d)   add('SNE',    { numero:fonte.sne_n||'', dataInsercao:fonte.sne_d||'' });
+  if(fonte.tot_n || fonte.tot_d)   add('TOT',    { numero:fonte.tot_n||'', dataInsercao:fonte.tot_d||'' });
+  if(fonte.tqt_n || fonte.tqt_d)   add('TQT',    { numero:fonte.tqt_n||'', dataInsercao:fonte.tqt_d||'' });
+  if(Array.isArray(fonte.avps))    fonte.avps.filter(a=>a.local).forEach(a=> add('AVP', { localizacao:a.local||'', dataInsercao:a.data||'' }));
+  if(fonte.disp_o && fonte.disp_o.trim()) add('OUTRO', { descricao:fonte.disp_o.trim() });
+  // Vincula checklists de inserção que possam já existir (referência pelo campo salvo)
+  if(Array.isArray(fonte.dispositivosCk)){
+    fonte.dispositivosCk.forEach(ref=>{
+      const alvo = out.find(o=>o.tipo===ref.tipo && (o.dataInsercao||'')===(ref.dataInsercao||''));
+      if(alvo) alvo.checklistId = ref.checklistId;
+    });
+  }
+  return out;
+}
+
+function _dispNovoId(){ return 'd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+// ── CONVERSÃO ARRAY → CAMPOS LEGADO (ao salvar) ──────────────────────────────
+// Devolve um objeto com os campos antigos preenchidos, para mesclar em coletarDados().
+// Mantém PDF, indicadores e bundles funcionando sem mudança.
+function _dispParaCamposLegado(lista){
+  const r = {
+    avps:[], avc_l:'', avc_d:'', avc_ret:'', dial_l:'', dial_d:'', dial_ret:'',
+    svd_n:'', svd_d:'', svd_ret:'', sne_n:'', sne_d:'', sne_ret:'',
+    tot_n:'', tot_d:'', tot_ret:'', tqt_n:'', tqt_d:'', tqt_ret:'', disp_o:'',
+    dispositivos:[], dispositivosCk:[]
+  };
+  const outros = [];
+  (lista||[]).forEach(d=>{
+    // Persistir o objeto cru no array (fonte de verdade)
+    r.dispositivos.push({ ...d });
+    if(d.checklistId) r.dispositivosCk.push({ tipo:d.tipo, dataInsercao:d.dataInsercao||'', checklistId:d.checklistId });
+    const def = _dispDef(d.tipo);
+    const leg = def.legado || {};
+    const localComposto = [d.localizacao, (d.lado && d.lado!=='—')?d.lado:''].filter(Boolean).join(' ');
+    if(leg.avpArray){
+      r.avps.push({ local: localComposto || d.localizacao || '·', data: d.dataInsercao||'' });
+    } else if(leg.outros){
+      const desc = d.tipo==='OUTRO'
+        ? (d.descricao || 'Dispositivo') + (d.localizacao?(' ('+d.localizacao+')'):'')
+        : (def.nome.split(' (')[0]) + (d.subtipo?(' '+d.subtipo):'') + (d.localizacao?(' '+d.localizacao):'') + (d.dataInsercao?(' '+fmtD(d.dataInsercao)):'');
+      outros.push(desc);
+    } else {
+      if(leg.local){ r[leg.local] = localComposto || d.localizacao || '·'; }
+      if(leg.numero){ r[leg.numero] = d.numero || '·'; }
+      if(leg.data){ r[leg.data] = d.dataInsercao || ''; }
+      if(leg.ret && d.dataRetirada){ r[leg.ret] = d.dataRetirada; }
+    }
+  });
+  if(!r.avps.length) r.avps = [];
+  r.disp_o = outros.join(' | ');
+  return r;
+}
+
+// ── RENDER DA LISTA DE DISPOSITIVOS NO FORMULÁRIO ────────────────────────────
+function _dispRenderLista(){
+  const cont = document.getElementById('disp-cards');
+  if(!cont) return;
+  if(!_dispLista.length){
+    cont.innerHTML = '<div style="font-size:.78rem;color:var(--muted);font-style:italic;padding:6px 2px;">Nenhum dispositivo registrado. Use o botão acima para adicionar.</div>';
+    return;
+  }
+  cont.innerHTML = _dispLista.map(d=>{
+    const def = _dispDef(d.tipo);
+    const ativo = !d.dataRetirada;
+    const dias = d.dataInsercao ? _diasDeInstalacao(d.dataInsercao) : null;
+    const diasStr = dias!==null ? (dias===1?'1 dia':dias+' dias') : '';
+    const detalhes = [];
+    if(d.localizacao) detalhes.push(d.localizacao + (d.lado&&d.lado!=='—'?(' '+d.lado):''));
+    if(d.descricao && d.tipo==='OUTRO') detalhes.unshift(d.descricao);
+    if(d.subtipo) detalhes.push(d.subtipo);
+    if(d.numero) detalhes.push('nº '+d.numero);
+    if(d.calibre) detalhes.push(d.calibre);
+    if(d.lumens) detalhes.push(d.lumens.replace(/\s*\(.*\)/,'')+' lúmen'+(parseInt(d.lumens)>1?'s':''));
+    const dtStr = d.dataInsercao ? fmtD(d.dataInsercao) : '—';
+    // selo de checklist (apenas CVC/SVD)
+    let selo = '';
+    if(def.checklist){
+      if(d.checklistId){
+        selo = `<button type="button" class="btn-sec" title="Checklist de inserção preenchido — clique para visualizar/imprimir" style="font-size:.66rem;padding:2px 8px;background:#e8f5e9;border:1px solid #66bb6a;color:#1b5e20;font-weight:700;" onclick="_ckInsImprimirPorId('${d.checklistId}')">✓ checklist</button>`;
+      } else {
+        selo = `<button type="button" class="btn-sec" title="Checklist de inserção pendente — clique para preencher" style="font-size:.66rem;padding:2px 8px;background:#fff3cd;border:1px solid #ffd54f;color:#856404;font-weight:700;" onclick="_ckInsAbrirPorDispId('${d.id}')">⏳ checklist pendente</button>`;
+      }
+    }
+    const retInfo = d.dataRetirada
+      ? `<span style="font-size:.68rem;color:var(--vermelho);font-weight:700;">retirado ${fmtD(d.dataRetirada)}</span>`
+      : (diasStr ? `<span style="font-size:.68rem;background:#f0f4fa;color:var(--azul);font-weight:700;padding:2px 8px;border-radius:10px;">${diasStr}</span>` : '');
+    return `
+      <div class="disp-card" data-id="${d.id}" style="border:1.5px solid ${ativo?def.cor+'55':'#ddd'};border-left:4px solid ${ativo?def.cor:'#bbb'};border-radius:9px;padding:8px 11px;margin-bottom:7px;background:${ativo?'#fff':'#fafafa'};opacity:${ativo?1:.7};">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:1rem;">${def.icone}</span>
+          <span style="font-weight:800;color:${def.cor};font-size:.82rem;">${def.tipo}</span>
+          <span style="font-size:.76rem;color:#444;">${_esc(detalhes.join(' · ')||'—')}</span>
+          <span style="font-size:.7rem;color:var(--muted);">inserido ${dtStr}</span>
+          ${retInfo}
+          ${selo}
+          <span style="margin-left:auto;display:flex;gap:5px;">
+            <button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;" onclick="_dispAbrirModal('${d.id}')">✎ Editar</button>
+            ${ativo?`<button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;background:#fff3cd;color:#856404;border-color:#ffeeba;" onclick="_dispRetirar('${d.id}')">↑ Retirar</button>`:''}
+            <button type="button" class="btn-rem" onclick="_dispRemover('${d.id}')">×</button>
+          </span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── MODAL DE ADICIONAR / EDITAR DISPOSITIVO ──────────────────────────────────
+function _dispAbrirModal(editId){
+  _dispEditId = editId || null;
+  const existente = editId ? _dispLista.find(d=>d.id===editId) : null;
+  const modal = document.getElementById('modal-disp');
+  document.getElementById('disp-modal-titulo').textContent = existente ? '✎ Editar Dispositivo' : '➕ Adicionar Dispositivo';
+  // monta select de tipo
+  const sel = document.getElementById('disp-tipo');
+  sel.innerHTML = '<option value="">— selecione o tipo —</option>' +
+    DISP_CATALOGO.map(c=>`<option value="${c.tipo}">${c.icone} ${c.nome}</option>`).join('');
+  sel.value = existente ? existente.tipo : '';
+  _dispRenderCampos(existente || null);
+  modal.classList.add('show');
+}
+function _dispFecharModal(){ document.getElementById('modal-disp').classList.remove('show'); _dispEditId=null; }
+
+// Renderiza os campos dinâmicos conforme o tipo escolhido
+function _dispRenderCampos(valores){
+  const tipo = document.getElementById('disp-tipo').value;
+  const cont = document.getElementById('disp-campos');
+  if(!tipo){ cont.innerHTML = '<div style="font-size:.78rem;color:var(--muted);padding:8px 0;">Selecione o tipo de dispositivo para ver os campos.</div>'; return; }
+  const def = _dispDef(tipo);
+  const v = valores || {};
+  const campo = (id, label, html) => `<div style="margin-bottom:9px;"><label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">${label}</label>${html}</div>`;
+  let h = '';
+  const cs = def.campos;
+  if(cs.includes('descricao')){
+    h += campo('disp-c-descricao','Descrição do dispositivo *',
+      `<input type="text" id="disp-c-descricao" placeholder="Ex: Cateter de PIC, dreno de tórax..." value="${_esc(v.descricao||'')}" style="width:100%;">`);
+  }
+  if(cs.includes('subtipo')){
+    h += campo('disp-c-subtipo','Tipo / detalhe',
+      `<input type="text" id="disp-c-subtipo" placeholder="Ex: tórax, abdominal, Blake..." value="${_esc(v.subtipo||'')}" style="width:100%;">`);
+  }
+  if(cs.includes('localizacao')){
+    const opts = DISP_LOCALIZACOES.map(o=>`<option value="${o}" ${(v.localizacao||'').toUpperCase()===o?'selected':''}>${o}</option>`).join('');
+    h += campo('disp-c-loc','Localização / sítio',
+      `<select id="disp-c-loc" style="width:100%;"><option value="">—</option>${opts}</select>`);
+  }
+  if(cs.includes('lado')){
+    const opts = DISP_LADOS.map(o=>`<option value="${o}" ${(v.lado||'')===o?'selected':''}>${o==='D'?'Direito':o==='E'?'Esquerdo':'N/A'}</option>`).join('');
+    h += campo('disp-c-lado','Lado',
+      `<select id="disp-c-lado" style="width:140px;max-width:100%;"><option value="">—</option>${opts}</select>`);
+  }
+  if(cs.includes('lumens')){
+    const opts = DISP_LUMENS.map(o=>`<option value="${o}" ${(v.lumens||'')===o?'selected':''}>${o}</option>`).join('');
+    h += campo('disp-c-lumens','Nº de lúmens (vias)',
+      `<select id="disp-c-lumens" style="width:160px;max-width:100%;"><option value="">—</option>${opts}</select>`);
+  }
+  if(cs.includes('calibre')){
+    h += campo('disp-c-calibre','Calibre',
+      `<input type="text" id="disp-c-calibre" placeholder="Ex: 20G, 7Fr..." value="${_esc(v.calibre||'')}" style="width:140px;max-width:100%;">`);
+  }
+  if(cs.includes('numero')){
+    h += campo('disp-c-numero','Nº / calibre',
+      `<input type="text" id="disp-c-numero" placeholder="Nº" value="${_esc(v.numero||'')}" style="width:120px;max-width:100%;">`);
+  }
+  // Data de inserção sempre presente
+  h += campo('disp-c-data','Data de inserção *',
+    `<input type="date" id="disp-c-data" value="${v.dataInsercao||hoje()}" style="width:170px;max-width:100%;">`);
+  // Aviso de checklist para CVC/SVD
+  if(def.checklist){
+    h += `<div style="font-size:.72rem;color:#856404;background:#fff8e1;border:1px solid #ffe082;border-radius:7px;padding:7px 10px;margin-top:4px;">
+      📋 Após salvar, será sugerido o preenchimento do <strong>Checklist de Inserção (CCIH)</strong> deste dispositivo.</div>`;
+  }
+  cont.innerHTML = h;
+}
+
+// Lê os campos do modal e salva (cria ou atualiza) o dispositivo
+function _dispSalvarModal(){
+  const tipo = document.getElementById('disp-tipo').value;
+  if(!tipo){ toast('Selecione o tipo de dispositivo', true); return; }
+  const def = _dispDef(tipo);
+  const g = id => { const e=document.getElementById(id); return e? (e.value||'').trim() : ''; };
+  const obj = {
+    tipo,
+    localizacao: g('disp-c-loc') ? g('disp-c-loc').toUpperCase() : '',
+    lado: g('disp-c-lado'),
+    lumens: g('disp-c-lumens'),
+    calibre: g('disp-c-calibre') ? g('disp-c-calibre').toUpperCase() : '',
+    numero: g('disp-c-numero'),
+    subtipo: g('disp-c-subtipo'),
+    descricao: g('disp-c-descricao'),
+    dataInsercao: g('disp-c-data'),
+  };
+  if(def.campos.includes('descricao') && !obj.descricao){ toast('Informe a descrição do dispositivo', true); return; }
+  if(!obj.dataInsercao){ toast('Informe a data de inserção', true); return; }
+
+  let salvo;
+  if(_dispEditId){
+    const i = _dispLista.findIndex(d=>d.id===_dispEditId);
+    if(i>=0){ _dispLista[i] = { ..._dispLista[i], ...obj }; salvo = _dispLista[i]; }
+  } else {
+    salvo = { id:_dispNovoId(), ...obj };
+    _dispLista.push(salvo);
+  }
+  _dispRenderLista();
+  _dispFecharModal();
+
+  // Gatilho SOFT do checklist de inserção (apenas CVC/SVD, e apenas se ainda não houver)
+  if(salvo && def.checklist && !salvo.checklistId){
+    toast('✓ '+def.tipo+' registrado');
+    setTimeout(()=>_ckInsSugerir(salvo), 250);
+  } else {
+    toast('✓ '+def.tipo+(_dispEditId?' atualizado':' registrado'));
+  }
+}
+
+function _dispRemover(id){
+  const d = _dispLista.find(x=>x.id===id); if(!d) return;
+  const def = _dispDef(d.tipo);
+  if(!confirm(`Remover o ${def.tipo} da lista?\n\nObs: isso apaga o registro do dispositivo nesta evolução (não é o mesmo que "retirar" — use Retirar para registrar a data de retirada).`)) return;
+  _dispLista = _dispLista.filter(x=>x.id!==id);
+  _dispRenderLista();
+}
+
+async function _dispRetirar(id){
+  const d = _dispLista.find(x=>x.id===id); if(!d) return;
+  const def = _dispDef(d.tipo);
+  if(!confirm(`Confirma a retirada do ${def.tipo}${d.localizacao?(' ('+d.localizacao+')'):''}?`)) return;
+  d.dataRetirada = hoje();
+  // Log de retirada (mesma chave usada pelo histórico existente)
+  try {
+    const key = 'uti_disp_log';
+    const log = (await dbGet(key)) || [];
+    log.push({
+      leito: leitoAtual, paciente: gf('f-pac')||'', tipo: def.tipo,
+      local_ou_numero: d.localizacao || d.numero || d.descricao || '',
+      data_instalacao: d.dataInsercao||'', data_retirada: d.dataRetirada,
+      turno, autor: usuarioEmail, registradoEm:new Date().toISOString()
+    });
+    await dbSet(key, log);
+  } catch(e){ console.warn('Log retirada disp:', e); }
+  _dispRenderLista();
+  toast('✓ '+def.tipo+' retirado em '+d.dataRetirada.split('-').reverse().join('/'));
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CHECKLISTS DE INSERÇÃO (CVC / SVD) – LEIAUTE CCIH
+// ════════════════════════════════════════════════════════════════════════════
+// Definição declarativa dos dois formulários. Cada item é avaliado para os
+// indicadores como bundle de inserção (all-or-nothing, padrão IHI), exceto os
+// itens marcados `infoOnly` (justificativas / indicações, não entram na adesão).
+
+const CK_INSERCAO = {
+  cvc: {
+    titulo: 'CHECKLIST PARA PASSAGEM DE ACESSO VENOSO CENTRAL',
+    protocolo: 'PROTOCOLO DE CATETER CENTRAL PARA CONTROLE DE IRAS',
+    tipoDisp: 'CVC',
+    cabecalho: [
+      { id:'indicacao',  label:'INDICAÇÃO DO PROCEDIMENTO', tipo:'multi', infoOnly:true,
+        opcoes:['DROGA VASOATIVA','SEM CONDIÇÕES AVP','HEMODIÁLISE','OUTROS'] },
+      { id:'localizacao',label:'LOCALIZAÇÃO', tipo:'single', infoOnly:true,
+        opcoes:['JUGULAR','SUBCLÁVIA','FEMORAL','PERIFÉRICA'] },
+      { id:'eletivo',    label:'TIPO DE PROCEDIMENTO', tipo:'single', infoOnly:true,
+        opcoes:['ELETIVO','EMERGÊNCIA'] },
+      { id:'cateter',    label:'TIPO DE CATETER', tipo:'single', infoOnly:true,
+        opcoes:['1 Lúmen (via)','2 Lúmens (vias)','3 Lúmens (vias)'] },
+      { id:'subclavia1', label:'SÍTIO DE INSERÇÃO 1ª ESCOLHA É SUBCLÁVIA?', tipo:'simnao', infoOnly:true, justifica:true },
+      { id:'complicacao',label:'COMPLICAÇÃO?', tipo:'single', infoOnly:true,
+        opcoes:['ARRITMIA','HEMATOMAS','LESÃO VASCULAR','MAL POSICIONAMENTO','SEM COMPLICAÇÕES'] },
+    ],
+    secoes: [
+      { titulo:'ANTES DO PROCEDIMENTO', itens:[
+        { id:'higiene_clorex',   texto:'HIGIENIZAR AS MÃOS COM CLOREXIDINA DEGERMANTE' },
+        { id:'campo_grande',     texto:'USAR CAMPO ESTÉRIL GRANDE PARA COBRIR O PACIENTE, INCLUINDO O ROSTO' },
+        { id:'antissepsia_pele', texto:'ANTISSEPSIA DA PELE COM CLOREXIDINA ALCOÓLICA > 0,5%', solucao:true },
+      ]},
+      { titulo:'PARAMENTAÇÃO (EPI)', itens:[
+        { id:'epi_mascara', texto:'MÁSCARA' },
+        { id:'epi_oculos',  texto:'ÓCULOS' },
+        { id:'epi_touca',   texto:'TOUCA DESCARTÁVEL' },
+        { id:'epi_luva',    texto:'LUVA ESTÉRIL' },
+        { id:'epi_avental', texto:'AVENTAL / CAPOTE CIRÚRGICO ESTÉRIL' },
+      ]},
+      { titulo:'APÓS O PROCEDIMENTO', itens:[
+        { id:'fixacao_4pontos', texto:'VERIFICAR FIXAÇÃO DO CATETER EM 4 PONTOS' },
+        { id:'curativo_24h',    texto:'CURATIVO COM GAZE E MICROPORE NAS 24H INICIAIS' },
+        { id:'rx_checado',      texto:'RX CHECADO E DOCUMENTADO (POSIÇÃO EM JUGULAR/SUBCLÁVIA)' },
+      ]},
+    ],
+    assinaturas: ['NOME, ASSINATURA E CARIMBO DO MÉDICO QUE REALIZOU O PROCEDIMENTO',
+                  'NOME, ASSINATURA E CARIMBO DO(A) ENFERMEIRO(A) QUE APLICOU O CHECK-LIST'],
+  },
+  svd: {
+    titulo: 'CHECKLIST PARA PASSAGEM DE SONDA VESICAL DE DEMORA',
+    protocolo: 'PROTOCOLO DE PREVENÇÃO DE INFECÇÃO DO TRATO URINÁRIO',
+    tipoDisp: 'SVD',
+    cabecalho: [
+      { id:'justificativa', label:'JUSTIFICATIVA PARA O PROCEDIMENTO', tipo:'multi', infoOnly:true,
+        opcoes:['Monitorização de volume','Obstrução do trato urinário','Bexiga neurogênica e/ou retenção urinária',
+                'Cirurgias urológicas/sistema urinário','Irrigação contínua ou intermitente','Úlcera por pressão',
+                'Instabilidade hemodinâmica','Prostatite','Outro'] },
+      { id:'eletivo', label:'TIPO DE PROCEDIMENTO', tipo:'single', infoOnly:true, opcoes:['ELETIVO','URGÊNCIA'] },
+    ],
+    secoes: [
+      { titulo:'ANTES DO PROCEDIMENTO', itens:[
+        { id:'higiene_maos',     texto:'REALIZADO HIGIENE CORRETA DAS MÃOS' },
+        { id:'epi',              texto:'USO CORRETO DE EPIs: TOUCA, AVENTAL, LUVAS' },
+        { id:'higiene_intima',   texto:'REALIZADO HIGIENE PRÉVIA ÍNTIMA COM ÁGUA E SABÃO OU DEGERMANTE' },
+        { id:'antissepsia',      texto:'REALIZADO ANTISSEPSIA COM CLOREXIDINA AQUOSA' },
+        { id:'higiene_maos2',    texto:'REALIZADO HIGIENE DAS MÃOS COM ÁGUA E SABÃO OU ÁLCOOL 70%' },
+        { id:'abertura_esteril', texto:'ABERTURA DO MATERIAL ESTÉRIL SEM CONTAMINAÇÃO' },
+        { id:'luvas_esterilizadas', texto:'LUVAS ESTÉREIS CALÇADAS NA TÉCNICA CORRETA' },
+        { id:'tecnica',          texto:'TÉCNICA DE PASSAGEM SEM CONTAMINAÇÃO NA PRIMEIRA OPORTUNIDADE' },
+        { id:'balao',            texto:'INSUFLOU BALÃO' },
+        { id:'fixacao',          texto:'FIXAÇÃO DE SONDA PARA EVITAR TRAUMAS' },
+      ]},
+    ],
+    assinaturas: ['NOME E CARIMBO DO PROFISSIONAL QUE REALIZOU O PROCEDIMENTO (ENFERMEIRO OU MÉDICO)',
+                  'NOME E CARIMBO DE QUEM APLICOU O QUESTIONÁRIO OU AUXILIOU (TÉCNICO OU ENFERMEIRO)'],
+  }
+};
+
+// Estado do checklist de inserção em edição
+let _ckInsAtual = null;     // { ckTipo, leito, data, pac, dn, setor, dispId, ... }
+let _ckInsResp = {};        // { itemId: 'sim'|'lembrado'|'nao'|'na', cab_<id>: valor }
+
+// ── Reúne metadados do paciente do formulário aberto ─────────────────────────
+function _ckInsMetaPaciente(){
+  return {
+    leito: leitoAtual,
+    pac: gf('f-pac')||'',
+    dn: gf('f-dn')||'',
+    setor: 'UTI Geral',
+    adm: gf('f-adm')||'',
+    data: gf('f-data') || dataDoTurno(),
+  };
+}
+
+// ── Sugerir checklist após salvar dispositivo (soft) ─────────────────────────
+function _ckInsSugerir(disp){
+  const def = _dispDef(disp.tipo);
+  if(!def.checklist) return;
+  const nome = def.tipo==='CVC' ? 'acesso venoso central' : 'sonda vesical de demora';
+  if(confirm(`Deseja preencher agora o Checklist de Inserção (CCIH) do ${nome}?\n\n(Você pode preencher depois pelo selo "checklist pendente" no card do dispositivo.)`)){
+    _ckInsAbrir(def.checklist, disp.id);
+  }
+}
+
+// Abre o checklist a partir do id do dispositivo (selo pendente)
+function _ckInsAbrirPorDispId(dispId){
+  const d = _dispLista.find(x=>x.id===dispId); if(!d) return;
+  const def = _dispDef(d.tipo);
+  if(!def.checklist){ toast('Este dispositivo não possui checklist de inserção.', true); return; }
+  _ckInsAbrir(def.checklist, dispId);
+}
+
+// ── Abrir modal do checklist de inserção ─────────────────────────────────────
+async function _ckInsAbrir(ckTipo, dispId, registroExistente){
+  const def = CK_INSERCAO[ckTipo];
+  if(!def){ toast('Checklist desconhecido', true); return; }
+  const meta = registroExistente
+    ? { leito:registroExistente.leito, pac:registroExistente.pac, dn:registroExistente.dn,
+        setor:registroExistente.setor, adm:registroExistente.adm, data:registroExistente.data }
+    : _ckInsMetaPaciente();
+
+  _ckInsAtual = { ckTipo, dispId: dispId||null, ...meta,
+                  chave: registroExistente ? registroExistente.__chave : null,
+                  criadoEm: registroExistente ? registroExistente.criadoEm : null };
+  _ckInsResp = registroExistente ? { ...(registroExistente.respostas||{}), ...(_ckInsCabFromReg(registroExistente)) } : {};
+
+  // Se há um dispositivo vinculado, pré-popula localização (CVC) a partir do card
+  if(dispId && !registroExistente){
+    const d = _dispLista.find(x=>x.id===dispId);
+    if(d){
+      if(ckTipo==='cvc' && d.localizacao && !_ckInsResp['cab_localizacao']){
+        const match = def.cabecalho.find(c=>c.id==='localizacao').opcoes.find(o=>d.localizacao.includes(o.split(' ')[0]));
+        if(match) _ckInsResp['cab_localizacao'] = match;
+      }
+    }
+  }
+
+  document.getElementById('ckins-titulo').textContent = '📋 ' + def.titulo;
+  document.getElementById('ckins-sub').textContent =
+    `Leito ${pad(meta.leito)} · ${meta.pac||'—'} · ${meta.data?meta.data.split('-').reverse().join('/'):''}`;
+  _ckInsRender();
+  document.getElementById('modal-ckins').classList.add('show');
+}
+
+function _ckInsCabFromReg(reg){
+  const o = {};
+  if(reg && reg.cabecalho) Object.keys(reg.cabecalho).forEach(k=> o['cab_'+k] = reg.cabecalho[k]);
+  return o;
+}
+
+function _ckInsFechar(){ document.getElementById('modal-ckins').classList.remove('show'); _ckInsAtual=null; }
+
+// ── Render do conteúdo do checklist (entrada de dados) ───────────────────────
+function _ckInsRender(){
+  if(!_ckInsAtual) return;
+  const def = CK_INSERCAO[_ckInsAtual.ckTipo];
+  const body = document.getElementById('ckins-corpo');
+  let h = '';
+
+  // Cabeçalho — campos informativos (indicação, localização, etc.)
+  h += `<div style="background:#f5f8fc;border:1px solid #d6e4f5;border-radius:9px;padding:10px 13px;margin-bottom:12px;">`;
+  def.cabecalho.forEach(c=>{
+    h += `<div style="margin-bottom:9px;"><div style="font-size:.74rem;font-weight:800;color:#0d47a1;margin-bottom:4px;">${c.label}</div>`;
+    if(c.tipo==='multi'){
+      h += '<div style="display:flex;flex-wrap:wrap;gap:5px;">' + c.opcoes.map(o=>{
+        const sel = (_ckInsResp['cab_'+c.id]||[]).includes ? (_ckInsResp['cab_'+c.id]||[]).includes(o) : false;
+        return `<label style="font-size:.72rem;display:inline-flex;align-items:center;gap:4px;background:${sel?'#1565c0':'#fff'};color:${sel?'#fff':'#333'};border:1px solid #90caf9;border-radius:14px;padding:3px 10px;cursor:pointer;">
+          <input type="checkbox" style="display:none;" ${sel?'checked':''} onchange="_ckInsToggleMulti('${c.id}','${o.replace(/'/g,"\\'")}')">${o}</label>`;
+      }).join('') + '</div>';
+    } else if(c.tipo==='single'){
+      h += '<div style="display:flex;flex-wrap:wrap;gap:5px;">' + c.opcoes.map(o=>{
+        const sel = _ckInsResp['cab_'+c.id]===o;
+        return `<label style="font-size:.72rem;display:inline-flex;align-items:center;gap:4px;background:${sel?'#1565c0':'#fff'};color:${sel?'#fff':'#333'};border:1px solid #90caf9;border-radius:14px;padding:3px 10px;cursor:pointer;">
+          <input type="radio" name="cab_${c.id}" style="display:none;" ${sel?'checked':''} onchange="_ckInsSetCab('${c.id}','${o.replace(/'/g,"\\'")}')">${o}</label>`;
+      }).join('') + '</div>';
+    } else if(c.tipo==='simnao'){
+      h += '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">' + ['SIM','NÃO'].map(o=>{
+        const sel = _ckInsResp['cab_'+c.id]===o;
+        return `<label style="font-size:.72rem;display:inline-flex;align-items:center;gap:4px;background:${sel?'#1565c0':'#fff'};color:${sel?'#fff':'#333'};border:1px solid #90caf9;border-radius:14px;padding:3px 12px;cursor:pointer;">
+          <input type="radio" name="cab_${c.id}" style="display:none;" ${sel?'checked':''} onchange="_ckInsSetCab('${c.id}','${o}')">${o}</label>`;
+      }).join('');
+      if(c.justifica){
+        h += `<input type="text" placeholder="Justifique..." value="${_esc(_ckInsResp['cab_'+c.id+'_just']||'')}" oninput="_ckInsResp['cab_${c.id}_just']=this.value" style="flex:1;min-width:160px;font-size:.74rem;">`;
+      }
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+  h += '</div>';
+
+  // Seções com itens de segurança (SIM / SIM, APÓS LEMBRAR / NÃO / N/A)
+  def.secoes.forEach(sec=>{
+    h += `<div style="font-weight:800;font-size:.78rem;color:#fff;background:#0d47a1;padding:5px 11px;border-radius:7px 7px 0 0;margin-top:6px;">${sec.titulo}</div>`;
+    h += `<div style="border:1px solid #d6e4f5;border-top:none;border-radius:0 0 7px 7px;padding:4px 0;margin-bottom:8px;">`;
+    sec.itens.forEach((it,idx)=>{
+      const r = _ckInsResp[it.id]||'';
+      const opt = (val,label,cor)=>`<label style="font-size:.68rem;display:inline-flex;align-items:center;gap:3px;cursor:pointer;background:${r===val?cor:'#fff'};color:${r===val?'#fff':'#444'};border:1px solid ${cor};border-radius:11px;padding:2px 9px;font-weight:600;">
+        <input type="radio" name="ck_${it.id}" style="display:none;" ${r===val?'checked':''} onchange="_ckInsSetItem('${it.id}','${val}')">${label}</label>`;
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 11px;border-bottom:1px solid #eef3fa;flex-wrap:wrap;${idx%2?'background:#fafcff;':''}">
+        <span style="flex:1;min-width:180px;font-size:.74rem;color:#222;">${it.texto}</span>
+        <span style="display:flex;gap:4px;flex-wrap:wrap;">
+          ${opt('sim','SIM','#1a6b3a')}
+          ${opt('lembrado','APÓS LEMBRAR','#b26a00')}
+          ${opt('nao','NÃO','#c62828')}
+          ${opt('na','N/A','#777')}
+        </span>`;
+      if(it.solucao){
+        h += `<input type="text" placeholder="Se NÃO: qual solução? (álcool 70%, PVPI 10%, outro)" value="${_esc(_ckInsResp[it.id+'_sol']||'')}" oninput="_ckInsResp['${it.id}_sol']=this.value" style="flex-basis:100%;font-size:.72rem;margin-top:2px;">`;
+      }
+      h += `</div>`;
+    });
+    h += `</div>`;
+  });
+
+  // Observações + executores
+  h += `<div style="margin-top:8px;">
+    <label style="font-size:.74rem;font-weight:700;color:#0d47a1;">Observações</label>
+    <textarea id="ckins-obs" rows="2" style="width:100%;font-size:.78rem;margin-top:3px;" oninput="_ckInsResp.observacoes=this.value">${_esc(_ckInsResp.observacoes||'')}</textarea>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+    <div style="flex:1;min-width:200px;">
+      <label style="font-size:.72rem;font-weight:700;color:#0d47a1;">Profissional que realizou o procedimento</label>
+      <input type="text" value="${_esc(_ckInsResp.profExecutor||'')}" oninput="_ckInsResp.profExecutor=this.value" placeholder="Nome / carimbo" style="width:100%;font-size:.76rem;margin-top:3px;">
+    </div>
+    <div style="flex:1;min-width:200px;">
+      <label style="font-size:.72rem;font-weight:700;color:#0d47a1;">Quem aplicou o check-list</label>
+      <input type="text" value="${_esc(_ckInsResp.profAplicador||'')}" oninput="_ckInsResp.profAplicador=this.value" placeholder="Nome / carimbo" style="width:100%;font-size:.76rem;margin-top:3px;">
+    </div>
+  </div>`;
+
+  body.innerHTML = h;
+  _ckInsAtualizarScore();
+}
+
+function _ckInsToggleMulti(cid, op){
+  const k = 'cab_'+cid;
+  let arr = Array.isArray(_ckInsResp[k]) ? _ckInsResp[k] : [];
+  if(arr.includes(op)) arr = arr.filter(x=>x!==op); else arr.push(op);
+  _ckInsResp[k] = arr;
+  _ckInsRender();
+}
+function _ckInsSetCab(cid, val){ _ckInsResp['cab_'+cid] = val; _ckInsRender(); }
+function _ckInsSetItem(id, val){ _ckInsResp[id] = val; _ckInsAtualizarScore(); _ckInsRender(); }
+
+// Avalia a adesão do checklist (all-or-nothing sobre os itens que NÃO são infoOnly)
+function _ckInsAvaliar(ckTipo, respostas){
+  const def = CK_INSERCAO[ckTipo];
+  let total=0, conformes=0, na=0, semResposta=0;
+  def.secoes.forEach(sec=> sec.itens.forEach(it=>{
+    total++;
+    const r = respostas[it.id];
+    if(!r) { semResposta++; return; }
+    if(r==='na'){ na++; return; }
+    if(r==='sim' || r==='lembrado') conformes++;
+  }));
+  const avaliaveis = total - na;            // N/A não conta no denominador
+  const respondidos = total - semResposta;
+  let status;
+  if(respondidos < total) status='incompleto';
+  else if(avaliaveis===0) status='na';
+  else status = (conformes===avaliaveis) ? 'aderente' : 'nao_aderente';
+  // observação: "APÓS LEMBRAR" conta como conforme para o resultado final, mas
+  // é sinalizado à parte como oportunidade de melhora (não falha o bundle).
+  return { total, conformes, na, semResposta, avaliaveis, respondidos, status };
+}
+
+function _ckInsAtualizarScore(){
+  if(!_ckInsAtual) return;
+  const av = _ckInsAvaliar(_ckInsAtual.ckTipo, _ckInsResp);
+  const el = document.getElementById('ckins-score');
+  if(!el) return;
+  const pct = av.avaliaveis>0 ? Math.round(av.conformes*100/av.avaliaveis) : 0;
+  const cor = av.status==='incompleto' ? '#856404' : pct>=95 ? '#155724' : pct>=80 ? '#856404' : '#721c24';
+  let txt;
+  if(av.status==='incompleto') txt = `${av.respondidos}/${av.total} itens respondidos — incompleto`;
+  else if(av.avaliaveis===0) txt = 'Todos os itens N/A';
+  else txt = `Conformidade: ${pct}% (${av.conformes}/${av.avaliaveis})`;
+  el.innerHTML = `<span style="color:${cor};font-weight:700;">${txt}</span>`;
+}
+
+// ── Salvar checklist de inserção ─────────────────────────────────────────────
+async function _ckInsSalvar(){
+  if(!_ckInsAtual){ toast('Contexto não inicializado', true); return; }
+  const { ckTipo, leito, data, dispId } = _ckInsAtual;
+  const def = CK_INSERCAO[ckTipo];
+  const av = _ckInsAvaliar(ckTipo, _ckInsResp);
+
+  // separa cabeçalho das respostas de itens
+  const cabecalho = {};
+  const respostas = {};
+  Object.keys(_ckInsResp).forEach(k=>{
+    if(k.startsWith('cab_')) cabecalho[k.slice(4)] = _ckInsResp[k];
+    else respostas[k] = _ckInsResp[k];
+  });
+
+  // chave estável: reutiliza a do registro aberto, ou cria nova
+  const ts = _ckInsAtual.criadoEm ? new Date(_ckInsAtual.criadoEm).getTime() : Date.now();
+  const chave = _ckInsAtual.chave || `uti_ckins_${ckTipo}_${leito}_${data}_${ts}`;
+
+  const payload = {
+    tipo: ckTipo, tipoDisp: def.tipoDisp,
+    leito, data, pac: _ckInsAtual.pac, dn: _ckInsAtual.dn,
+    setor: _ckInsAtual.setor, adm: _ckInsAtual.adm,
+    turno, dispId: dispId||null,
+    cabecalho, respostas,
+    observacoes: _ckInsResp.observacoes||'',
+    profExecutor: _ckInsResp.profExecutor||'', profAplicador: _ckInsResp.profAplicador||'',
+    avaliacao: av,
+    autor: usuarioEmail,
+    criadoEm: _ckInsAtual.criadoEm || new Date().toISOString(),
+    salvoEm: new Date().toISOString()
+  };
+
+  try {
+    await dbSet(chave, payload);
+    // Vincula ao card do dispositivo (selo "✓ checklist")
+    if(dispId){
+      const d = _dispLista.find(x=>x.id===dispId);
+      if(d){ d.checklistId = chave; _dispRenderLista(); }
+    }
+    _ckInsAtual.chave = chave;
+    toast('✓ Checklist de inserção salvo');
+    _ckInsFechar();
+  } catch(e){
+    toast('Erro ao salvar checklist: '+e.message, true);
+  }
+}
+
+// ── Imprimir checklist a partir do id (selo "✓ checklist" no card) ───────────
+async function _ckInsImprimirPorId(chave){
+  let reg;
+  try { reg = await dbGet(chave); } catch(e){ reg=null; }
+  if(!reg){ toast('Checklist não encontrado', true); return; }
+  reg.__chave = chave;
+  _ckInsImprimirRegistro(reg);
+}
+
+// ── Imprimir o checklist ATUAL (botão dentro do modal) ───────────────────────
+function _ckInsImprimirAtual(){
+  if(!_ckInsAtual) return;
+  // monta um "registro" temporário a partir do estado atual
+  const cabecalho = {}, respostas = {};
+  Object.keys(_ckInsResp).forEach(k=>{
+    if(k.startsWith('cab_')) cabecalho[k.slice(4)] = _ckInsResp[k]; else respostas[k]=_ckInsResp[k];
+  });
+  _ckInsImprimirRegistro({
+    tipo:_ckInsAtual.ckTipo, leito:_ckInsAtual.leito, data:_ckInsAtual.data,
+    pac:_ckInsAtual.pac, dn:_ckInsAtual.dn, setor:_ckInsAtual.setor, adm:_ckInsAtual.adm,
+    cabecalho, respostas, observacoes:_ckInsResp.observacoes||'',
+    profExecutor:_ckInsResp.profExecutor||'', profAplicador:_ckInsResp.profAplicador||''
+  });
+}
+
+// ── Geração do HTML de impressão (leiaute igual ao Word/CCIH) ────────────────
+function _ckInsImprimirRegistro(reg){
+  const def = CK_INSERCAO[reg.tipo];
+  if(!def){ toast('Tipo de checklist inválido', true); return; }
+  const dt = reg.data ? reg.data.split('-').reverse().join('/') : '____/____/______';
+  const dnBR = reg.dn ? (reg.dn.includes('-') ? reg.dn.split('-').reverse().join('/') : reg.dn) : '';
+
+  const cabHtml = def.cabecalho.map(c=>{
+    let val = '';
+    if(c.tipo==='multi'){
+      val = (reg.cabecalho && Array.isArray(reg.cabecalho[c.id])) ? reg.cabecalho[c.id].join('; ') : '';
+    } else {
+      val = (reg.cabecalho && reg.cabecalho[c.id]) || '';
+      if(c.justifica && reg.cabecalho && reg.cabecalho[c.id+'_just']) val += ' — ' + reg.cabecalho[c.id+'_just'];
+    }
+    return `<tr><td class="lbl">${c.label}</td><td class="val">${_esc(val)||'&nbsp;'}</td></tr>`;
+  }).join('');
+
+  const marca = (r,alvo)=> r===alvo ? '<span class="x">X</span>' : '';
+  const secHtml = def.secoes.map(sec=>{
+    const linhas = sec.itens.map(it=>{
+      const r = (reg.respostas||{})[it.id]||'';
+      let extra = '';
+      if(it.solucao && (reg.respostas||{})[it.id+'_sol']) extra = `<div class="sub">Solução: ${_esc(reg.respostas[it.id+'_sol'])}</div>`;
+      return `<tr>
+        <td class="item">${it.texto}${extra}</td>
+        <td class="c">${marca(r,'sim')}</td>
+        <td class="c">${marca(r,'lembrado')}</td>
+        <td class="c">${marca(r,'nao')}</td>
+        <td class="c">${marca(r,'na')}</td>
+      </tr>`;
+    }).join('');
+    return `<tr><td colspan="5" class="sectit">${sec.titulo}</td></tr>
+      <tr class="head"><th class="item">ITENS DE SEGURANÇA DO PACIENTE</th><th class="c">SIM</th><th class="c">SIM, APÓS LEMBRAR</th><th class="c">NÃO</th><th class="c">N/A</th></tr>
+      ${linhas}`;
+  }).join('');
+
+  const assinHtml = def.assinaturas.map(a=>`
+    <tr><td class="assintit">${a}</td></tr>
+    <tr><td class="assinbox">&nbsp;</td></tr>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Checklist – ${def.tipoDisp}</title>
+  <style>
+    @page { size:A4; margin:12mm; }
+    *{box-sizing:border-box;}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:10.5px;margin:0;}
+    .org{text-align:center;font-weight:bold;line-height:1.35;font-size:11px;margin-bottom:8px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px;}
+    td,th{border:1px solid #000;padding:3px 5px;vertical-align:middle;}
+    .titprot{background:#e8e8e8;font-weight:bold;text-align:center;font-size:11px;}
+    .titck{background:#f4f4f4;font-weight:bold;text-align:center;}
+    .lbl{font-weight:bold;width:55%;font-size:9.5px;}
+    .val{font-size:9.5px;}
+    .pac td{font-size:10px;}
+    .sectit{background:#dce6f1;font-weight:bold;text-align:center;text-transform:uppercase;font-size:10px;}
+    tr.head th{background:#f0f0f0;font-size:8.5px;text-align:center;}
+    tr.head th.item{text-align:left;}
+    td.item{font-size:9.5px;}
+    td.c{width:11%;text-align:center;font-weight:bold;}
+    .x{font-weight:bold;font-size:12px;}
+    .sub{font-size:8px;color:#333;font-style:italic;}
+    .obs{min-height:34px;}
+    .assintit{font-size:8.5px;font-weight:bold;background:#fafafa;}
+    .assinbox{height:34px;}
+    .data{margin-top:10px;font-weight:bold;font-size:11px;}
+    @media print{ button{display:none;} }
+  </style></head><body>
+    <div class="org">SECRETARIA MUNICIPAL DE SAÚDE – SMS<br>COMISSÃO DE CONTROLE DE INFECÇÃO HOSPITALAR – CCIH<br>HOSPITAL DOS PESCADORES – HOSPESC</div>
+    <table>
+      <tr><td colspan="2" class="titprot">${def.protocolo}</td></tr>
+      <tr><td colspan="2" class="titck">${def.titulo}</td></tr>
+    </table>
+    <table class="pac">
+      <tr><td class="lbl">NOME DO PACIENTE</td><td>${_esc(reg.pac)||'&nbsp;'}</td><td class="lbl" style="width:auto;">DN</td><td>${_esc(dnBR)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">SETOR</td><td>${_esc(reg.setor)||'UTI Geral'}</td><td class="lbl" style="width:auto;">LEITO</td><td>${pad(reg.leito)}</td></tr>
+      ${reg.adm?`<tr><td class="lbl">DATA ADMISSÃO</td><td colspan="3">${_esc(reg.adm.split('-').reverse().join('/'))}</td></tr>`:''}
+    </table>
+    <table>${cabHtml}</table>
+    <table>
+      <tr><td colspan="5" class="titck" style="text-align:left;">CHECK-LIST DO PROCEDIMENTO &nbsp;&nbsp; DATA: ${dt}</td></tr>
+      ${secHtml}
+    </table>
+    <table>
+      <tr><td class="sectit">OBSERVAÇÕES</td></tr>
+      <tr><td class="obs">${_esc(reg.observacoes)||'&nbsp;'}</td></tr>
+    </table>
+    <table>
+      ${reg.profExecutor?`<tr><td class="assintit">PROFISSIONAL QUE REALIZOU: ${_esc(reg.profExecutor)}</td></tr>`:''}
+      ${reg.profAplicador?`<tr><td class="assintit">APLICOU O CHECK-LIST: ${_esc(reg.profAplicador)}</td></tr>`:''}
+      ${assinHtml}
+    </table>
+    <div class="data">DATA: ${dt}</div>
+    <script>setTimeout(function(){window.print();},400);</script>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  if(!win){ alert('Permita pop-ups para imprimir o checklist.'); return; }
+  win.document.write(html); win.document.close(); win.focus();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// INDICADORES + BUSCA RETROATIVA DOS CHECKLISTS DE INSERÇÃO
+// ════════════════════════════════════════════════════════════════════════════
+// Lê todos os registros uti_ckins_* (Firestore + localStorage), filtra por
+// período e devolve para a sub-aba de indicadores e a busca retroativa.
+
+async function _ckInsCarregarTodos(){
+  const chaves = new Set();
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k && k.startsWith('uti_ckins_')) chaves.add(k);
+  }
+  if(!modoOffline && db){
+    try{
+      const FP = firebase.firestore.FieldPath.documentId();
+      const pref = 'uti_ckins_';
+      const snap = await db.collection('uti').where(FP,'>=',pref).where(FP,'<',pref+'\uf8ff').get();
+      snap.forEach(d=>chaves.add(d.id));
+    }catch(e){ console.warn('[ckins] varredura:', e); }
+  }
+  const map = await dbGetMany([...chaves]);
+  const out = [];
+  chaves.forEach(k=>{ const v=map[k]; if(v){ v.__chave=k; out.push(v); } });
+  return out;
+}
+
+// Render da sub-aba de indicadores (chamado dentro de _indIRAS via botão)
+async function _ckInsRenderIndicadores(periodo){
+  const cont = document.getElementById('ckins-ind-conteudo');
+  if(!cont) return;
+  cont.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:1rem;">Carregando checklists de inserção...</div>';
+  const todos = (await _ckInsCarregarTodos()).filter(r=> _dentroPeriodo(r.data, periodo));
+
+  if(!todos.length){
+    cont.innerHTML = '<div class="ind-hint" style="margin-top:6px;">⚠️ Nenhum checklist de inserção (CVC/SVD) preenchido no período selecionado.</div>';
+    return;
+  }
+
+  let h = '';
+  ['cvc','svd'].forEach(ckTipo=>{
+    const def = CK_INSERCAO[ckTipo];
+    const regs = todos.filter(r=>r.tipo===ckTipo);
+    if(!regs.length) return;
+
+    // Adesão all-or-nothing por checklist
+    let aderentes=0, avaliaveis=0;
+    regs.forEach(r=>{
+      const av = r.avaliacao || _ckInsAvaliar(ckTipo, r.respostas||{});
+      if(av.status==='na' || av.status==='incompleto') return;
+      avaliaveis++;
+      if(av.status==='aderente') aderentes++;
+    });
+    const pct = avaliaveis>0 ? Math.round(aderentes*100/avaliaveis) : 0;
+    const cor = avaliaveis===0?'#999':pct>=95?'#1a6b3a':pct>=80?'#856404':'#dc3545';
+
+    h += `<div style="margin-top:14px;border:1.5px solid #d6e4f5;border-radius:10px;overflow:hidden;">
+      <div style="background:#0d47a1;color:#fff;padding:8px 13px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+        <span style="font-weight:800;font-size:.84rem;">${def.tipoDisp} · Bundle de Inserção</span>
+        <span style="font-size:.8rem;font-weight:700;color:#fff;">${regs.length} checklist${regs.length>1?'s':''}</span>
+      </div>
+      <div style="padding:10px 13px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:160px;height:11px;background:#eee;border-radius:6px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${cor};"></div>
+          </div>
+          <span style="font-size:.82rem;font-weight:800;color:${cor};">${avaliaveis>0?pct+'% adesão':'— sem dados'}</span>
+        </div>
+        <div style="font-size:.74rem;color:var(--muted);margin-bottom:6px;">Aderentes: <strong style="color:#155724;">${aderentes}</strong> · Falhas: <strong style="color:#dc3545;">${avaliaveis-aderentes}</strong> · Avaliáveis: ${avaliaveis} de ${regs.length}</div>`;
+
+    // Conformidade por item
+    h += '<table style="width:100%;border-collapse:collapse;font-size:.73rem;margin-top:4px;"><thead><tr style="background:#f0f5fc;"><th style="text-align:left;padding:5px 8px;">Item do bundle</th><th style="padding:5px;width:70px;">Conf.</th><th style="padding:5px;width:54px;">%</th></tr></thead><tbody>';
+    def.secoes.forEach(sec=> sec.itens.forEach(it=>{
+      let conf=0, aval=0;
+      regs.forEach(r=>{
+        const v = (r.respostas||{})[it.id];
+        if(!v || v==='na') return;
+        aval++;
+        if(v==='sim'||v==='lembrado') conf++;
+      });
+      const p = aval>0 ? Math.round(conf*100/aval) : null;
+      const c = p===null?'#999':p>=95?'#1a6b3a':p>=80?'#856404':'#dc3545';
+      h += `<tr style="border-bottom:1px solid #eef3fa;"><td style="padding:4px 8px;">${it.texto}</td><td style="padding:4px;text-align:center;">${conf}/${aval}</td><td style="padding:4px;text-align:center;font-weight:700;color:${c};">${p===null?'—':p+'%'}</td></tr>`;
+    }));
+    h += '</tbody></table></div></div>';
+  });
+
+  h += '<div class="ind-hint" style="margin-top:10px;">💡 <strong>Bundle de inserção (tudo ou nada):</strong> o checklist é aderente quando 100% dos itens aplicáveis (não-N/A) estão conformes. "Após lembrar" conta como conforme, mas sinaliza oportunidade de melhora. Use a busca abaixo para auditar checklists por paciente e data.</div>';
+  cont.innerHTML = h;
+}
+
+// ── Busca retroativa por paciente e intervalo ───────────────────────────────
+async function _ckInsBuscar(){
+  const cont = document.getElementById('ckins-busca-result');
+  const nomeFiltro = (gf('ckins-busca-nome')||'').trim().toUpperCase();
+  const di = gf('ckins-busca-de');
+  const df = gf('ckins-busca-ate');
+  const tipoF = gf('ckins-busca-tipo');
+  cont.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:.8rem;">Buscando...</div>';
+
+  let todos = await _ckInsCarregarTodos();
+  todos = todos.filter(r=>{
+    if(tipoF && r.tipo!==tipoF) return false;
+    if(nomeFiltro && !(r.pac||'').toUpperCase().includes(nomeFiltro)) return false;
+    if(di && (r.data||'') < di) return false;
+    if(df && (r.data||'') > df) return false;
+    return true;
+  }).sort((a,b)=> (b.data||'').localeCompare(a.data||'') || (b.salvoEm||'').localeCompare(a.salvoEm||''));
+
+  if(!todos.length){
+    cont.innerHTML = '<div style="font-size:.82rem;color:var(--muted);padding:.8rem;font-style:italic;">Nenhum checklist encontrado com esses filtros.</div>';
+    return;
+  }
+
+  let h = `<div style="font-size:.74rem;color:var(--muted);margin:6px 0;">${todos.length} checklist(s) encontrado(s)</div>
+    <table style="width:100%;border-collapse:collapse;font-size:.76rem;">
+      <thead><tr style="background:var(--azul);color:#fff;">
+        <th style="padding:6px 9px;text-align:left;border-radius:6px 0 0 0;">Data</th>
+        <th style="padding:6px 9px;text-align:left;">Tipo</th>
+        <th style="padding:6px 9px;text-align:left;">Paciente</th>
+        <th style="padding:6px;text-align:center;">Leito</th>
+        <th style="padding:6px;text-align:center;">Adesão</th>
+        <th style="padding:6px;text-align:center;border-radius:0 6px 0 0;">Ação</th>
+      </tr></thead><tbody>`;
+  todos.forEach((r,i)=>{
+    const av = r.avaliacao || _ckInsAvaliar(r.tipo, r.respostas||{});
+    const pct = av.avaliaveis>0 ? Math.round(av.conformes*100/av.avaliaveis) : 0;
+    let badge, bcor;
+    if(av.status==='aderente'){ badge='✓ '+pct+'%'; bcor='#1a6b3a'; }
+    else if(av.status==='nao_aderente'){ badge='✗ '+pct+'%'; bcor='#c62828'; }
+    else if(av.status==='incompleto'){ badge='… incompleto'; bcor='#b26a00'; }
+    else { badge='N/A'; bcor='#777'; }
+    const bg = i%2? '#f7faff':'#fff';
+    h += `<tr style="background:${bg};border-bottom:1px solid #eef3fa;">
+      <td style="padding:6px 9px;">${(r.data||'').split('-').reverse().join('/')}</td>
+      <td style="padding:6px 9px;font-weight:700;color:var(--azul);">${CK_INSERCAO[r.tipo]?CK_INSERCAO[r.tipo].tipoDisp:r.tipo}</td>
+      <td style="padding:6px 9px;">${_esc(r.pac)||'—'}</td>
+      <td style="padding:6px;text-align:center;">${pad(r.leito)}</td>
+      <td style="padding:6px;text-align:center;"><span style="background:${bcor};color:#fff;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:10px;">${badge}</span></td>
+      <td style="padding:6px;text-align:center;"><button class="btn-sec" style="font-size:.68rem;padding:3px 9px;" onclick="_ckInsImprimirPorId('${r.__chave}')">🖨 Imprimir</button></td>
+    </tr>`;
+  });
+  h += '</tbody></table>';
+  cont.innerHTML = h;
+}
+
+// ── Painel de checklists de inserção dentro da aba IRAS (indicadores) ────────
+// Retorna o HTML do container e agenda o preenchimento assíncrono (a função
+// _indIRAS é síncrona, então os dados de uti_ckins_* são carregados depois).
+function _ckInsPainelHTML(periodo){
+  // agenda render assíncrono após o HTML entrar no DOM
+  setTimeout(()=>{ _ckInsRenderIndicadores(periodo).catch(e=>console.warn('[ckins ind]',e)); }, 30);
+  const hoje0 = hoje();
+  const _toYMD = (dt)=>{ try{ if(!dt) return ''; const d=(dt instanceof Date)?dt:new Date(dt); if(isNaN(d)) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }catch(e){ return ''; } };
+  const de0 = (periodo && periodo.inicio) ? _toYMD(periodo.inicio) : '';
+  const ate0 = (periodo && periodo.fim) ? _toYMD(periodo.fim) : hoje0;
+  return `
+  <div class="ind-section-title" style="font-weight:700;font-size:.95rem;margin:22px 0 8px;color:var(--azul);border-top:2px solid #e3f0ff;padding-top:14px;">📋 Checklists de Inserção (CVC / SVD)</div>
+  <div class="ind-hint" style="margin-bottom:8px;">Bundles de <strong>inserção</strong> de acesso venoso central e sonda vesical, conforme protocolos da CCIH. Avaliados pela metodologia tudo-ou-nada.</div>
+  <div id="ckins-ind-conteudo"></div>
+
+  <div style="margin-top:16px;border:1.5px solid #d6e4f5;border-radius:10px;padding:12px 14px;background:#f9fbfe;">
+    <div style="font-weight:700;color:var(--azul);font-size:.86rem;margin-bottom:9px;">🔎 Busca retroativa por paciente e data</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+      <div><label style="display:block;font-size:.7rem;color:var(--muted);font-weight:600;">Paciente</label><input type="text" id="ckins-busca-nome" placeholder="Nome (parcial)" style="font-size:.78rem;min-width:160px;"></div>
+      <div><label style="display:block;font-size:.7rem;color:var(--muted);font-weight:600;">Tipo</label><select id="ckins-busca-tipo" style="font-size:.78rem;"><option value="">Todos</option><option value="cvc">CVC</option><option value="svd">SVD</option></select></div>
+      <div><label style="display:block;font-size:.7rem;color:var(--muted);font-weight:600;">De</label><input type="date" id="ckins-busca-de" value="${de0}" style="font-size:.78rem;"></div>
+      <div><label style="display:block;font-size:.7rem;color:var(--muted);font-weight:600;">Até</label><input type="date" id="ckins-busca-ate" value="${ate0}" style="font-size:.78rem;"></div>
+      <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="_ckInsBuscar()">Buscar</button>
+    </div>
+    <div id="ckins-busca-result" style="margin-top:10px;"></div>
+  </div>`;
 }
