@@ -441,6 +441,139 @@ function _nasBadge(nas){
 }
 
 // ── NAS – NAVEGAÇÃO E RENDERIZAÇÃO ────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// ATUALIZAR PASSAGEM DE PLANTÃO (planilha Google Sheets via Apps Script)
+// ────────────────────────────────────────────────────────────────────────────
+// Percorre os leitos ocupados, monta o resumo de cada paciente a partir da
+// evolução de enfermagem mais recente e envia ao Apps Script, que escreve nas
+// células da planilha de passagem (ID abaixo). A planilha tem 10 blocos de 11
+// linhas; o leito N começa na linha 2 + (N-1)*11.
+// Mapeamento de campos:
+//   Diagnóstico   ← diag (+ diags adicionais)
+//   Comorbidades  ← comor
+//   Dispositivos  ← dispositivos[] (formatado)
+//   Antibiótico   ← atbs[] (nome + D-dia)
+//   Eliminações   ← diurese/evacuação
+//   Lesão         ← les
+//   Observações   ← examesReal  ("Exames e Procedimentos Realizados")
+//   Pendências    ← examesSolic ("Exames e Pareceres Solicitados")
+const PASSAGEM_SHEET_ID = '1QQlqSNRBKYTBL4V14m-eXuj9ISQioL-jO6PyuF2_t_A';
+
+// Formata a lista de dispositivos de uma evolução para o texto da passagem.
+function _passagemFmtDispositivos(ev){
+  // Reconstrói o array unificado a partir dos campos (novo ou legado)
+  let lista = [];
+  try { lista = _camposLegadoParaDisp(ev); } catch(_) { lista = []; }
+  if(!lista.length) return '';
+  return lista.filter(d=>!d.dataRetirada).map(d=>{
+    const rot = (d.tipo==='SONDA' && d.sondaTipo) ? d.sondaTipo : _dispDef(d.tipo).tipo;
+    const partes = [rot];
+    if(d.descricao && d.tipo==='OUTRO') partes.push(d.descricao);
+    if(d.localizacao) partes.push(d.localizacao + (d.lado&&d.lado!=='—'?(' '+d.lado):''));
+    if(d.numero) partes.push('Nº'+d.numero);
+    if(d.calibre) partes.push(d.calibre);
+    if(d.dataInsercao) partes.push(fmtD(d.dataInsercao));
+    return partes.join(' ');
+  }).join('  •  ');
+}
+
+// Formata a lista de ATBs (nome + dia de uso) para o texto da passagem.
+function _passagemFmtATB(ev){
+  const atbs = (ev.atbs||[]).filter(a=>a && a.nome);
+  if(!atbs.length) return 'SEM ATB';
+  return atbs.map(a=>{
+    let s = a.nome;
+    if(a.inicio) s += ' (D0: '+fmtD(a.inicio)+')';
+    return s;
+  }).join('  +  ');
+}
+
+// Formata eliminações (vesical/intestinal) para o texto da passagem.
+function _passagemFmtEliminacoes(ev){
+  const ves = ev.diu ? '+' : '-';
+  const int = ev.eli ? '+' : '-';
+  let s = 'VESICAIS ( '+ves+' ) / INTESTINAIS ( '+int+' )';
+  if(ev.ddiu) s += ' — diurese '+ev.ddiu;
+  return s;
+}
+
+// Monta o objeto de passagem de um leito a partir da evolução salva.
+async function _passagemDadosLeito(leito){
+  const dataAtual = dataDoTurno();
+  let ev = await dbGet(`uti_ev_${leito}_${turno}_${dataAtual}`);
+  if(!ev){
+    const outro = turno==='DIURNO'?'NOTURNO':'DIURNO';
+    ev = await dbGet(`uti_ev_${leito}_${outro}_${dataAtual}`);
+  }
+  if(!ev){
+    ev = await dbGet(`uti_ev_${leito}_${turno}_${ontem()}`);
+  }
+  if(!ev) return null;   // sem evolução → não atualiza este leito
+
+  // Diagnóstico: principal + adicionais
+  let diagTxt = ev.diag || '';
+  if(Array.isArray(ev.diags) && ev.diags.length>1){
+    const extras = ev.diags.slice(1).map(x=>x.diag).filter(Boolean);
+    if(extras.length) diagTxt = [diagTxt, ...extras].filter(Boolean).join(' + ');
+  }
+
+  return {
+    leito: parseInt(leito),
+    paciente: ev.pac || '',
+    diagnostico: diagTxt,
+    comorbidades: ev.comor || '',
+    dispositivos: _passagemFmtDispositivos(ev),
+    antibiotico: _passagemFmtATB(ev),
+    eliminacoes: _passagemFmtEliminacoes(ev),
+    lesao: ev.les || '',
+    observacoes: ev.examesReal || '',     // Exames e Procedimentos Realizados
+    pendencias: ev.examesSolic || ''      // Exames e Pareceres Solicitados
+  };
+}
+
+async function atualizarPassagemPlantao(){
+  let leitos;
+  try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
+
+  // Leitos ocupados (1..10)
+  const ocupados = [];
+  for(let n=1;n<=10;n++){
+    if(leitos[n] && leitos[n].ocupado) ocupados.push(n);
+  }
+  if(!ocupados.length){ toast('Nenhum leito ocupado para atualizar.', true); return; }
+
+  if(!confirm(`Atualizar a Passagem de Plantão na planilha com os dados das evoluções de enfermagem?\n\n${ocupados.length} leito(s) ocupado(s) serão enviados.\n\nOs campos serão sobrescritos com os dados do sistema (Pendências e Observações em branco no sistema preservam o que já está na planilha).`)) return;
+
+  toast('⏳ Coletando dados das evoluções...');
+  const registros = [];
+  for(const n of ocupados){
+    try {
+      const dado = await _passagemDadosLeito(n);
+      if(dado && dado.paciente) registros.push(dado);
+    } catch(e){ console.warn('Passagem leito '+n+':', e); }
+  }
+
+  if(!registros.length){ toast('Nenhuma evolução encontrada para os leitos ocupados.', true); return; }
+
+  toast('⏳ Enviando '+registros.length+' leito(s) para a planilha...');
+  try {
+    const resp = await _apsFetch({
+      action: 'atualizar_passagem',
+      sheetId: PASSAGEM_SHEET_ID,
+      aba: 'UTI GERAL',
+      data: dataDoTurno(),
+      registros
+    });
+    if(resp && resp.status==='ok'){
+      toast('✓ Passagem atualizada: '+(resp.atualizados||registros.length)+' leito(s)');
+    } else {
+      toast('Erro do servidor: '+((resp&&resp.msg)||'resposta inesperada'), true);
+    }
+  } catch(e){
+    toast('Erro ao enviar para a planilha: '+e.message, true);
+  }
+}
+
 // ── Notificação ao Núcleo de Segurança do Paciente (NSP) ─────────────────────
 // Abre, em nova aba, o formulário oficial de notificação de eventos do NSP.
 // Pede confirmação antes de sair do sistema, já que é um link externo (Google Forms).
@@ -5592,7 +5725,7 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
   h+=br('OUTROS DISP.',d.disp_o);
   h+=`<div class="pst" id="pdf-break-point">Antimicrobianos em Uso</div>`;
   if(d.atbs&&d.atbs.filter(a=>a.nome).length){ d.atbs.filter(a=>a.nome).forEach(a=>{ h+=`<div class="pr"><span class="pv">${a.nome}</span>${a.inicio?`<span class="pl" style="margin-left:1rem;">INÍCIO</span><span class="pv">${fmtD(a.inicio)}</span>`:''}</div>`; }); } else h+=br('','–');
-  h+=st('Exames e Procedimentos Realizados Hoje');
+  h+=st('Exames e Procedimentos Realizados');
 h+=`<div class="obs-box" style="min-height:45px;">${d.examesReal||'–'}</div>`;
 h+=st('Exames e Pareceres Solicitados');
 h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`;
