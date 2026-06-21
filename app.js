@@ -2816,25 +2816,28 @@ function _indIRAS(periodo){
                              : '<span style="color:#bbb;" title="Não aplicável">–</span>';
 
   h += '<div class="ind-section-title" style="font-weight:700;font-size:.9rem;margin:16px 0 8px;color:var(--azul);">🗓️ Bundles preenchidos por data</div>';
+  // Guarda os dados para a busca sob demanda e monta os cabeçalhos de bundle.
+  _irasLinhasPorData = linhasPorData;
+  _irasBundlesUsados = bundlesUsados.map(b => ({ id:b.id, icone:b.icone, titulo:b.titulo }));
+  // Faixa de datas padrão = período selecionado nos indicadores
+  const _toYMD = (dt)=>{ try{ if(!dt) return ''; const d=(dt instanceof Date)?dt:new Date(dt); if(isNaN(d)) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }catch(e){ return ''; } };
+  const _de0 = periodo && periodo.inicio ? _toYMD(periodo.inicio) : '';
+  const _ate0 = periodo && periodo.fim ? _toYMD(periodo.fim) : '';
   h += `<div style="margin-bottom:8px;">
     <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="_exportarPDFBundlesIRAS()">📄 Exportar PDF (bundles por data)</button>
   </div>`;
-  h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.76rem;background:white;">';
-  h += `<thead><tr style="background:#0d47a1;color:white;">
-    <th style="padding:6px 8px;text-align:left;">Data</th>
-    <th style="padding:6px 8px;text-align:left;">Turno</th>
-    <th style="padding:6px 8px;text-align:left;">Leito</th>
-    ${bundlesUsados.map(b => `<th style="padding:6px 8px;text-align:center;" title="${_esc(b.titulo)}">${b.icone}</th>`).join('')}
-  </tr></thead><tbody>`;
-  linhasPorData.forEach((l, i) => {
-    h += `<tr style="${i%2===0?'background:#f5f7fa;':''}border-bottom:1px solid #eee;">
-      <td style="padding:5px 8px;">${_esc(l.data)}</td>
-      <td style="padding:5px 8px;">${_esc(l.turno||'–')}</td>
-      <td style="padding:5px 8px;">${_esc(l.leito||'–')}</td>
-      ${bundlesUsados.map(b => `<td style="padding:5px 8px;text-align:center;">${_statusIcone(l.statusPorBundle[b.id])}</td>`).join('')}
-    </tr>`;
-  });
-  h += '</tbody></table></div>';
+  h += `<div style="border:1.5px solid #d6e4f5;border-radius:10px;padding:12px 14px;background:#f9fbfe;">
+    <div style="font-weight:700;color:var(--azul);font-size:.84rem;margin-bottom:9px;">🔎 Buscar bundles por paciente e data</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+      <div><label style="display:block;font-size:.7rem;color:var(--muted);font-weight:600;">Paciente</label><input type="text" id="iras-busca-nome" placeholder="Nome (parcial)" style="font-size:.78rem;min-width:150px;"></div>
+      <div><label style="display:block;font-size:.7rem;color:var(--muted);font-weight:600;">Leito</label><input type="text" id="iras-busca-leito" placeholder="Nº" style="font-size:.78rem;width:70px;"></div>
+      <div><label style="display:block;font-size:.7rem;color:var(--muted);font-weight:600;">De</label><input type="date" id="iras-busca-de" value="${_de0}" style="font-size:.78rem;"></div>
+      <div><label style="display:block;font-size:.7rem;color:var(--muted);font-weight:600;">Até</label><input type="date" id="iras-busca-ate" value="${_ate0}" style="font-size:.78rem;"></div>
+      <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="_irasBuscarBundles()">Buscar</button>
+      <button class="btn btn-sm btn-sec" onclick="_irasBuscarBundles(true)">Mostrar todos</button>
+    </div>
+    <div id="iras-busca-result" style="margin-top:10px;font-size:.78rem;color:var(--muted);font-style:italic;">Use a busca acima para exibir os bundles preenchidos por data.</div>
+  </div>`;
   h += '<div class="ind-hint" style="margin-top:8px;">💡 <strong>Tudo ou nada (IHI):</strong> o bundle só é considerado aderente (✓) quando 100% dos itens aplicáveis (não-N/A) estão conformes. ✗ = falhou algum item · … = checklist incompleto · – = bundle não aplicável (sem o dispositivo). Meta institucional recomendada: ≥ 95%.</div>';
 
   // ── Conformidade por Item (conforme/não conforme item a item) ──
@@ -3032,7 +3035,60 @@ function _exportarPDFBundlesIRAS(){
     toast('Erro ao gerar PDF: '+e.message, true);
   }
 }
-// ── 16. DIAGNÓSTICOS / CID-10 ────────────────────────────────────────────────
+
+// ── Busca sob demanda dos bundles preenchidos por data ───────────────────────
+// A tabela completa não é mais exibida por padrão; aparece só após a busca,
+// filtrando por paciente, leito e intervalo de datas (igual à busca dos
+// checklists de inserção). Usa os dados já calculados em _irasLinhasPorData.
+function _irasBuscarBundles(mostrarTodos){
+  const cont = document.getElementById('iras-busca-result');
+  if(!cont) return;
+  const _statusIcone = (s) => s === 'aderente' ? '<span style="color:#1a6b3a;font-weight:700;" title="Aderente">✓</span>'
+                             : s === 'nao_aderente' ? '<span style="color:#dc3545;font-weight:700;" title="Não aderente">✗</span>'
+                             : s === 'incompleto' ? '<span style="color:#856404;font-weight:700;" title="Incompleto">…</span>'
+                             : '<span style="color:#bbb;" title="Não aplicável">–</span>';
+
+  const nomeF  = mostrarTodos ? '' : (gf('iras-busca-nome')||'').trim().toUpperCase();
+  const leitoF = mostrarTodos ? '' : (gf('iras-busca-leito')||'').trim();
+  const di     = mostrarTodos ? '' : gf('iras-busca-de');
+  const df     = mostrarTodos ? '' : gf('iras-busca-ate');
+
+  let linhas = (_irasLinhasPorData||[]).filter(l=>{
+    if(nomeF  && !((l.pac||'').toUpperCase().includes(nomeF))) return false;
+    if(leitoF && String(l.leito)!==String(leitoF)) return false;
+    if(di && (l.data||'') < di) return false;
+    if(df && (l.data||'') > df) return false;
+    return true;
+  }).sort((a,b)=> (b.data||'').localeCompare(a.data||'') || (String(a.leito).localeCompare(String(b.leito))));
+
+  if(!linhas.length){
+    cont.innerHTML = '<div style="font-size:.8rem;color:var(--muted);font-style:italic;padding:.4rem 0;">Nenhum bundle encontrado com esses filtros.</div>';
+    return;
+  }
+
+  const bundlesUsados = _irasBundlesUsados||[];
+  let h = `<div style="font-size:.74rem;color:var(--muted);margin:2px 0 6px;">${linhas.length} registro(s) encontrado(s)</div>`;
+  h += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:.76rem;background:white;">';
+  h += `<thead><tr style="background:#0d47a1;color:white;">
+    <th style="padding:6px 8px;text-align:left;">Data</th>
+    <th style="padding:6px 8px;text-align:left;">Turno</th>
+    <th style="padding:6px 8px;text-align:left;">Leito</th>
+    <th style="padding:6px 8px;text-align:left;">Paciente</th>
+    ${bundlesUsados.map(b => `<th style="padding:6px 8px;text-align:center;" title="${_esc(b.titulo)}">${b.icone}</th>`).join('')}
+  </tr></thead><tbody>`;
+  linhas.forEach((l, i) => {
+    h += `<tr style="${i%2===0?'background:#f5f7fa;':''}border-bottom:1px solid #eee;">
+      <td style="padding:5px 8px;">${_esc(l.data)}</td>
+      <td style="padding:5px 8px;">${_esc(l.turno||'–')}</td>
+      <td style="padding:5px 8px;">${_esc(l.leito||'–')}</td>
+      <td style="padding:5px 8px;">${_esc(l.pac||'–')}</td>
+      ${bundlesUsados.map(b => `<td style="padding:5px 8px;text-align:center;">${_statusIcone(l.statusPorBundle[b.id])}</td>`).join('')}
+    </tr>`;
+  });
+  h += '</tbody></table></div>';
+  cont.innerHTML = h;
+}
+
 function _indDiagnosticos(periodo){
   const { evolucoes, admissoes } = _indCache;
 
@@ -8299,6 +8355,10 @@ const IRAS_BUNDLES = [
 
 let _irasRespostas = {}; // { id: 'sim'|'nao'|'na'|'gaze'|'filme'|'n_a' }
 let _irasEvolucaoAtual = null; // snapshot da evolução do paciente (para distinguir N/A com vs sem dispositivo)
+// Dados da última renderização de indicadores IRAS, para a busca sob demanda
+// dos "bundles preenchidos por data" (não exibidos até o usuário buscar).
+let _irasLinhasPorData = [];
+let _irasBundlesUsados = [];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Reconstrói o "contexto da evolução" a partir de um checklist salvo, permitindo
