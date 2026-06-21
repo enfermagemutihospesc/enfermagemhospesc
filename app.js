@@ -4269,6 +4269,85 @@ async function salvarAdmissao() {
   };
   await dbSet('uti_leitos', d);
 
+  // ── Limpeza de segurança em NOVA admissão ────────────────────────────────
+  // Se o leito está recebendo um paciente novo, apaga quaisquer evoluções/NAS
+  // residuais (de um paciente anterior) que não tenham sido removidas na alta.
+  // Sem isso, dispositivos/culturas do paciente anterior podem ser herdados.
+  if (novaAdmissao) {
+    try {
+      const novoPac = _normNome(gf('m-pac'));
+      const chaves = new Set();
+      const prefEv  = 'uti_ev_'+modalLeito+'_';
+      const prefNas = 'uti_nas_'+modalLeito+'_';
+      // localStorage
+      for(let i=0;i<localStorage.length;i++){
+        const k = localStorage.key(i);
+        if(!k) continue;
+        if((k.startsWith(prefEv) && !k.startsWith('uti_ev_resumo_')) ||
+           (k.startsWith(prefNas) && !k.startsWith('uti_nas_resumo_'))) chaves.add(k);
+      }
+      // Firestore — varredura filtrada por prefixo do leito
+      if(!modoOffline && db){
+        try{
+          const FP = firebase.firestore.FieldPath.documentId();
+          const [sEv, sNas] = await Promise.all([
+            db.collection('uti').where(FP,'>=',prefEv ).where(FP,'<',prefEv +'\uf8ff').get(),
+            db.collection('uti').where(FP,'>=',prefNas).where(FP,'<',prefNas+'\uf8ff').get()
+          ]);
+          sEv.forEach(doc=>{ if(!doc.id.startsWith('uti_ev_resumo_')) chaves.add(doc.id); });
+          sNas.forEach(doc=>{ if(!doc.id.startsWith('uti_nas_resumo_')) chaves.add(doc.id); });
+        }catch(e){ console.warn('[Admissão] varredura residual:', e); }
+      }
+      if(chaves.size){
+        // Só mexe em registros que NÃO sejam do paciente recém-admitido (preserva
+        // o caso de reabrir/editar a admissão do mesmo paciente).
+        const map = await dbGetMany([...chaves]);
+        const alvos = [];
+        chaves.forEach(k=>{
+          const ev = map[k];
+          const pacEv = _normNome(ev && ev.pac);
+          if(!novoPac || !pacEv || pacEv !== novoPac) alvos.push(k);
+        });
+        if(alvos.length){
+          // Agrega em resumo diário ANTES de apagar (preserva indicadores), igual
+          // à limpeza feita na alta.
+          const porDiaEv = {}, porDiaNas = {};
+          alvos.forEach(k=>{
+            const v = map[k]; if(!v) return;
+            if(k.startsWith(prefEv)){
+              const dia = v.data || k.split('_').slice(4).join('_');
+              (porDiaEv[dia] = porDiaEv[dia] || []).push(_resumirEvolucao(v));
+            } else if(k.startsWith(prefNas)){
+              const dia = v.data || k.split('_').slice(4).join('_');
+              (porDiaNas[dia] = porDiaNas[dia] || []).push(_resumirNAS(v));
+            }
+          });
+          const diasEv = Object.keys(porDiaEv), diasNas = Object.keys(porDiaNas);
+          const [rEv, rNas] = await Promise.all([
+            dbGetMany(diasEv.map(d=>'uti_ev_resumo_'+d)),
+            dbGetMany(diasNas.map(d=>'uti_nas_resumo_'+d))
+          ]);
+          const grav = [];
+          for(const dia of diasEv){
+            const rk='uti_ev_resumo_'+dia;
+            const ex = rEv[rk] || { dia, evolucoes:[], _resumido:true };
+            ex.evolucoes = (ex.evolucoes||[]).concat(porDiaEv[dia].filter(Boolean));
+            grav.push(dbSet(rk, ex));
+          }
+          for(const dia of diasNas){
+            const rk='uti_nas_resumo_'+dia;
+            const ex = rNas[rk] || { dia, nas:[], _resumido:true };
+            ex.nas = (ex.nas||[]).concat(porDiaNas[dia].filter(Boolean));
+            grav.push(dbSet(rk, ex));
+          }
+          await Promise.all(grav);
+          await Promise.all(alvos.map(k=>dbDelete(k).catch(()=>{})));
+          console.log('[Admissão] leito '+modalLeito+': '+alvos.length+' registro(s) residual(is) de paciente anterior resumido(s) e apagado(s)');
+        }
+      }
+    } catch(e){ console.warn('[Admissão] limpeza residual:', e); }
+  }
+
   // Log de admissão (para relatório de indicadores)
   if (novaAdmissao) {
     try {
@@ -4950,16 +5029,30 @@ async function getAnterior(n) {
             || (await dbGet('uti_ev_'+n+'_'+turno+'_'+dtAntes))
             || (await dbGet('uti_ev_'+n+'_'+outro+'_'+dtAntes));
   if(!cand) return null;
-  // Proteção contra reuso de leito: só herda se a evolução anterior for do
-  // MESMO paciente atualmente admitido no leito. Evita puxar dados (culturas,
-  // dispositivos, etc.) de um paciente que já recebeu alta.
+  // Proteção contra reuso de leito: só herda se a evolução anterior for
+  // comprovadamente do MESMO paciente atualmente admitido no leito. A herança
+  // de dispositivos/culturas/etc. de um paciente que já recebeu alta é uma falha
+  // grave de segurança, então a correspondência precisa ser POSITIVA: se o leito
+  // tem um nome e a evolução não bate (ou está sem nome), NÃO herda.
   try {
     const ld = await leitosData();
-    const pacLeito = ((ld[n]||{}).pac || '').trim().toUpperCase();
-    const pacEv    = (cand.pac || '').trim().toUpperCase();
-    if(pacLeito && pacEv && pacLeito !== pacEv) return null;
-  } catch(_) {}
+    const pacLeito = _normNome((ld[n]||{}).pac);
+    const pacEv    = _normNome(cand.pac);
+    // Se o leito tem paciente identificado, exige nome igual na evolução.
+    if(pacLeito){
+      if(!pacEv || pacEv !== pacLeito) return null;
+    }
+  } catch(_) { return null; }   // na dúvida, não herda
   return cand;
+}
+
+// Normaliza nome para comparação robusta: maiúsculas, sem acentos, espaços
+// colapsados. Evita que diferenças de acento/espaçamento façam dois registros
+// do mesmo paciente parecerem pacientes distintos (ou vice-versa).
+function _normNome(s){
+  return (s||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')  // remove acentos
+    .replace(/\s+/g,' ').trim().toUpperCase();
 }
 
 async function abrirForm(n) {
@@ -4972,11 +5065,12 @@ async function abrirForm(n) {
   const anterior = await getAnterior(n);
   let evHoje = await dbGet('uti_ev_'+n+'_'+turno+'_'+dataDoTurno());
   // Proteção: se a evolução de hoje for de outro paciente (reuso de leito no
-  // mesmo dia), não a usa como fonte de herança.
+  // mesmo dia) — ou estiver sem nome enquanto o leito tem paciente identificado —
+  // não a usa como fonte de herança.
   if(evHoje){
-    const pacLeito = (pac.pac||'').trim().toUpperCase();
-    const pacEv    = (evHoje.pac||'').trim().toUpperCase();
-    if(pacLeito && pacEv && pacLeito !== pacEv) evHoje = null;
+    const pacLeito = _normNome(pac.pac);
+    const pacEv    = _normNome(evHoje.pac);
+    if(pacLeito && (!pacEv || pacEv !== pacLeito)) evHoje = null;
   }
 
   document.getElementById('herd-tag').style.display = anterior ? 'inline' : 'none';
@@ -10328,8 +10422,11 @@ function _camposLegadoParaDisp(fonte){
   if(fonte.dial_l || fonte.dial_d) add('DIALISE',{ localizacao:fonte.dial_l||'', dataInsercao:fonte.dial_d||'' });
   if(fonte.svd_n || fonte.svd_d)   add('SVD',    { numero:fonte.svd_n||'', dataInsercao:fonte.svd_d||'' });
   if(fonte.sne_n || fonte.sne_d)   add('SNE',    { numero:fonte.sne_n||'', dataInsercao:fonte.sne_d||'' });
-  if(fonte.tot_n || fonte.tot_d)   add('TOT',    { numero:fonte.tot_n||'', dataInsercao:fonte.tot_d||'' });
-  if(fonte.tqt_n || fonte.tqt_d)   add('TQT',    { numero:fonte.tqt_n||'', dataInsercao:fonte.tqt_d||'' });
+  // TOT/TQT: exige DATA de inserção. Em dados legados, `tot_n`/`tqt_n` podiam vir
+  // apenas do nº do tubo digitado na seção de Ventilação (sem dispositivo real),
+  // o que geraria um card fantasma. A data é o campo que define o dispositivo.
+  if(fonte.tot_d)                  add('TOT',    { numero:fonte.tot_n||'', dataInsercao:fonte.tot_d });
+  if(fonte.tqt_d)                  add('TQT',    { numero:fonte.tqt_n||'', dataInsercao:fonte.tqt_d });
   if(Array.isArray(fonte.avps))    fonte.avps.filter(a=>a.local).forEach(a=> add('AVP', { localizacao:a.local||'', dataInsercao:a.data||'' }));
   if(fonte.disp_o && fonte.disp_o.trim()) add('OUTRO', { descricao:fonte.disp_o.trim() });
   // Vincula checklists de inserção que possam já existir (referência pelo campo salvo)
