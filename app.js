@@ -171,12 +171,21 @@ function _perfilSeed(email) {
   };
 }
 
+// E-mail "conhecido" = já está na lista de seed ou é admin, ou seja, foi
+// cadastrado no código deste app antes da verificação de perfil existir.
+// Usado para distinguir "usuário legado sem doc ainda" (libera com seed) de
+// "e-mail de outro app que nunca teve conta aqui" (nega acesso) — o Firebase
+// Auth é compartilhado com outros sistemas da UTI (ex: Fisioterapia).
+function _conhecido(email) {
+  return !!PERFIS_SEED[email] || ADMIN_EMAILS.includes(email);
+}
+
 async function _carregarPerfil(email) {
   email = (email||'').trim().toLowerCase();
   if (!email) return null;
-  if (!db) return _perfilSeed(email);
+  if (!db) return _conhecido(email) ? _perfilSeed(email) : { email, ativo:false, semCadastro:true };
 
-  // Timeout de segurança: se o Firestore não responder em 8s, usa o seed
+  // Timeout de segurança: se o Firestore não responder em 8s, usa o seed (se conhecido)
   const comTimeout = (promessa, ms) => Promise.race([
     promessa,
     new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
@@ -188,8 +197,15 @@ async function _carregarPerfil(email) {
     if (snap.exists) {
       return { email, ...snap.data() };
     }
-    // Documento não existe: cria em BACKGROUND (não bloqueia o login).
-    // Se a regra do Firestore negar escrita, o login segue mesmo assim.
+    // Documento não existe na coleção 'usuarios' (Enfermagem). O Firebase Auth é
+    // compartilhado com outros apps da UTI (ex: Fisioterapia, que usa a coleção
+    // própria 'usuarios_fisio'), então um e-mail válido no Auth não significa
+    // que a pessoa tem conta aqui. Só materializa o perfil automaticamente para
+    // e-mails conhecidos (seed/admin já cadastrados no código antes desta
+    // verificação existir); qualquer outro e-mail é tratado como sem acesso.
+    if (!_conhecido(email)) {
+      return { email, ativo: false, semCadastro: true };
+    }
     const novo = _perfilSeed(email);
     ref.set({
       nome: novo.nome, coren: novo.coren, role: novo.role,
@@ -198,7 +214,7 @@ async function _carregarPerfil(email) {
     return novo;
   } catch (e) {
     console.warn('[Perfil] leitura falhou, usando seed:', e && (e.code || e.message));
-    return _perfilSeed(email);
+    return _conhecido(email) ? _perfilSeed(email) : { email, ativo:false, semCadastro:true };
   }
 }
 
@@ -6719,7 +6735,10 @@ window.addEventListener('load', () => {
 
         // Acesso revogado?
         if (perfilUsuario && perfilUsuario.ativo === false) {
-          toast('Seu acesso foi desativado. Contate o administrador.', true);
+          const msg = perfilUsuario.semCadastro
+            ? 'Este e-mail não tem cadastro no sistema de Enfermagem. Se você é da Fisioterapia ou outro setor, use o app correspondente.'
+            : 'Seu acesso foi desativado. Contate o administrador.';
+          toast(msg, true);
           sessionStorage.removeItem('uti_auth_ok');
           await auth.signOut();
           mostrarTela('t-login');
