@@ -1019,6 +1019,25 @@
   </div>
 </div>
 
+<!-- MODAL PASSAGEM DE PLANTÃO -->
+<div class="overlay" id="modal-passagem">
+  <div class="modal" style="max-width:780px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#00695c,#00897b);color:white;">
+      <div>
+        <h3 style="color:white;margin:0;font-size:.92rem;">📋 Passagem de Plantão</h3>
+        <small id="passagem-sub" style="opacity:.9;">—</small>
+      </div>
+      <button class="modal-close" style="color:white;" onclick="_passagemFecharModal()">×</button>
+    </div>
+    <div class="modal-body" id="passagem-corpo" style="max-height:76vh;overflow-y:auto;padding:14px 16px;"></div>
+    <div class="modal-footer" style="background:#e0f2f1;border-top:1px solid #b2dfdb;display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;flex-wrap:wrap;">
+      <button class="btn btn-sec btn-sm" onclick="_passagemFecharModal()">Fechar</button>
+      <button class="btn btn-sm" style="background:#455a64;color:white;" onclick="_passagemSalvar()">💾 Salvar (sem imprimir)</button>
+      <button class="btn btn-sm" style="background:#00695c;color:white;" onclick="_passagemSalvarEImprimir()">🖨 Salvar e Imprimir</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL ADICIONAR/EDITAR DISPOSITIVO -->
 <div class="overlay" id="modal-disp">
   <div class="modal" style="max-width:520px;">
@@ -1086,7 +1105,7 @@
 <!-- ════════════════════════════════════════════
      JAVASCRIPT
 ═════════════════════════════════════════════ -->
-<script src="app.js?v=20260621pass1"></script>
+<script src="app.js?v=20260622pass2"></script>
 <!-- MODAL HISTÓRICO DE DISPOSITIVOS -->
 <div class="overlay" id="modal-hist-disp">
   <div class="modal" style="max-width:620px;">
