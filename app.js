@@ -458,12 +458,14 @@ function _nasBadge(nas){
 
 // ── NAS – NAVEGAÇÃO E RENDERIZAÇÃO ────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
-// ATUALIZAR PASSAGEM DE PLANTÃO (planilha Google Sheets via Apps Script)
+// PASSAGEM DE PLANTÃO (gerada internamente — sem depender de planilha externa)
 // ────────────────────────────────────────────────────────────────────────────
-// Percorre os leitos ocupados, monta o resumo de cada paciente a partir da
-// evolução de enfermagem mais recente e envia ao Apps Script, que escreve nas
-// células da planilha de passagem (ID abaixo). A planilha tem 10 blocos de 11
-// linhas; o leito N começa na linha 2 + (N-1)*11.
+// O sistema monta o documento a partir das evoluções mais recentes de cada
+// leito, abre um modal editável (mesmo leiaute de blocos da planilha antiga:
+// PACIENTE/DIAGNÓSTICO/COMORBIDADES/DISPOSITIVOS/ANTIBIÓTICO/ELIMINAÇÕES/
+// LESÃO/PENDÊNCIAS/OBSERVAÇÃO por leito) para revisão/ajuste manual, e then
+// gera a impressão a partir do que ficou no modal. O documento é salvo em
+// `uti_passagem_<data>_<turno>` para poder ser reaberto/continuado depois.
 // Mapeamento de campos:
 //   Diagnóstico   ← diag (+ diags adicionais)
 //   Comorbidades  ← comor
@@ -473,7 +475,6 @@ function _nasBadge(nas){
 //   Lesão         ← les
 //   Observações   ← examesReal  ("Exames e Procedimentos Realizados")
 //   Pendências    ← examesSolic ("Exames e Pareceres Solicitados")
-const PASSAGEM_SHEET_ID = '1QQlqSNRBKYTBL4V14m-eXuj9ISQioL-jO6PyuF2_t_A';
 
 // Formata a lista de dispositivos de uma evolução para o texto da passagem.
 function _passagemFmtDispositivos(ev){
@@ -536,6 +537,8 @@ async function _passagemDadosLeito(leito){
   return {
     leito: parseInt(leito),
     paciente: ev.pac || '',
+    dn: ev.dn || '',
+    adm: ev.adm || '',
     diagnostico: diagTxt,
     comorbidades: ev.comor || '',
     dispositivos: _passagemFmtDispositivos(ev),
@@ -547,18 +550,44 @@ async function _passagemDadosLeito(leito){
   };
 }
 
+// Campos editáveis do modal, na ordem de exibição (igual ao bloco da planilha)
+const PASSAGEM_CAMPOS = [
+  { id:'diagnostico',   label:'DIAGNÓSTICO',    tag:'textarea' },
+  { id:'comorbidades',  label:'COMORBIDADES',   tag:'textarea' },
+  { id:'dispositivos',  label:'DISPOSITIVOS',   tag:'textarea' },
+  { id:'antibiotico',   label:'ANTIBIÓTICO',    tag:'textarea' },
+  { id:'eliminacoes',   label:'ELIMINAÇÕES',    tag:'input' },
+  { id:'lesao',         label:'LESÃO',          tag:'input' },
+  { id:'pendencias',    label:'PENDÊNCIAS',     tag:'textarea', destaque:true },
+  { id:'observacoes',   label:'OBSERVAÇÃO',     tag:'textarea', destaque:true },
+];
+
+let _passagemRegistros = [];   // estado em memória enquanto o modal está aberto
+let _passagemChaveAtual = '';  // uti_passagem_<data>_<turno>
+
+// Abre o modal: coleta das evoluções (ou recarrega edição em andamento) e renderiza.
 async function atualizarPassagemPlantao(){
+  const dataAtual = dataDoTurno();
+  _passagemChaveAtual = `uti_passagem_${dataAtual}_${turno}`;
+
+  // Se já existe uma passagem salva para este turno/data, pergunta se quer continuar editando.
+  let existente = null;
+  try { existente = await dbGet(_passagemChaveAtual); } catch(_) {}
+
+  if(existente && existente.registros && existente.registros.length){
+    if(confirm(`Já existe uma passagem salva para ${turno} de hoje (${existente.registros.length} leito(s)).\n\nContinuar editando essa versão?\n\n(Cancelar gera uma nova a partir das evoluções atuais, substituindo a anterior.)`)){
+      _passagemRegistros = existente.registros;
+      _passagemAbrirModal();
+      return;
+    }
+  }
+
   let leitos;
   try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
 
-  // Leitos ocupados (1..10)
   const ocupados = [];
-  for(let n=1;n<=10;n++){
-    if(leitos[n] && leitos[n].ocupado) ocupados.push(n);
-  }
-  if(!ocupados.length){ toast('Nenhum leito ocupado para atualizar.', true); return; }
-
-  if(!confirm(`Atualizar a Passagem de Plantão na planilha com os dados das evoluções de enfermagem?\n\n${ocupados.length} leito(s) ocupado(s) serão enviados.\n\nOs campos serão sobrescritos com os dados do sistema (Pendências e Observações em branco no sistema preservam o que já está na planilha).`)) return;
+  for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
+  if(!ocupados.length){ toast('Nenhum leito ocupado para gerar a passagem.', true); return; }
 
   toast('⏳ Coletando dados das evoluções...');
   const registros = [];
@@ -568,26 +597,116 @@ async function atualizarPassagemPlantao(){
       if(dado && dado.paciente) registros.push(dado);
     } catch(e){ console.warn('Passagem leito '+n+':', e); }
   }
+  registros.sort((a,b)=>a.leito-b.leito);
 
   if(!registros.length){ toast('Nenhuma evolução encontrada para os leitos ocupados.', true); return; }
 
-  toast('⏳ Enviando '+registros.length+' leito(s) para a planilha...');
+  _passagemRegistros = registros;
+  _passagemAbrirModal();
+}
+
+// Renderiza o modal com um bloco editável por leito.
+function _passagemAbrirModal(){
+  const modal = document.getElementById('modal-passagem');
+  const corpo = document.getElementById('passagem-corpo');
+  document.getElementById('passagem-sub').textContent =
+    `${turno} · ${dataDoTurno().split('-').reverse().join('/')} · ${_passagemRegistros.length} leito(s)`;
+
+  corpo.innerHTML = _passagemRegistros.map((r, i) => {
+    const camposHtml = PASSAGEM_CAMPOS.map(c => {
+      const valor = _esc(r[c.id]||'');
+      const estilo = c.destaque ? 'border-color:#ffd54f;background:#fffdf5;' : '';
+      if(c.tag==='textarea'){
+        return `<div style="margin-bottom:7px;">
+          <label style="display:block;font-size:.7rem;font-weight:700;color:var(--azul);margin-bottom:2px;">${c.label}</label>
+          <textarea data-leito="${r.leito}" data-campo="${c.id}" rows="2" style="width:100%;font-size:.78rem;${estilo}" oninput="_passagemAtualizarCampo(this)">${valor}</textarea>
+        </div>`;
+      }
+      return `<div style="margin-bottom:7px;">
+        <label style="display:block;font-size:.7rem;font-weight:700;color:var(--azul);margin-bottom:2px;">${c.label}</label>
+        <input type="text" data-leito="${r.leito}" data-campo="${c.id}" value="${valor}" style="width:100%;font-size:.78rem;${estilo}" oninput="_passagemAtualizarCampo(this)">
+      </div>`;
+    }).join('');
+
+    return `<div style="border:1.5px solid #d6e4f5;border-radius:10px;padding:10px 13px;margin-bottom:10px;background:${i%2?'#fafcff':'#fff'};">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <span style="background:var(--azul);color:#fff;font-weight:800;font-size:.78rem;padding:3px 10px;border-radius:7px;">LEITO ${pad(r.leito)}</span>
+        <input type="text" data-leito="${r.leito}" data-campo="paciente" value="${_esc(r.paciente)}" placeholder="Paciente" style="flex:1;min-width:160px;font-weight:700;font-size:.82rem;" oninput="_passagemAtualizarCampo(this)">
+      </div>
+      ${camposHtml}
+    </div>`;
+  }).join('');
+
+  modal.classList.add('show');
+}
+
+function _passagemFecharModal(){ document.getElementById('modal-passagem').classList.remove('show'); }
+
+// Atualiza o estado em memória conforme o usuário edita os campos do modal.
+function _passagemAtualizarCampo(el){
+  const leito = parseInt(el.dataset.leito);
+  const campo = el.dataset.campo;
+  const r = _passagemRegistros.find(x=>x.leito===leito);
+  if(r) r[campo] = el.value;
+}
+
+// Salva o estado atual (permite fechar e continuar depois) sem imprimir.
+async function _passagemSalvar(){
   try {
-    const resp = await _apsFetch({
-      action: 'atualizar_passagem',
-      sheetId: PASSAGEM_SHEET_ID,
-      aba: 'UTI GERAL',
-      data: dataDoTurno(),
-      registros
+    await dbSet(_passagemChaveAtual, {
+      data: dataDoTurno(), turno, registros: _passagemRegistros,
+      salvoPor: usuarioEmail, salvoEm: new Date().toISOString()
     });
-    if(resp && resp.status==='ok'){
-      toast('✓ Passagem atualizada: '+(resp.atualizados||registros.length)+' leito(s)');
-    } else {
-      toast('Erro do servidor: '+((resp&&resp.msg)||'resposta inesperada'), true);
-    }
-  } catch(e){
-    toast('Erro ao enviar para a planilha: '+e.message, true);
-  }
+    toast('✓ Passagem salva. Pode continuar editando depois pelo mesmo botão.');
+  } catch(e){ toast('Erro ao salvar: '+e.message, true); }
+}
+
+// Salva e abre a impressão (leiaute em blocos, igual à planilha antiga).
+async function _passagemSalvarEImprimir(){
+  await _passagemSalvar();
+  _passagemImprimir();
+}
+
+// Gera a janela de impressão a partir do estado atual (_passagemRegistros).
+function _passagemImprimir(){
+  const dataBR = dataDoTurno().split('-').reverse().join('/');
+  const blocos = _passagemRegistros.map(r => `
+    <table class="bloco">
+      <tr><td class="lbl" style="width:14%;">PACIENTE</td><td colspan="3">${_esc(r.paciente)||'&nbsp;'}</td></tr>
+      <tr>
+        <td class="lbl">IDADE/DN</td><td style="width:20%;">${_esc(r.dn)||'&nbsp;'}</td>
+        <td class="lbl" style="width:14%;">LEITO</td><td style="width:16%;font-weight:bold;">${pad(r.leito)}</td>
+      </tr>
+      <tr><td class="lbl">DIAGNÓSTICO</td><td colspan="3">${_esc(r.diagnostico)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">COMORBIDADES</td><td colspan="3">${_esc(r.comorbidades)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">DISPOSITIVOS</td><td colspan="3">${_esc(r.dispositivos)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">ANTIBIÓTICO</td><td colspan="3">${_esc(r.antibiotico)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">ELIMINAÇÕES</td><td colspan="3">${_esc(r.eliminacoes)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">LESÃO</td><td colspan="3">${_esc(r.lesao)||'&nbsp;'}</td></tr>
+      <tr class="destaque"><td class="lbl">PENDÊNCIAS</td><td colspan="3">${_esc(r.pendencias)||'&nbsp;'}</td></tr>
+      <tr class="destaque"><td class="lbl">OBSERVAÇÃO</td><td colspan="3">${_esc(r.observacoes)||'&nbsp;'}</td></tr>
+    </table>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Passagem de Plantão — ${turno} ${dataBR}</title>
+  <style>
+    @page { size:A4; margin:10mm; }
+    *{box-sizing:border-box;}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:10px;margin:0;}
+    h1{font-size:13px;text-align:center;margin:0 0 10px;}
+    table.bloco{width:100%;border-collapse:collapse;margin-bottom:8px;page-break-inside:avoid;}
+    table.bloco td{border:1px solid #000;padding:3px 6px;vertical-align:top;font-size:9.5px;}
+    td.lbl{font-weight:bold;background:#f0f0f0;}
+    tr.destaque td.lbl{background:#fff3cd;}
+    @media print{ button{display:none;} }
+  </style></head><body>
+    <h1>PASSAGEM DE PLANTÃO — UTI GERAL — ${turno} — ${dataBR}</h1>
+    ${blocos}
+    <script>setTimeout(function(){window.print();},400);</script>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  if(!win){ alert('Permita pop-ups para imprimir a passagem.'); return; }
+  win.document.write(html); win.document.close(); win.focus();
 }
 
 // ── Notificação ao Núcleo de Segurança do Paciente (NSP) ─────────────────────
