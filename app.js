@@ -670,12 +670,23 @@ async function _passagemSalvarEImprimir(){
 // Gera a janela de impressão a partir do estado atual (_passagemRegistros).
 function _passagemImprimir(){
   const dataBR = dataDoTurno().split('-').reverse().join('/');
-  const blocos = _passagemRegistros.map(r => `
+
+  const blocos = _passagemRegistros.map(r => {
+    // DN: converter de YYYY-MM-DD para DD/MM/AAAA
+    const dnBR = r.dn ? fmtD(r.dn) : '&nbsp;';
+    // Calcular idade a partir do DN
+    const idadeTxt = r.dn ? (_calcIdade(r.dn) + ' anos') : '&nbsp;';
+
+    return `
     <table class="bloco">
-      <tr><td class="lbl" style="width:14%;">PACIENTE</td><td colspan="3">${_esc(r.paciente)||'&nbsp;'}</td></tr>
       <tr>
-        <td class="lbl">IDADE/DN</td><td style="width:20%;">${_esc(r.dn)||'&nbsp;'}</td>
-        <td class="lbl" style="width:14%;">LEITO</td><td style="width:16%;font-weight:bold;">${pad(r.leito)}</td>
+        <td class="lbl leito-cel" colspan="4">LEITO ${pad(r.leito)} — ${_esc(r.paciente)||'&nbsp;'}</td>
+      </tr>
+      <tr>
+        <td class="lbl" style="width:14%;">DN</td>
+        <td style="width:22%;">${dnBR}</td>
+        <td class="lbl" style="width:14%;">IDADE</td>
+        <td style="width:50%;">${idadeTxt}</td>
       </tr>
       <tr><td class="lbl">DIAGNÓSTICO</td><td colspan="3">${_esc(r.diagnostico)||'&nbsp;'}</td></tr>
       <tr><td class="lbl">COMORBIDADES</td><td colspan="3">${_esc(r.comorbidades)||'&nbsp;'}</td></tr>
@@ -685,23 +696,39 @@ function _passagemImprimir(){
       <tr><td class="lbl">LESÃO</td><td colspan="3">${_esc(r.lesao)||'&nbsp;'}</td></tr>
       <tr class="destaque"><td class="lbl">PENDÊNCIAS</td><td colspan="3">${_esc(r.pendencias)||'&nbsp;'}</td></tr>
       <tr class="destaque"><td class="lbl">OBSERVAÇÃO</td><td colspan="3">${_esc(r.observacoes)||'&nbsp;'}</td></tr>
-    </table>`).join('');
+    </table>`;
+  }).join('');
 
   const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Passagem de Plantão — ${turno} ${dataBR}</title>
   <style>
-    @page { size:A4; margin:10mm; }
+    @page { size:A4; margin:8mm; }
     *{box-sizing:border-box;}
-    body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:10px;margin:0;}
-    h1{font-size:13px;text-align:center;margin:0 0 10px;}
-    table.bloco{width:100%;border-collapse:collapse;margin-bottom:8px;page-break-inside:avoid;}
-    table.bloco td{border:1px solid #000;padding:3px 6px;vertical-align:top;font-size:9.5px;}
-    td.lbl{font-weight:bold;background:#f0f0f0;}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:8.5px;margin:0;}
+    h1{font-size:11px;text-align:center;margin:0 0 6px;font-weight:bold;}
+    /* Layout em 2 colunas para caber até 10 leitos em 2 páginas */
+    .grade{
+      columns:2;
+      column-gap:6mm;
+      column-fill:auto; /* preenche coluna por coluna, não balanceia */
+    }
+    table.bloco{
+      width:100%;
+      border-collapse:collapse;
+      margin-bottom:5px;
+      break-inside:avoid;
+      -webkit-column-break-inside:avoid;
+    }
+    table.bloco td{border:1px solid #000;padding:2px 4px;vertical-align:top;font-size:8px;}
+    td.lbl{font-weight:bold;background:#f0f0f0;white-space:nowrap;}
+    td.leito-cel{background:#0d47a1;color:#fff;font-weight:bold;font-size:9px;text-align:center;}
     tr.destaque td.lbl{background:#fff3cd;}
     @media print{ button{display:none;} }
   </style></head><body>
     <h1>PASSAGEM DE PLANTÃO — UTI GERAL — ${turno} — ${dataBR}</h1>
-    ${blocos}
-    <script>setTimeout(function(){window.print();},400);</script>
+    <div class="grade">
+      ${blocos}
+    </div>
+    <script>setTimeout(function(){window.print();},400);<\/script>
   </body></html>`;
 
   const win = window.open('', '_blank');
