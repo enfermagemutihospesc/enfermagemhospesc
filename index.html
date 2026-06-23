@@ -1020,24 +1020,33 @@
   </div>
 </div>
 
-<!-- MODAL EMITIR DOCUMENTOS (Técnico + Decúbito + Balanço) — seleção de data -->
+<!-- MODAL EMITIR DOCUMENTOS — seleção de data + dois botões de impressão -->
 <div class="overlay" id="modal-emitir-doc">
-  <div class="modal" style="max-width:420px;">
+  <div class="modal" style="max-width:440px;">
     <div class="modal-header" style="background:linear-gradient(135deg,#6a1b9a,#8e24aa);color:white;">
       <h3 style="color:white;margin:0;">📑 Emitir Documentos</h3>
       <button class="modal-close" style="color:white;" onclick="fecharModalEmitirDocumentos()">×</button>
     </div>
-    <div class="modal-body" style="padding:16px;">
-      <p style="font-size:.82rem;color:var(--muted);margin-top:0;">
-        Gera, para todos os leitos ocupados: <strong>Anotações do Técnico de Enfermagem</strong> (2 páginas, frente e verso),
-        <strong>Mudança de Decúbito</strong> e <strong>Balanço Hídrico</strong>. Só o cabeçalho é preenchido — o restante fica em branco.
-      </p>
-      <label style="display:block;font-size:.78rem;font-weight:700;color:var(--azul);margin-bottom:4px;">Data de referência dos formulários</label>
+    <div class="modal-body" style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      <label style="display:block;font-size:.78rem;font-weight:700;color:var(--azul);margin-bottom:0;">Data de referência dos formulários</label>
       <input type="date" id="emitir-doc-data" style="width:100%;">
+
+      <!-- Bloco 1: Técnico -->
+      <div style="background:#f3e5f5;border:1px solid #e1bee7;border-radius:8px;padding:12px;">
+        <div style="font-size:.8rem;font-weight:700;color:#6a1b9a;margin-bottom:4px;">📋 Anotações do Técnico de Enfermagem</div>
+        <p style="font-size:.75rem;color:var(--muted);margin:0 0 10px;">2 páginas por leito (frente e verso) — impressão em <strong>retrato</strong>. Só o cabeçalho é preenchido.</p>
+        <button class="btn btn-sm" style="background:#6a1b9a;color:white;width:100%;" onclick="confirmarEmitirTecnico()">🖨 Imprimir Anotações do Técnico</button>
+      </div>
+
+      <!-- Bloco 2: Balanço + Decúbito -->
+      <div style="background:#e0f2f1;border:1px solid #b2dfdb;border-radius:8px;padding:12px;">
+        <div style="font-size:.8rem;font-weight:700;color:#00695c;margin-bottom:4px;">📊 Balanço Hídrico + Mudança de Decúbito</div>
+        <p style="font-size:.75rem;color:var(--muted);margin:0 0 10px;">Impressão em <strong>paisagem (A4 horizontal)</strong> — 2 páginas por leito. Só o cabeçalho é preenchido.</p>
+        <button class="btn btn-sm" style="background:#00695c;color:white;width:100%;" onclick="confirmarEmitirBalancoDecubito()">🖨 Imprimir Balanço + Decúbito</button>
+      </div>
     </div>
-    <div class="modal-footer" style="background:#f3e5f5;border-top:1px solid #e1bee7;display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;">
-      <button class="btn btn-sec btn-sm" onclick="fecharModalEmitirDocumentos()">Cancelar</button>
-      <button class="btn btn-sm" style="background:#6a1b9a;color:white;" onclick="confirmarEmitirDocumentos()">🖨 Emitir</button>
+    <div class="modal-footer" style="background:#fafafa;border-top:1px solid #eee;display:flex;justify-content:flex-end;padding:10px 16px;">
+      <button class="btn btn-sec btn-sm" onclick="fecharModalEmitirDocumentos()">Fechar</button>
     </div>
   </div>
 </div>
