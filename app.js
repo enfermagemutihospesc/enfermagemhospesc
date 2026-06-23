@@ -709,6 +709,389 @@ function _passagemImprimir(){
   win.document.write(html); win.document.close(); win.focus();
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// ANOTAÇÕES DO TÉCNICO DE ENFERMAGEM (documento de 2 páginas, frente e verso)
+// ────────────────────────────────────────────────────────────────────────────
+// Apenas o CABEÇALHO de identificação é alimentado pelo sistema (nome, DN,
+// idade, diagnóstico, comorbidades, datas de admissão, leito, setor, data do
+// plantão). Todo o restante (checklists de riscos, dispositivos, ventilação,
+// dieta, eliminações, integridade da pele, cuidados gerais e as anotações de
+// enfermagem em si) permanece em branco para o técnico preencher à mão.
+// Página 1 = ficha de checklist · Página 2 = anotações + assinaturas.
+// Impressas em sequência (pág.1, pág.2, pág.1, pág.2...) para saírem como
+// frente e verso de UMA folha por paciente quando a impressora estiver
+// configurada em modo duplex.
+
+// Gera o HTML das duas páginas de um leito a partir dos dados de admissão.
+function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
+  const idade = dados.dn ? _calcIdade(dados.dn) : null;
+  const idadeTxt = idade!==null ? idade+'  ANOS' : '';
+  const dnBR   = dados.dn       ? fmtD(dados.dn)       : '';
+  const admBR  = dados.adm      ? fmtD(dados.adm)      : '';
+  const admHBR = dados.admHosp  ? fmtD(dados.admHosp)  : '';
+  const dataBR = (dataRef||dataDoTurno()).split('-').reverse().join('/');
+  const chk = '(&nbsp;&nbsp;&nbsp;)';   // checkbox vazio, preenchido à mão
+
+  // ── PÁGINA 1 — ficha de checklist (cabeçalho preenchido + restante em branco) ──
+  const pg1 = `
+  <div class="tec-pg">
+    <div class="tec-top">
+      <div class="tec-logo">${_logoImg(70)}</div>
+      <div class="tec-orgao">PREFEITURA MUNICIPAL DO NATAL<br>HOSPITAL DOS PESCADORES</div>
+      <div class="tec-data">DATA: ${dataBR}</div>
+    </div>
+    <table class="tec-tb">
+      <tr><td colspan="4" class="tec-faixa">LEITO: ${pad(leito)} &nbsp;&nbsp;&nbsp; SETOR: UTI GERAL</td></tr>
+      <tr><td colspan="4" class="tec-tit">ANOTAÇÕES DO TÉCNICO DE ENFERMAGEM</td></tr>
+      <tr>
+        <td class="tec-lbl" style="width:60%;">NOME: <span class="tec-val">${_esc(dados.pac)||'&nbsp;'}</span></td>
+        <td class="tec-lbl" style="width:20%;">DN: <span class="tec-val">${dnBR||'&nbsp;'}</span></td>
+        <td class="tec-lbl" style="width:20%;">IDADE: <span class="tec-val">${idadeTxt||'&nbsp;'}</span></td>
+      </tr>
+      <tr>
+        <td colspan="2" class="tec-lbl">DIAGNÓSTICO: <span class="tec-val">${_esc(dados.diag)||'&nbsp;'}</span></td>
+        <td class="tec-lbl">DATA ADMISSÃO UTI: <span class="tec-val">${admBR||'&nbsp;'}</span></td>
+      </tr>
+      <tr>
+        <td colspan="2" class="tec-lbl">COMORBIDADES: <span class="tec-val">${_esc(dados.comor)||'&nbsp;'}</span></td>
+        <td class="tec-lbl">DATA ADMISSÃO HOSPESC: <span class="tec-val">${admHBR||'&nbsp;'}</span></td>
+      </tr>
+      <tr>
+        <td colspan="3" class="tec-lbl">ALERGIAS: ${chk} SIM &nbsp; ${chk} NÃO &nbsp; QUAIS? ____________________ &nbsp; ${chk} SEM INFORMAÇÃO</td>
+      </tr>
+      <tr><td colspan="3" class="tec-lbl">ESTÁ COM PULSEIRA DE IDENTIFICAÇÃO? ${chk} SIM &nbsp; ${chk} NÃO</td></tr>
+      <tr><td colspan="3" class="tec-lbl">ISOLAMENTO: ${chk} SIM &nbsp; ${chk} NÃO &nbsp;&nbsp; VIGILÂNCIA ${chk} &nbsp; CONTATO ${chk} &nbsp; GOTÍCULAS ${chk} &nbsp; AEROSSÓIS ${chk} &nbsp; MICRO-ORGANISMO: ___________________</td></tr>
+      <tr><td colspan="3" class="tec-lbl">GRAU DE DEPENDÊNCIA: ${chk} INDEPENDENTE &nbsp; ${chk} PARCIALMENTE DEPENDENTE &nbsp; ${chk} DEPENDENTE &nbsp;&nbsp; DEAMBULA? ${chk} SIM ${chk} NÃO &nbsp;&nbsp; CADEIRA DE RODAS? ${chk} SIM ${chk} NÃO</td></tr>
+    </table>
+
+    <table class="tec-tb">
+      <tr><td colspan="2" class="tec-sec">RISCOS ASSISTENCIAIS</td></tr>
+      <tr>
+        <td class="tec-c1">QUEDAS</td>
+        <td>GRADES DO LEITO ELEVADAS? ${chk} SIM ${chk} NÃO<br>
+            NECESSITA DE CONTENÇÃO MECÂNICA? ${chk} SIM ${chk} NÃO<br>
+            CONTENÇÃO SEM APERTAR/GARROTEAR? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            TROCADA CONTENÇÃO HOJE? ${chk} SIM ${chk} NÃO ${chk} N/A — SE NÃO, REALIZAR TROCA!</td>
+      </tr>
+      <tr>
+        <td class="tec-c1">LESÃO POR PRESSÃO (LPP)</td>
+        <td>USO DE COLCHÃO DE AR? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            CALCÂNEOS SUSPENSOS? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            APLICADO HIDRATANTE NA PELE? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            APLICADO PROTETOR CUTÂNEO NAS TROCAS DE FRALDA? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            MUDANÇA DE DECÚBITO CONFORME ORIENTAÇÃO (2/2H; 3/3H)? ${chk} SIM ${chk} NÃO ${chk} N/A</td>
+      </tr>
+    </table>
+
+    <table class="tec-tb tec-grid3">
+      <tr>
+        <th>NÍVEL DE CONSCIÊNCIA</th><th class="tec-dn">D</th><th class="tec-dn">N</th>
+        <th>ELIMINAÇÕES INTESTINAIS</th><th class="tec-dn">D</th><th class="tec-dn">N</th>
+        <th colspan="2">HIDRATAÇÃO VENOSA</th>
+      </tr>
+      <tr><td>CONSCIENTE</td><td></td><td></td><td>PRESENTE</td><td></td><td></td><td colspan="2" rowspan="6" style="vertical-align:top;">
+        ${chk} SRS &nbsp; ${chk} SRL &nbsp; ${chk} SF 0,9% &nbsp; ${chk} SG 5%<br>M____/T____/N____ ml/h &nbsp; ${chk} NENHUMA
+        <div class="tec-sec" style="margin-top:6px;">DROGAS EM BOMBAS DE INFUSÃO</div>
+        <table class="tec-mini"><tr><th></th><th>M</th><th>T</th><th>N</th></tr>
+        ${[1,2,3,4,5,6].map(n=>`<tr><td>${n}. VAZÃO</td><td></td><td></td><td></td></tr>`).join('')}
+        </table>
+      </td></tr>
+      <tr><td>ORIENTADO</td><td></td><td></td><td>AUSENTE</td><td></td><td></td></tr>
+      <tr><td>DESORIENTADO</td><td></td><td></td><td>ESPONTÂNEA – BANHEIRO</td><td></td><td></td></tr>
+      <tr><td>SONOLENTO</td><td></td><td></td><td>ESPONTÂNEA – FRALDA</td><td></td><td></td></tr>
+      <tr><td>COMATOSO</td><td></td><td></td><td>COLOSTOMIA</td><td></td><td></td></tr>
+      <tr><td>SEDADO</td><td></td><td></td><td>ILEOSTOMIA</td><td></td><td></td></tr>
+    </table>
+
+    <table class="tec-tb tec-grid3">
+      <tr><th>VENTILAÇÃO PULMONAR</th><th colspan="2">DISPOSITIVOS MÉDICOS</th><th colspan="2">CUIDADOS GERAIS</th></tr>
+      <tr><td>AR AMBIENTE ${chk}</td><td colspan="2">TOT ${chk} SIM ${chk} NÃO</td>
+          <td colspan="2" rowspan="9" style="vertical-align:top;">
+            BANHO: ${chk} DIURNO ${chk} NOTURNO ${chk} LEITO ${chk} ASPERSÃO C/ AUXÍLIO ${chk} ASPERSÃO SEM AUXÍLIO<br>
+            HIGIENE ORAL REALIZADA? ${chk} SIM ${chk} NÃO<br>
+            POLIFIX SEM RESÍDUO DE SANGUE? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            CURATIVO DO ACESSO VENOSO LIMPO? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            EQUIPOS DATADOS? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            EQUIPOS PRECISAM SER TROCADOS? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            BOLSA COLETORA DA SVD ABAIXO DA BEXIGA E SEM TOCAR O CHÃO? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            SVD FIXADA NO PACIENTE? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+            HIGIENE DO MEATO URETRAL REALIZADA? ${chk} SIM ${chk} NÃO ${chk} N/A
+          </td></tr>
+      <tr><td>C.N.: ____ L/MIN</td><td colspan="2">SEM ACESSO VENOSO ${chk} SIM ${chk} NÃO</td></tr>
+      <tr><td>M.V.: ____ %</td><td colspan="2">AVP LOCAL: __________ DATA: ____/____/______</td></tr>
+      <tr><td>MÁSC. NÃO REINALANTE ____ L/MIN</td><td colspan="2">AVC LOCAL: __________ DATA CURATIVO: ____/____/______ &nbsp; ${chk} FILME ${chk} GAZE+MICROPORE</td></tr>
+      <tr><td>VNI: ${chk} BIPAP ${chk} HELMET</td><td colspan="2" rowspan="2">CDL P/ HD LOCAL: __________ DATA CURATIVO: ____/____/______</td></tr>
+      <tr><td>VENTILAÇÃO MECÂNICA INVASIVA ${chk}</td></tr>
+      <tr><td>TRAQUEOSTOMIA ${chk}</td><td colspan="2">DRENO DE TÓRAX ${chk} D ${chk} E &nbsp; INSERÇÃO: ____/____/______ &nbsp; DÉBITO APÓS TROCA SELO D'ÁGUA 06H: _______</td></tr>
+      <tr><td colspan="3"></td></tr>
+      <tr><td colspan="3"></td></tr>
+    </table>
+
+    <table class="tec-tb tec-grid3">
+      <tr><th>DIETA</th><th colspan="2">DIURESE</th><th colspan="2">ASPECTOS DA URINA</th></tr>
+      <tr><td>ORAL ${chk}</td><td colspan="2">PRESENTE ${chk}</td><td colspan="2" rowspan="6" style="vertical-align:top;">
+        CLARA ${chk} &nbsp; CONCENTRADA ${chk} &nbsp; COLÚRIA ${chk}<br>HEMATÚRIA ${chk} &nbsp; PIÚRIA ${chk} &nbsp; OUTRO: ____________
+      </td></tr>
+      <tr><td>SNE VAZÃO: ______</td><td colspan="2">AUSENTE ${chk}</td></tr>
+      <tr><td>SOE VAZÃO: ______</td><td colspan="2">ESPONTÂNEA – BANHEIRO ${chk}</td></tr>
+      <tr><td>SNG VAZÃO: ______</td><td colspan="2">ESPONTÂNEA – FRALDA ${chk}</td></tr>
+      <tr><td>GTM VAZÃO: ______</td><td colspan="2">DISP. NÃO INVASIVO (JONTEX) ${chk} &nbsp; APARADEIRA/PAPAGARO ${chk}</td></tr>
+      <tr><td>JEJUNOSTOMIA ${chk} &nbsp; ZERO ATÉ 2ª ORDEM ${chk}</td><td colspan="2">SVD ${chk} &nbsp; CISTOSTOMIA ${chk} &nbsp; NEFROSTOMIA ${chk} D ${chk} E</td></tr>
+    </table>
+
+    <table class="tec-tb tec-grid3">
+      <tr><th colspan="2">INTEGRIDADE DA PELE E MUCOSAS</th><th colspan="3">LESÕES E CURATIVOS</th></tr>
+      <tr><td colspan="2">${chk} PELE ÍNTEGRA &nbsp;&nbsp; ${chk} PELE NÃO ÍNTEGRA<br>LESÃO EM MUCOSA? ${chk} SIM ${chk} NÃO &nbsp; DESCRIÇÃO: ___________________________</td>
+          <td colspan="3" rowspan="2" style="height:34px;"></td></tr>
+      <tr><td colspan="2">FIXAÇÃO DO TOT LIMPA? ${chk} SIM ${chk} NÃO ${chk} N/A &nbsp;&nbsp; SNE/SNG COM FIXAÇÃO LIMPA? ${chk} SIM ${chk} NÃO ${chk} N/A<br>TROCADA FIXAÇÃO DO TOT/TQT? ${chk} SIM ${chk} NÃO ${chk} N/A &nbsp;&nbsp; CABECEIRA ELEVADA A 30°? ${chk} SIM ${chk} NÃO</td></tr>
+    </table>
+  </div>`;
+
+  // ── PÁGINA 2 — anotações de enfermagem (em branco) + assinaturas ──
+  const linhas = Array.from({length:30}, ()=> '<tr><td class="tec-hor"></td><td></td><td></td></tr>').join('');
+  const pg2 = `
+  <div class="tec-pg">
+    <div class="tec-top">
+      <div class="tec-logo">${_logoImg(60)}</div>
+      <div class="tec-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</div>
+      <div class="tec-data">LEITO ${pad(leito)} — ${dataBR}</div>
+    </div>
+    <div class="tec-sec" style="text-align:center;">ANOTAÇÕES DE ENFERMAGEM</div>
+    <table class="tec-tb tec-anot">
+      <tr><th style="width:12%;">HORÁRIO</th><th>DESCRIÇÃO</th><th style="width:24%;">ASSINATURA + CARIMBO DO TÉC. DE ENF.</th></tr>
+      ${linhas}
+    </table>
+    <table class="tec-tb" style="margin-top:8px;">
+      <tr><td colspan="3" class="tec-sec">ASSINATURA + CARIMBO DO ENFERMEIRO DO PLANTÃO</td></tr>
+      <tr><td style="height:34px;width:33.3%;"></td><td style="width:33.3%;"></td><td style="width:33.4%;"></td></tr>
+      <tr><td class="tec-c1" style="text-align:center;">MANHÃ</td><td class="tec-c1" style="text-align:center;">TARDE</td><td class="tec-c1" style="text-align:center;">NOITE</td></tr>
+    </table>
+  </div>`;
+
+  return pg1 + pg2;
+}
+
+// CSS de impressão das Anotações do Técnico (compartilhado por todas as páginas)
+const TEC_ANOTACOES_CSS = `
+  @page { size:A4; margin:8mm; }
+  *{box-sizing:border-box;}
+  body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:9px;margin:0;}
+  .tec-pg{ page-break-after: always; }
+  .tec-pg:last-child{ page-break-after: auto; }
+  .tec-top{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .tec-logo img{height:42px;width:auto;}
+  .tec-orgao{flex:1;text-align:center;font-weight:bold;font-size:11px;}
+  .tec-data{font-weight:bold;font-size:10px;white-space:nowrap;}
+  table.tec-tb{width:100%;border-collapse:collapse;margin-bottom:5px;}
+  table.tec-tb td, table.tec-tb th{border:1px solid #000;padding:2.5px 5px;vertical-align:top;font-size:8.5px;}
+  table.tec-tb th{background:#eee;font-size:8px;text-align:center;}
+  .tec-faixa{background:#0d47a1;color:#fff;font-weight:bold;text-align:center;font-size:10px;}
+  .tec-tit{background:#e8e8e8;font-weight:bold;text-align:center;font-size:10px;}
+  .tec-sec{background:#dce6f1;font-weight:bold;text-align:center;text-transform:uppercase;font-size:9px;}
+  .tec-lbl{font-weight:bold;}
+  .tec-val{font-weight:normal;}
+  .tec-c1{font-weight:bold;width:16%;}
+  .tec-dn{width:4%;text-align:center;}
+  .tec-grid3 td, .tec-grid3 th{font-size:8px;}
+  table.tec-mini{width:100%;border-collapse:collapse;margin-top:3px;}
+  table.tec-mini td, table.tec-mini th{border:1px solid #999;padding:1px 3px;font-size:7.5px;}
+  table.tec-anot td{height:15px;}
+  td.tec-hor{text-align:center;}
+  @media print{ button{display:none;} }
+`;
+
+// ════════════════════════════════════════════════════════════════════════════
+// MUDANÇA DE DECÚBITO (1 página) + BALANÇO HÍDRICO (1 página)
+// ────────────────────────────────────────────────────────────────────────────
+// Mesmo princípio das Anotações do Técnico: só o cabeçalho de identificação é
+// preenchido pelo sistema; as tabelas horárias ficam em branco para
+// preenchimento manual durante o plantão.
+
+// Horários fixos da Mudança de Decúbito (a cada 2h, ciclo de 24h a partir das 06h)
+const DECUBITO_HORARIOS = ['06:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00','22:00','00:00','02:00','04:00'];
+
+function _decubitoHtmlLeito(leito, dados, dataRef){
+  const dataBR = dataRef.split('-').reverse().join('/');
+  const [y,m,d] = dataRef.split('-').map(Number);
+  const dataMais1 = new Date(y, m-1, d+1);
+  const dataMais1BR = dataMais1.getDate().toString().padStart(2,'0')+'/'+(dataMais1.getMonth()+1).toString().padStart(2,'0')+'/'+dataMais1.getFullYear();
+
+  const linhas = DECUBITO_HORARIOS.map(h => {
+    const diaLinha = (h==='00:00'||h==='02:00'||h==='04:00') ? dataMais1BR : dataBR;
+    return `<tr>
+      <td class="tec-hor">${diaLinha}</td>
+      <td class="tec-hor">${h}</td>
+      <td>DORSAL (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL E (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL D (&nbsp;&nbsp;&nbsp;)</td>
+      <td></td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="tec-pg">
+    <div class="tec-top">
+      <div class="tec-logo">${_logoImg(60)}</div>
+      <div class="tec-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</div>
+      <div class="tec-data">LEITO ${pad(leito)} — ${dataBR}</div>
+    </div>
+    <div class="tec-sec" style="text-align:center;">REGISTRO DE MUDANÇA POSTURAL</div>
+    <table class="tec-tb">
+      <tr><td class="tec-lbl" style="width:75%;">PACIENTE: <span class="tec-val">${_esc(dados.pac)||'&nbsp;'}</span></td>
+          <td class="tec-lbl">UTI GERAL — LEITO ${pad(leito)}</td></tr>
+    </table>
+    <table class="tec-tb tec-anot">
+      <tr><th style="width:13%;">DATA</th><th style="width:9%;">HORA</th><th>POSICIONAMENTO</th><th style="width:20%;">ASSINATURA PROFISSIONAL</th></tr>
+      ${linhas}
+    </table>
+    <table class="tec-tb" style="margin-top:8px;">
+      <tr><td style="width:60%;">ENFERMEIRO: _______________________________________________</td>
+          <td>DATA: ${dataBR}</td></tr>
+    </table>
+  </div>`;
+}
+
+// Blocos horários do Balanço Hídrico: 4 blocos de 6h cada (07h-12h, 13h-18h, 19h-24h, 01h-06h),
+// reproduzindo fielmente a planilha original (sub-totais após os blocos 1, 2 e 4; total geral ao final).
+const BALANCO_BLOCOS = [
+  { horas:[7,8,9,10,11,12],  subtotal:true  },
+  { horas:[13,14,15,16,17,18], subtotal:true },
+  { horas:[19,20,21,22,23,24], subtotal:false },
+  { horas:[1,2,3,4,5,6],     subtotal:true, totalFinal:true },
+];
+
+function _balancoHtmlLeito(leito, dados, dataRef){
+  const dataBR = dataRef.split('-').reverse().join('/');
+  const idade = dados.dn ? _calcIdade(dados.dn) : null;
+  const idadeTxt = idade!==null ? idade+' A' : '';
+  const dnBR = dados.dn ? fmtD(dados.dn) : '';
+
+  const linhasHora = (horas) => horas.map(h => `
+    <tr><td class="bh-h">${String(h).padStart(2,'0')}h</td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td></td><td></td><td></td><td></td><td></td>
+      <td></td><td></td><td></td><td></td><td></td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>`).join('');
+
+  const blocos = BALANCO_BLOCOS.map(b => {
+    let h = linhasHora(b.horas);
+    if(b.subtotal){
+      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">SUB-TOTAIS</td><td colspan="5"></td>
+        <td colspan="5" style="text-align:right;">BALANÇO PARCIAL</td><td colspan="5"></td></tr>`;
+    }
+    if(b.totalFinal){
+      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">TOTAIS</td><td colspan="5"></td>
+        <td colspan="5" style="text-align:right;">BALANÇO TOTAL</td><td colspan="5"></td></tr>`;
+    }
+    return h;
+  }).join('');
+
+  return `
+  <div class="tec-pg">
+    <table class="tec-tb bh-cab">
+      <tr>
+        <td class="tec-lbl" style="width:34%;">PACIENTE: <span class="tec-val">${_esc(dados.pac)||'&nbsp;'}</span></td>
+        <td class="tec-lbl" style="width:8%;">SEXO: <span class="tec-val"></span></td>
+        <td class="tec-lbl" style="width:14%;">ALERGIA: <span class="tec-val">${_esc(dados.alergia)||'&nbsp;'}</span></td>
+        <td class="tec-lbl" style="width:9%;">IDADE: <span class="tec-val">${idadeTxt}</span></td>
+        <td class="tec-lbl" style="width:8%;">DN: <span class="tec-val">${dnBR}</span></td>
+        <td class="tec-lbl" style="width:8%;">LEITO: <span class="tec-val">${pad(leito)}</span></td>
+        <td class="tec-lbl" style="width:9%;">DATA: <span class="tec-val">${dataBR}</span></td>
+      </tr>
+      <tr><td colspan="2" class="tec-lbl">DIAGNÓSTICO: <span class="tec-val">${_esc(dados.diag)||'&nbsp;'}</span></td>
+          <td colspan="5" class="tec-lbl">UNIDADE DE TERAPIA INTENSIVA — UTI GERAL</td></tr>
+      <tr><td colspan="7" class="tec-lbl" style="height:20px;">OBSERVAÇÕES: </td></tr>
+    </table>
+    <table class="tec-tb bh-grid">
+      <tr>
+        <th rowspan="2">HORA</th>
+        <th colspan="7">SINAIS VITAIS</th>
+        <th colspan="5">CONTROLE HÍDRICO — INFUNDIDO</th>
+        <th colspan="5">CONTROLE HÍDRICO — ELIMINADO</th>
+        <th colspan="5">CUIDADOS ESPECIAIS</th>
+      </tr>
+      <tr>
+        <th>T</th><th>FR</th><th>FC</th><th>PA</th><th>PAM</th><th>PVC</th><th>SPO²</th>
+        <th>ORAL/MED.</th><th>SNG/SNE</th><th>SORO</th><th>MED. EV</th><th>SANGUE/DERIV.</th>
+        <th>DIURESE</th><th>DREN. GÁSTR.</th><th>FEZES</th><th>VÔMITOS</th><th>DRENO</th>
+        <th>FIO²</th><th>HGT</th><th>HIG. ORAL</th><th>HIG. MEATO</th><th>DECÚBITO</th>
+      </tr>
+      ${blocos}
+    </table>
+  </div>`;
+}
+
+// CSS específico das tabelas horárias do Balanço Hídrico (denso, muitas colunas)
+const BALANCO_CSS = `
+  table.bh-cab td{font-size:8px;}
+  table.bh-grid{font-size:6.6px;}
+  table.bh-grid th{font-size:6.3px;padding:2px 1px;}
+  table.bh-grid td{padding:3px 1px;height:11px;}
+  td.bh-h{font-weight:bold;text-align:center;background:#f5f5f5;}
+  tr.bh-sub td{background:#dce6f1;font-weight:bold;font-size:6.8px;}
+`;
+
+// ════════════════════════════════════════════════════════════════════════════
+// EMISSÃO CONJUNTA: Anotações do Técnico + Mudança de Decúbito + Balanço Hídrico
+// ────────────────────────────────────────────────────────────────────────────
+// Um único botão abre um modal para escolher a DATA de referência dos três
+// documentos (todos compartilham a mesma data no cabeçalho). Por paciente, a
+// ordem de impressão é: Técnico pág.1 (frente) → Técnico pág.2 (verso) →
+// Mudança de Decúbito → Balanço Hídrico — assim as duas primeiras páginas
+// continuam saindo como frente/verso de uma folha quando a impressora estiver
+// em modo duplex; os outros dois documentos seguem como folhas extras.
+
+function abrirModalEmitirDocumentos(){
+  const hoje0 = hoje();
+  document.getElementById('emitir-doc-data').value = hoje0;
+  document.getElementById('modal-emitir-doc').classList.add('show');
+}
+function fecharModalEmitirDocumentos(){ document.getElementById('modal-emitir-doc').classList.remove('show'); }
+
+async function confirmarEmitirDocumentos(){
+  const dataRef = gf('emitir-doc-data');
+  if(!dataRef){ toast('Selecione uma data', true); return; }
+  fecharModalEmitirDocumentos();
+  await emitirDocumentosConjuntos(dataRef);
+}
+
+async function emitirDocumentosConjuntos(dataRef){
+  let leitos;
+  try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
+
+  const ocupados = [];
+  for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
+  if(!ocupados.length){ toast('Nenhum leito ocupado.', true); return; }
+
+  const dataBR = dataRef.split('-').reverse().join('/');
+  if(!confirm(`Emitir os 3 documentos (Anotações do Técnico, Mudança de Decúbito e Balanço Hídrico) de ${ocupados.length} leito(s), com data de referência ${dataBR}?\n\nApenas os dados de cabeçalho são preenchidos automaticamente — o restante fica em branco para preenchimento manual.\n\nNa hora de imprimir, selecione impressão em FRENTE E VERSO (as duas primeiras páginas de cada paciente são a ficha do técnico).`)) return;
+
+  const blocos = ocupados.map(n => {
+    const dados = leitos[n];
+    return _tecAnotacoesHtmlLeito(n, dados, dataRef)
+         + _decubitoHtmlLeito(n, dados, dataRef)
+         + _balancoHtmlLeito(n, dados, dataRef);
+  }).join('');
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if(!w){ toast('Bloqueador de pop-up impediu abrir a janela. Permita pop-ups e tente novamente.', true); return; }
+
+  w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>Documentos de Enfermagem — ${dataBR}</title>
+    <style>${TEC_ANOTACOES_CSS}${BALANCO_CSS}
+      .no-print{background:#00695c;color:#fff;padding:10px;text-align:center;position:sticky;top:0;z-index:99;}
+      .no-print button{background:#fff;color:#00695c;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;margin-left:10px;}
+    </style></head><body>
+    <div class="no-print">
+      ${ocupados.length} leito(s) — Técnico + Decúbito + Balanço — ${dataBR} — lembre-se: imprima as 2 primeiras páginas de cada paciente em FRENTE E VERSO
+      <button onclick="window.print()">🖨 Imprimir tudo</button>
+      <button onclick="window.close()">Fechar</button>
+    </div>
+    ${blocos}
+    <script>setTimeout(()=>window.print(), 600);<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
 // ── Notificação ao Núcleo de Segurança do Paciente (NSP) ─────────────────────
 // Abre, em nova aba, o formulário oficial de notificação de eventos do NSP.
 // Pede confirmação antes de sair do sistema, já que é um link externo (Google Forms).
