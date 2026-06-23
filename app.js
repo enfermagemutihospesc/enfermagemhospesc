@@ -875,22 +875,22 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
   </div>`;
 
   // ── PÁGINA 2 — anotações de enfermagem (em branco) + assinaturas ──
-  // Linhas sem altura fixa: a tabela ocupa todo o espaço disponível (flex-grow:1)
-  // e cada linha se expande automaticamente para preencher de cima a baixo da página.
-  const linhas = Array.from({length:30}, ()=> '<tr><td class="tec-hor tec-anot-td"></td><td class="tec-anot-td"></td><td class="tec-anot-td"></td></tr>').join('');
+  // Linhas com altura fixa de 22px — suficiente para escrita à mão quando impresso.
+  // A quantidade (30) preenche naturalmente a página deixando espaço para a assinatura.
+  const linhas = Array.from({length:30}, ()=> '<tr><td class="tec-hor" style="height:22px;"></td><td></td><td></td></tr>').join('');
   const pg2 = `
-  <div class="tec-pg tec-pg-flex">
+  <div class="tec-pg">
     <div class="tec-top">
       <div class="tec-logo">${_logoImg(60)}</div>
       <div class="tec-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</div>
       <div class="tec-data">LEITO ${pad(leito)} — ${dataBR}</div>
     </div>
     <div class="tec-sec" style="text-align:center;">ANOTAÇÕES DE ENFERMAGEM</div>
-    <table class="tec-tb tec-anot tec-anot-expand">
+    <table class="tec-tb tec-anot">
       <tr><th style="width:12%;">HORÁRIO</th><th>DESCRIÇÃO</th><th style="width:24%;">ASSINATURA + CARIMBO DO TÉC. DE ENF.</th></tr>
       ${linhas}
     </table>
-    <table class="tec-tb tec-assin">
+    <table class="tec-tb" style="margin-top:6px;">
       <tr><td colspan="3" class="tec-sec">ASSINATURA + CARIMBO DO ENFERMEIRO DO PLANTÃO</td></tr>
       <tr><td style="height:34px;width:33.3%;"></td><td style="width:33.3%;"></td><td style="width:33.4%;"></td></tr>
       <tr><td class="tec-c1" style="text-align:center;">MANHÃ</td><td class="tec-c1" style="text-align:center;">TARDE</td><td class="tec-c1" style="text-align:center;">NOITE</td></tr>
@@ -904,21 +904,10 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
 const TEC_ANOTACOES_CSS = `
   @page { size:A4; margin:8mm; }
   *{box-sizing:border-box;}
-  html,body{height:100%;margin:0;}
-  body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:9px;}
+  body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:9px;margin:0;}
   .tec-pg{ page-break-after: always; }
   .tec-pg:last-child{ page-break-after: auto; }
-  /* Página 2: flex column para esticar a tabela de anotações até a assinatura */
-  .tec-pg-flex{
-    display:flex;flex-direction:column;
-    height:277mm; /* A4 – 2×8mm de margem */
-  }
-  table.tec-anot-expand{flex:1;margin-bottom:0;}
-  table.tec-anot-expand tbody{height:100%;}
-  table.tec-anot-expand tr.tec-anot-td-row{height:auto;}
-  td.tec-anot-td{height:auto;}
-  table.tec-assin{flex-shrink:0;margin-top:5px;}
-  .tec-top{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-shrink:0;}
+  .tec-top{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
   .tec-logo img{height:42px;width:auto;}
   .tec-orgao{flex:1;text-align:center;font-weight:bold;font-size:11px;}
   .tec-data{font-weight:bold;font-size:10px;white-space:nowrap;}
@@ -927,7 +916,7 @@ const TEC_ANOTACOES_CSS = `
   table.tec-tb th{background:#eee;font-size:8px;text-align:center;}
   .tec-faixa{background:#0d47a1;color:#fff;font-weight:bold;text-align:center;font-size:10px;}
   .tec-tit{background:#e8e8e8;font-weight:bold;text-align:center;font-size:10px;}
-  .tec-sec{background:#dce6f1;font-weight:bold;text-align:center;text-transform:uppercase;font-size:9px;flex-shrink:0;}
+  .tec-sec{background:#dce6f1;font-weight:bold;text-align:center;text-transform:uppercase;font-size:9px;}
   .tec-lbl{font-weight:bold;}
   .tec-val{font-weight:normal;}
   .tec-c1{font-weight:bold;width:16%;}
