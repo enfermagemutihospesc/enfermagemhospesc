@@ -944,7 +944,7 @@ function _decubitoHtmlLeito(leito, dados, dataRef){
 
   const linhas = DECUBITO_HORARIOS.map(h => {
     const diaLinha = (h==='00:00'||h==='02:00'||h==='04:00') ? dataMais1BR : dataBR;
-    return `<tr style="height:18px;">
+    return `<tr>
       <td class="tec-hor">${diaLinha}</td>
       <td class="tec-hor">${h}</td>
       <td style="padding:2px 6px;">DORSAL (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL E (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL D (&nbsp;&nbsp;&nbsp;)</td>
@@ -1085,7 +1085,7 @@ const BALANCO_CSS = `
   .dec-page{ display:flex; flex-direction:column; }
   .dec-grid{ flex:0 0 auto; }
   .dec-spacer{ flex:1 1 auto; }
-  .dec-grid td{ height:18px; }
+  table.dec-grid.tec-anot td{ height:32px; }
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
     table.bh-grid td{ height:20px; }
