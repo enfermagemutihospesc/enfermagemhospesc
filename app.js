@@ -1077,18 +1077,18 @@ const BALANCO_CSS = `
   .bh-spacer{ flex:1 1 auto; }
   table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:7px; }
   table.bh-grid th{ font-size:6.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; }
-  table.bh-grid td{ padding:0 1px; height:14px; border:1px solid #000; vertical-align:middle; text-align:center; }
+  table.bh-grid td{ padding:0 1px; height:20px; border:1px solid #000; vertical-align:middle; text-align:center; }
   th.bh-th-hora{ background:#dce6f1; font-size:7px; }
   th.bh-th-grupo{ background:#c8d8f0; font-size:6.5px; font-weight:bold; }
   td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7px; }
-  tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:6.8px; height:12px; }
+  tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:6.8px; height:16px; }
   .dec-page{ display:flex; flex-direction:column; }
   .dec-grid{ flex:0 0 auto; }
   .dec-spacer{ flex:1 1 auto; }
   .dec-grid td{ height:18px; }
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
-    table.bh-grid td{ height:14px; }
+    table.bh-grid td{ height:20px; }
     .dec-page{ min-height:calc(210mm - 16mm); }
   }
 `;
