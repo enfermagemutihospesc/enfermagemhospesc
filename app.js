@@ -575,7 +575,7 @@ async function atualizarPassagemPlantao(){
   try { existente = await dbGet(_passagemChaveAtual); } catch(_) {}
 
   if(existente && existente.registros && existente.registros.length){
-    if(confirm(`Já existe uma passagem salva para ${turno} de hoje (${existente.registros.length} leito(s)).\n\nContinuar editando essa versão?\n\n(Cancelar gera uma nova a partir das evoluções atuais, substituindo a anterior.)`)){
+    if(confirm(`Já existe uma passagem salva para ${turno} de hoje (${existente.registros.length} leito(s)).\n\nContinuar editando essa versão?\n\n(Cancelar gera uma nova a partir das evoluções atuais — Pendências e Observações já escritas são preservadas para o mesmo paciente; só são descartadas se o leito tiver outro paciente agora.)`)){
       _passagemRegistros = existente.registros;
       _passagemAbrirModal();
       return;
@@ -589,12 +589,30 @@ async function atualizarPassagemPlantao(){
   for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
   if(!ocupados.length){ toast('Nenhum leito ocupado para gerar a passagem.', true); return; }
 
+  // Índice da passagem anterior por leito, para mesclar Pendências/Observações
+  // manuais sem depender do usuário escolher "continuar editando".
+  const anteriorPorLeito = {};
+  if(existente && existente.registros){
+    existente.registros.forEach(r => { anteriorPorLeito[r.leito] = r; });
+  }
+
   toast('⏳ Coletando dados das evoluções...');
   const registros = [];
   for(const n of ocupados){
     try {
       const dado = await _passagemDadosLeito(n);
-      if(dado && dado.paciente) registros.push(dado);
+      if(dado && dado.paciente){
+        // Mescla Pendências/Observações da passagem anterior salva, MAS só se
+        // for comprovadamente o mesmo paciente no leito (evita herdar texto de
+        // alguém que já recebeu alta — mesma lógica de proteção usada na
+        // herança de dispositivos entre evoluções).
+        const ant = anteriorPorLeito[n];
+        if(ant && _normNome(ant.paciente) === _normNome(dado.paciente)){
+          if(!dado.pendencias && ant.pendencias)   dado.pendencias  = ant.pendencias;
+          if(!dado.observacoes && ant.observacoes) dado.observacoes = ant.observacoes;
+        }
+        registros.push(dado);
+      }
     } catch(e){ console.warn('Passagem leito '+n+':', e); }
   }
   registros.sort((a,b)=>a.leito-b.leito);
