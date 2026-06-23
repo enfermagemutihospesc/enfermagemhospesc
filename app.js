@@ -968,6 +968,7 @@ function _decubitoHtmlLeito(leito, dados, dataRef){
       <tr><th style="width:13%;">DATA</th><th style="width:9%;">HORA</th><th>POSICIONAMENTO</th><th style="width:22%;">ASSINATURA PROFISSIONAL</th></tr>
       ${linhas}
     </table>
+    <div class="dec-spacer"></div>
     <table class="tec-tb" style="margin-top:8px;">
       <tr><td style="width:60%;">ENFERMEIRO: _______________________________________________</td>
           <td>DATA: ${dataBR}</td></tr>
@@ -1058,6 +1059,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
       </tr>
       ${blocos}
     </table>
+    <div class="bh-spacer"></div>
   </div>`;
 }
 
@@ -1071,7 +1073,8 @@ const BALANCO_CSS = `
   .bh-leito-data{ font-weight:bold; font-size:10px; text-align:right; white-space:nowrap; }
   table.bh-cab{ margin-bottom:3px; }
   table.bh-cab td{ font-size:8px; }
-  .tec-pg.bh-page table.bh-grid{ flex:1; }
+  .tec-pg.bh-page table.bh-grid{ flex:0 0 auto; }
+  .bh-spacer{ flex:1 1 auto; }
   table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:7px; }
   table.bh-grid th{ font-size:6.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; }
   table.bh-grid td{ padding:0 1px; height:14px; border:1px solid #000; vertical-align:middle; text-align:center; }
@@ -1080,7 +1083,8 @@ const BALANCO_CSS = `
   td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7px; }
   tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:6.8px; height:12px; }
   .dec-page{ display:flex; flex-direction:column; }
-  .dec-grid{ flex:1; }
+  .dec-grid{ flex:0 0 auto; }
+  .dec-spacer{ flex:1 1 auto; }
   .dec-grid td{ height:18px; }
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
