@@ -848,20 +848,22 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
   </div>`;
 
   // ── PÁGINA 2 — anotações de enfermagem (em branco) + assinaturas ──
-  const linhas = Array.from({length:30}, ()=> '<tr><td class="tec-hor"></td><td></td><td></td></tr>').join('');
+  // Linhas sem altura fixa: a tabela ocupa todo o espaço disponível (flex-grow:1)
+  // e cada linha se expande automaticamente para preencher de cima a baixo da página.
+  const linhas = Array.from({length:30}, ()=> '<tr><td class="tec-hor tec-anot-td"></td><td class="tec-anot-td"></td><td class="tec-anot-td"></td></tr>').join('');
   const pg2 = `
-  <div class="tec-pg">
+  <div class="tec-pg tec-pg-flex">
     <div class="tec-top">
       <div class="tec-logo">${_logoImg(60)}</div>
       <div class="tec-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</div>
       <div class="tec-data">LEITO ${pad(leito)} — ${dataBR}</div>
     </div>
     <div class="tec-sec" style="text-align:center;">ANOTAÇÕES DE ENFERMAGEM</div>
-    <table class="tec-tb tec-anot">
+    <table class="tec-tb tec-anot tec-anot-expand">
       <tr><th style="width:12%;">HORÁRIO</th><th>DESCRIÇÃO</th><th style="width:24%;">ASSINATURA + CARIMBO DO TÉC. DE ENF.</th></tr>
       ${linhas}
     </table>
-    <table class="tec-tb" style="margin-top:8px;">
+    <table class="tec-tb tec-assin">
       <tr><td colspan="3" class="tec-sec">ASSINATURA + CARIMBO DO ENFERMEIRO DO PLANTÃO</td></tr>
       <tr><td style="height:34px;width:33.3%;"></td><td style="width:33.3%;"></td><td style="width:33.4%;"></td></tr>
       <tr><td class="tec-c1" style="text-align:center;">MANHÃ</td><td class="tec-c1" style="text-align:center;">TARDE</td><td class="tec-c1" style="text-align:center;">NOITE</td></tr>
@@ -875,10 +877,21 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
 const TEC_ANOTACOES_CSS = `
   @page { size:A4; margin:8mm; }
   *{box-sizing:border-box;}
-  body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:9px;margin:0;}
+  html,body{height:100%;margin:0;}
+  body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:9px;}
   .tec-pg{ page-break-after: always; }
   .tec-pg:last-child{ page-break-after: auto; }
-  .tec-top{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  /* Página 2: flex column para esticar a tabela de anotações até a assinatura */
+  .tec-pg-flex{
+    display:flex;flex-direction:column;
+    height:277mm; /* A4 – 2×8mm de margem */
+  }
+  table.tec-anot-expand{flex:1;margin-bottom:0;}
+  table.tec-anot-expand tbody{height:100%;}
+  table.tec-anot-expand tr.tec-anot-td-row{height:auto;}
+  td.tec-anot-td{height:auto;}
+  table.tec-assin{flex-shrink:0;margin-top:5px;}
+  .tec-top{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-shrink:0;}
   .tec-logo img{height:42px;width:auto;}
   .tec-orgao{flex:1;text-align:center;font-weight:bold;font-size:11px;}
   .tec-data{font-weight:bold;font-size:10px;white-space:nowrap;}
@@ -887,7 +900,7 @@ const TEC_ANOTACOES_CSS = `
   table.tec-tb th{background:#eee;font-size:8px;text-align:center;}
   .tec-faixa{background:#0d47a1;color:#fff;font-weight:bold;text-align:center;font-size:10px;}
   .tec-tit{background:#e8e8e8;font-weight:bold;text-align:center;font-size:10px;}
-  .tec-sec{background:#dce6f1;font-weight:bold;text-align:center;text-transform:uppercase;font-size:9px;}
+  .tec-sec{background:#dce6f1;font-weight:bold;text-align:center;text-transform:uppercase;font-size:9px;flex-shrink:0;}
   .tec-lbl{font-weight:bold;}
   .tec-val{font-weight:normal;}
   .tec-c1{font-weight:bold;width:16%;}
@@ -1047,14 +1060,23 @@ function abrirModalEmitirDocumentos(){
 }
 function fecharModalEmitirDocumentos(){ document.getElementById('modal-emitir-doc').classList.remove('show'); }
 
-async function confirmarEmitirDocumentos(){
+// ── Confirmar emissão: dois botões distintos no modal ──
+async function confirmarEmitirTecnico(){
   const dataRef = gf('emitir-doc-data');
   if(!dataRef){ toast('Selecione uma data', true); return; }
   fecharModalEmitirDocumentos();
-  await emitirDocumentosConjuntos(dataRef);
+  await emitirAnotacoesTecnico(dataRef);
 }
 
-async function emitirDocumentosConjuntos(dataRef){
+async function confirmarEmitirBalancoDecubito(){
+  const dataRef = gf('emitir-doc-data');
+  if(!dataRef){ toast('Selecione uma data', true); return; }
+  fecharModalEmitirDocumentos();
+  await emitirBalancoDecubito(dataRef);
+}
+
+// ── Emitir apenas Anotações do Técnico de Enfermagem (retrato, frente e verso) ──
+async function emitirAnotacoesTecnico(dataRef){
   let leitos;
   try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
 
@@ -1063,27 +1085,64 @@ async function emitirDocumentosConjuntos(dataRef){
   if(!ocupados.length){ toast('Nenhum leito ocupado.', true); return; }
 
   const dataBR = dataRef.split('-').reverse().join('/');
-  if(!confirm(`Emitir os 3 documentos (Anotações do Técnico, Mudança de Decúbito e Balanço Hídrico) de ${ocupados.length} leito(s), com data de referência ${dataBR}?\n\nApenas os dados de cabeçalho são preenchidos automaticamente — o restante fica em branco para preenchimento manual.\n\nNa hora de imprimir, selecione impressão em FRENTE E VERSO (as duas primeiras páginas de cada paciente são a ficha do técnico).`)) return;
+  if(!confirm(`Emitir Anotações do Técnico de Enfermagem de ${ocupados.length} leito(s), com data de referência ${dataBR}?\n\nAs 2 páginas de cada paciente devem ser impressas em FRENTE E VERSO.`)) return;
 
-  const blocos = ocupados.map(n => {
-    const dados = leitos[n];
-    return _tecAnotacoesHtmlLeito(n, dados, dataRef)
-         + _decubitoHtmlLeito(n, dados, dataRef)
-         + _balancoHtmlLeito(n, dados, dataRef);
-  }).join('');
+  const blocos = ocupados.map(n => _tecAnotacoesHtmlLeito(n, leitos[n], dataRef)).join('');
 
   const w = window.open('', '_blank', 'width=900,height=700');
   if(!w){ toast('Bloqueador de pop-up impediu abrir a janela. Permita pop-ups e tente novamente.', true); return; }
 
   w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
-    <title>Documentos de Enfermagem — ${dataBR}</title>
-    <style>${TEC_ANOTACOES_CSS}${BALANCO_CSS}
+    <title>Anotações do Técnico — ${dataBR}</title>
+    <style>${TEC_ANOTACOES_CSS}
+      .no-print{background:#6a1b9a;color:#fff;padding:10px;text-align:center;position:sticky;top:0;z-index:99;}
+      .no-print button{background:#fff;color:#6a1b9a;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;margin-left:10px;}
+    </style></head><body>
+    <div class="no-print">
+      📋 Anotações do Técnico — ${ocupados.length} leito(s) — ${dataBR} — imprima em FRENTE E VERSO
+      <button onclick="window.print()">🖨 Imprimir</button>
+      <button onclick="window.close()">Fechar</button>
+    </div>
+    ${blocos}
+    <script>setTimeout(()=>window.print(), 600);<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
+// ── Emitir Mudança de Decúbito + Balanço Hídrico (paisagem) ──
+async function emitirBalancoDecubito(dataRef){
+  let leitos;
+  try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
+
+  const ocupados = [];
+  for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
+  if(!ocupados.length){ toast('Nenhum leito ocupado.', true); return; }
+
+  const dataBR = dataRef.split('-').reverse().join('/');
+  if(!confirm(`Emitir Mudança de Decúbito e Balanço Hídrico de ${ocupados.length} leito(s), com data de referência ${dataBR}?\n\nEsses documentos são impressos em modo PAISAGEM (A4 horizontal).`)) return;
+
+  const blocos = ocupados.map(n => {
+    const dados = leitos[n];
+    return _decubitoHtmlLeito(n, dados, dataRef)
+         + _balancoHtmlLeito(n, dados, dataRef);
+  }).join('');
+
+  const w = window.open('', '_blank', 'width=1100,height=700');
+  if(!w){ toast('Bloqueador de pop-up impediu abrir a janela. Permita pop-ups e tente novamente.', true); return; }
+
+  // CSS paisagem próprio — substitui @page do TEC_ANOTACOES_CSS
+  const cssLandscape = TEC_ANOTACOES_CSS.replace('@page { size:A4; margin:8mm; }', '@page { size:A4 landscape; margin:8mm; }')
+    + BALANCO_CSS;
+
+  w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>Decúbito e Balanço Hídrico — ${dataBR}</title>
+    <style>${cssLandscape}
       .no-print{background:#00695c;color:#fff;padding:10px;text-align:center;position:sticky;top:0;z-index:99;}
       .no-print button{background:#fff;color:#00695c;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;margin-left:10px;}
     </style></head><body>
     <div class="no-print">
-      ${ocupados.length} leito(s) — Técnico + Decúbito + Balanço — ${dataBR} — lembre-se: imprima as 2 primeiras páginas de cada paciente em FRENTE E VERSO
-      <button onclick="window.print()">🖨 Imprimir tudo</button>
+      🌊 Decúbito + Balanço Hídrico — ${ocupados.length} leito(s) — ${dataBR} — impressão em PAISAGEM
+      <button onclick="window.print()">🖨 Imprimir</button>
       <button onclick="window.close()">Fechar</button>
     </div>
     ${blocos}
