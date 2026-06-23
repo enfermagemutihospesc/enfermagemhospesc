@@ -158,6 +158,7 @@
       <button class="btn btn-sec btn-sm" onclick="abrirHistoricoDispositivosGeral()">🩺 Dispositivos</button>
       <button class="btn btn-sec btn-sm" onclick="irIndicadores()">📈 Indicadores</button>
       <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;" onclick="abrirChecklistSetorial()">📋 Check-list Setorial</button>
+      <button class="btn btn-sm" style="background:#6a1b9a;color:white;" onclick="abrirModalEmitirDocumentos()">📑 Emitir Documentos</button>
       <button class="btn btn-sm" style="background:#00695c;color:white;" onclick="atualizarPassagemPlantao()">📋 Atualizar Passagem</button>
       <button class="btn btn-sm" style="background:#c62828;color:white;" onclick="abrirNotificacaoNSP()">🛡 Notificação NSP</button>
       <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirTurnoCompleto()">🖨 Imprimir turno</button>
@@ -1019,6 +1020,28 @@
   </div>
 </div>
 
+<!-- MODAL EMITIR DOCUMENTOS (Técnico + Decúbito + Balanço) — seleção de data -->
+<div class="overlay" id="modal-emitir-doc">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#6a1b9a,#8e24aa);color:white;">
+      <h3 style="color:white;margin:0;">📑 Emitir Documentos</h3>
+      <button class="modal-close" style="color:white;" onclick="fecharModalEmitirDocumentos()">×</button>
+    </div>
+    <div class="modal-body" style="padding:16px;">
+      <p style="font-size:.82rem;color:var(--muted);margin-top:0;">
+        Gera, para todos os leitos ocupados: <strong>Anotações do Técnico de Enfermagem</strong> (2 páginas, frente e verso),
+        <strong>Mudança de Decúbito</strong> e <strong>Balanço Hídrico</strong>. Só o cabeçalho é preenchido — o restante fica em branco.
+      </p>
+      <label style="display:block;font-size:.78rem;font-weight:700;color:var(--azul);margin-bottom:4px;">Data de referência dos formulários</label>
+      <input type="date" id="emitir-doc-data" style="width:100%;">
+    </div>
+    <div class="modal-footer" style="background:#f3e5f5;border-top:1px solid #e1bee7;display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;">
+      <button class="btn btn-sec btn-sm" onclick="fecharModalEmitirDocumentos()">Cancelar</button>
+      <button class="btn btn-sm" style="background:#6a1b9a;color:white;" onclick="confirmarEmitirDocumentos()">🖨 Emitir</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL PASSAGEM DE PLANTÃO -->
 <div class="overlay" id="modal-passagem">
   <div class="modal" style="max-width:780px;">
@@ -1105,7 +1128,7 @@
 <!-- ════════════════════════════════════════════
      JAVASCRIPT
 ═════════════════════════════════════════════ -->
-<script src="app.js?v=20260622pass2"></script>
+<script src="app.js?v=20260622doc3"></script>
 <!-- MODAL HISTÓRICO DE DISPOSITIVOS -->
 <div class="overlay" id="modal-hist-disp">
   <div class="modal" style="max-width:620px;">
