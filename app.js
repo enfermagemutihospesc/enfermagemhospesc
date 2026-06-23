@@ -705,18 +705,15 @@ function _passagemImprimir(){
     *{box-sizing:border-box;}
     body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:8.5px;margin:0;}
     h1{font-size:11px;text-align:center;margin:0 0 6px;font-weight:bold;}
-    /* Layout em 2 colunas para caber até 10 leitos em 2 páginas */
     .grade{
-      columns:2;
-      column-gap:6mm;
-      column-fill:auto; /* preenche coluna por coluna, não balanceia */
+      width:100%;
     }
     table.bloco{
       width:100%;
       border-collapse:collapse;
       margin-bottom:5px;
       break-inside:avoid;
-      -webkit-column-break-inside:avoid;
+      page-break-inside:avoid;
     }
     table.bloco td{border:1px solid #000;padding:2px 4px;vertical-align:top;font-size:8px;}
     td.lbl{font-weight:bold;background:#f0f0f0;white-space:nowrap;}
@@ -820,7 +817,7 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
         ${chk} SRS &nbsp; ${chk} SRL &nbsp; ${chk} SF 0,9% &nbsp; ${chk} SG 5%<br>M____/T____/N____ ml/h &nbsp; ${chk} NENHUMA
         <div class="tec-sec" style="margin-top:6px;">DROGAS EM BOMBAS DE INFUSÃO</div>
         <table class="tec-mini"><tr><th></th><th>M</th><th>T</th><th>N</th></tr>
-        ${[1,2,3,4,5,6].map(n=>`<tr><td>${n}. VAZÃO</td><td></td><td></td><td></td></tr>`).join('')}
+        ${[1,2,3,4,5,6].map(n=>`<tr><td style="min-width:80px;">${n}.</td><td></td><td></td><td></td></tr>`).join('')}
         </table>
       </td></tr>
       <tr><td>ORIENTADO</td><td></td><td></td><td>AUSENTE</td><td></td><td></td></tr>
@@ -877,7 +874,7 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
   // ── PÁGINA 2 — anotações de enfermagem (em branco) + assinaturas ──
   // Linhas com altura fixa de 22px — suficiente para escrita à mão quando impresso.
   // A quantidade (30) preenche naturalmente a página deixando espaço para a assinatura.
-  const linhas = Array.from({length:30}, ()=> '<tr><td class="tec-hor" style="height:22px;"></td><td></td><td></td></tr>').join('');
+  const linhas = Array.from({length:36}, ()=> '<tr><td class="tec-hor" style="height:20px;"></td><td></td><td></td></tr>').join('');
   const pg2 = `
   <div class="tec-pg">
     <div class="tec-top">
@@ -947,28 +944,28 @@ function _decubitoHtmlLeito(leito, dados, dataRef){
 
   const linhas = DECUBITO_HORARIOS.map(h => {
     const diaLinha = (h==='00:00'||h==='02:00'||h==='04:00') ? dataMais1BR : dataBR;
-    return `<tr>
+    return `<tr style="height:18px;">
       <td class="tec-hor">${diaLinha}</td>
       <td class="tec-hor">${h}</td>
-      <td>DORSAL (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL E (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL D (&nbsp;&nbsp;&nbsp;)</td>
+      <td style="padding:2px 6px;">DORSAL (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL E (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL D (&nbsp;&nbsp;&nbsp;)</td>
       <td></td>
     </tr>`;
   }).join('');
 
   return `
-  <div class="tec-pg">
+  <div class="tec-pg dec-page">
     <div class="tec-top">
       <div class="tec-logo">${_logoImg(60)}</div>
       <div class="tec-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</div>
       <div class="tec-data">LEITO ${pad(leito)} — ${dataBR}</div>
     </div>
-    <div class="tec-sec" style="text-align:center;">REGISTRO DE MUDANÇA POSTURAL</div>
-    <table class="tec-tb">
+    <div class="tec-sec" style="text-align:center;padding:4px 0;">REGISTRO DE MUDANÇA POSTURAL</div>
+    <table class="tec-tb" style="margin-bottom:4px;">
       <tr><td class="tec-lbl" style="width:75%;">PACIENTE: <span class="tec-val">${_esc(dados.pac)||'&nbsp;'}</span></td>
           <td class="tec-lbl">UTI GERAL — LEITO ${pad(leito)}</td></tr>
     </table>
-    <table class="tec-tb tec-anot">
-      <tr><th style="width:13%;">DATA</th><th style="width:9%;">HORA</th><th>POSICIONAMENTO</th><th style="width:20%;">ASSINATURA PROFISSIONAL</th></tr>
+    <table class="tec-tb tec-anot dec-grid">
+      <tr><th style="width:13%;">DATA</th><th style="width:9%;">HORA</th><th>POSICIONAMENTO</th><th style="width:22%;">ASSINATURA PROFISSIONAL</th></tr>
       ${linhas}
     </table>
     <table class="tec-tb" style="margin-top:8px;">
@@ -1015,34 +1012,49 @@ function _balancoHtmlLeito(leito, dados, dataRef){
   }).join('');
 
   return `
-  <div class="tec-pg">
+  <div class="tec-pg bh-page">
+    <div class="bh-header-top">
+      <div class="bh-logo">${_logoImg(55)}</div>
+      <div class="bh-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES<br><span style="font-size:9px;font-weight:normal;">UNIDADE DE TERAPIA INTENSIVA — UTI GERAL</span></div>
+      <div class="bh-leito-data">LEITO ${pad(leito)}<br>${dataBR}</div>
+    </div>
     <table class="tec-tb bh-cab">
       <tr>
-        <td class="tec-lbl" style="width:34%;">PACIENTE: <span class="tec-val">${_esc(dados.pac)||'&nbsp;'}</span></td>
-        <td class="tec-lbl" style="width:8%;">SEXO: <span class="tec-val"></span></td>
-        <td class="tec-lbl" style="width:14%;">ALERGIA: <span class="tec-val">${_esc(dados.alergia)||'&nbsp;'}</span></td>
-        <td class="tec-lbl" style="width:9%;">IDADE: <span class="tec-val">${idadeTxt}</span></td>
-        <td class="tec-lbl" style="width:8%;">DN: <span class="tec-val">${dnBR}</span></td>
-        <td class="tec-lbl" style="width:8%;">LEITO: <span class="tec-val">${pad(leito)}</span></td>
+        <td class="tec-lbl" style="width:35%;">PACIENTE: <span class="tec-val">${_esc(dados.pac)||'&nbsp;'}</span></td>
+        <td class="tec-lbl" style="width:7%;">SEXO: <span class="tec-val"></span></td>
+        <td class="tec-lbl" style="width:16%;">ALERGIA: <span class="tec-val">${_esc(dados.alergia)||'&nbsp;'}</span></td>
+        <td class="tec-lbl" style="width:8%;">IDADE: <span class="tec-val">${idadeTxt}</span></td>
+        <td class="tec-lbl" style="width:9%;">DN: <span class="tec-val">${dnBR}</span></td>
+        <td class="tec-lbl" style="width:7%;">LEITO: <span class="tec-val">${pad(leito)}</span></td>
         <td class="tec-lbl" style="width:9%;">DATA: <span class="tec-val">${dataBR}</span></td>
       </tr>
-      <tr><td colspan="2" class="tec-lbl">DIAGNÓSTICO: <span class="tec-val">${_esc(dados.diag)||'&nbsp;'}</span></td>
-          <td colspan="5" class="tec-lbl">UNIDADE DE TERAPIA INTENSIVA — UTI GERAL</td></tr>
-      <tr><td colspan="7" class="tec-lbl" style="height:20px;">OBSERVAÇÕES: </td></tr>
+      <tr><td colspan="3" class="tec-lbl">DIAGNÓSTICO: <span class="tec-val">${_esc(dados.diag)||'&nbsp;'}</span></td>
+          <td colspan="4" class="tec-lbl">OBSERVAÇÕES: </td></tr>
     </table>
     <table class="tec-tb bh-grid">
+      <colgroup>
+        <col style="width:4%"><!-- HORA -->
+        <!-- SINAIS VITAIS: 7 colunas, mais largas -->
+        <col style="width:3.5%"><col style="width:3.5%"><col style="width:3.5%"><col style="width:6%"><col style="width:3.5%"><col style="width:3.5%"><col style="width:3.5%">
+        <!-- INFUNDIDO: 5 colunas -->
+        <col style="width:4.5%"><col style="width:4%"><col style="width:4%"><col style="width:4%"><col style="width:5%">
+        <!-- ELIMINADO: 5 colunas -->
+        <col style="width:4%"><col style="width:4.5%"><col style="width:3.5%"><col style="width:3.5%"><col style="width:3.5%">
+        <!-- CUIDADOS: 5 colunas -->
+        <col style="width:3.5%"><col style="width:3.5%"><col style="width:4%"><col style="width:4%"><col style="width:4%">
+      </colgroup>
       <tr>
-        <th rowspan="2">HORA</th>
-        <th colspan="7">SINAIS VITAIS</th>
-        <th colspan="5">CONTROLE HÍDRICO — INFUNDIDO</th>
-        <th colspan="5">CONTROLE HÍDRICO — ELIMINADO</th>
-        <th colspan="5">CUIDADOS ESPECIAIS</th>
+        <th rowspan="2" class="bh-th-hora">HORA</th>
+        <th colspan="7" class="bh-th-grupo">SINAIS VITAIS</th>
+        <th colspan="5" class="bh-th-grupo">CONTROLE HÍDRICO — INFUNDIDO</th>
+        <th colspan="5" class="bh-th-grupo">CONTROLE HÍDRICO — ELIMINADO</th>
+        <th colspan="5" class="bh-th-grupo">CUIDADOS ESPECIAIS</th>
       </tr>
       <tr>
-        <th>T</th><th>FR</th><th>FC</th><th>PA</th><th>PAM</th><th>PVC</th><th>SPO²</th>
-        <th>ORAL/MED.</th><th>SNG/SNE</th><th>SORO</th><th>MED. EV</th><th>SANGUE/DERIV.</th>
-        <th>DIURESE</th><th>DREN. GÁSTR.</th><th>FEZES</th><th>VÔMITOS</th><th>DRENO</th>
-        <th>FIO²</th><th>HGT</th><th>HIG. ORAL</th><th>HIG. MEATO</th><th>DECÚBITO</th>
+        <th>T°</th><th>FR</th><th>FC</th><th>PA</th><th>PAM</th><th>PVC</th><th>SpO²</th>
+        <th>ORAL/<br>MED.</th><th>SNG/<br>SNE</th><th>SORO</th><th>MED.<br>EV</th><th>SANGUE/<br>DERIV.</th>
+        <th>DIURESE</th><th>DREN.<br>GÁSTR.</th><th>FEZES</th><th>VÔMIT.</th><th>DRENO</th>
+        <th>FiO²</th><th>HGT</th><th>HIG.<br>ORAL</th><th>HIG.<br>MEATO</th><th>DECÚB.</th>
       </tr>
       ${blocos}
     </table>
@@ -1051,12 +1063,30 @@ function _balancoHtmlLeito(leito, dados, dataRef){
 
 // CSS específico das tabelas horárias do Balanço Hídrico (denso, muitas colunas)
 const BALANCO_CSS = `
-  table.bh-cab td{font-size:8px;}
-  table.bh-grid{font-size:6.6px;}
-  table.bh-grid th{font-size:6.3px;padding:2px 1px;}
-  table.bh-grid td{padding:3px 1px;height:11px;}
-  td.bh-h{font-weight:bold;text-align:center;background:#f5f5f5;}
-  tr.bh-sub td{background:#dce6f1;font-weight:bold;font-size:6.8px;}
+  .bh-page{ display:flex; flex-direction:column; height:calc(100vh - 2px); box-sizing:border-box; }
+  .bh-header-top{ display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .bh-logo{ flex-shrink:0; }
+  .bh-logo img{ height:46px; width:auto; display:block; }
+  .bh-orgao{ flex:1; text-align:center; font-weight:bold; font-size:10px; line-height:1.4; }
+  .bh-leito-data{ font-weight:bold; font-size:10px; text-align:right; white-space:nowrap; }
+  table.bh-cab{ margin-bottom:3px; }
+  table.bh-cab td{ font-size:8px; }
+  .tec-pg.bh-page table.bh-grid{ flex:1; }
+  table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:7px; }
+  table.bh-grid th{ font-size:6.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; }
+  table.bh-grid td{ padding:0 1px; height:14px; border:1px solid #000; vertical-align:middle; text-align:center; }
+  th.bh-th-hora{ background:#dce6f1; font-size:7px; }
+  th.bh-th-grupo{ background:#c8d8f0; font-size:6.5px; font-weight:bold; }
+  td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7px; }
+  tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:6.8px; height:12px; }
+  .dec-page{ display:flex; flex-direction:column; }
+  .dec-grid{ flex:1; }
+  .dec-grid td{ height:18px; }
+  @media print{
+    .bh-page{ height:auto; min-height:calc(297mm - 16mm); }
+    table.bh-grid td{ height:14px; }
+    .dec-page{ min-height:calc(297mm - 16mm); }
+  }
 `;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1110,9 +1140,11 @@ async function emitirAnotacoesTecnico(dataRef){
 
   w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
     <title>Anotações do Técnico — ${dataBR}</title>
+    <base href="${location.origin}${location.pathname.replace(/[^/]*$/, '')}">
     <style>${TEC_ANOTACOES_CSS}
       .no-print{background:#6a1b9a;color:#fff;padding:10px;text-align:center;position:sticky;top:0;z-index:99;}
       .no-print button{background:#fff;color:#6a1b9a;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;margin-left:10px;}
+      @media print{ .no-print{ display:none !important; } }
     </style></head><body>
     <div class="no-print">
       📋 Anotações do Técnico — ${ocupados.length} leito(s) — ${dataBR} — imprima em FRENTE E VERSO
@@ -1135,12 +1167,12 @@ async function emitirBalancoDecubito(dataRef){
   if(!ocupados.length){ toast('Nenhum leito ocupado.', true); return; }
 
   const dataBR = dataRef.split('-').reverse().join('/');
-  if(!confirm(`Emitir Mudança de Decúbito e Balanço Hídrico de ${ocupados.length} leito(s), com data de referência ${dataBR}?\n\nEsses documentos são impressos em modo PAISAGEM (A4 horizontal).`)) return;
+  if(!confirm(`Emitir Balanço Hídrico e Mudança de Decúbito de ${ocupados.length} leito(s), com data de referência ${dataBR}?\n\nEsses documentos são impressos em modo PAISAGEM (A4 horizontal).`)) return;
 
   const blocos = ocupados.map(n => {
     const dados = leitos[n];
-    return _decubitoHtmlLeito(n, dados, dataRef)
-         + _balancoHtmlLeito(n, dados, dataRef);
+    return _balancoHtmlLeito(n, dados, dataRef)
+         + _decubitoHtmlLeito(n, dados, dataRef);
   }).join('');
 
   const w = window.open('', '_blank', 'width=1100,height=700');
@@ -1151,13 +1183,15 @@ async function emitirBalancoDecubito(dataRef){
     + BALANCO_CSS;
 
   w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
-    <title>Decúbito e Balanço Hídrico — ${dataBR}</title>
+    <title>Balanço Hídrico e Decúbito — ${dataBR}</title>
+    <base href="${location.origin}${location.pathname.replace(/[^/]*$/, '')}">
     <style>${cssLandscape}
       .no-print{background:#00695c;color:#fff;padding:10px;text-align:center;position:sticky;top:0;z-index:99;}
       .no-print button{background:#fff;color:#00695c;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;margin-left:10px;}
+      @media print{ .no-print{ display:none !important; } }
     </style></head><body>
     <div class="no-print">
-      🌊 Decúbito + Balanço Hídrico — ${ocupados.length} leito(s) — ${dataBR} — impressão em PAISAGEM
+      🌊 Balanço Hídrico + Decúbito — ${ocupados.length} leito(s) — ${dataBR} — impressão em PAISAGEM
       <button onclick="window.print()">🖨 Imprimir</button>
       <button onclick="window.close()">Fechar</button>
     </div>
