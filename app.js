@@ -1083,9 +1083,9 @@ const BALANCO_CSS = `
   .dec-grid{ flex:1; }
   .dec-grid td{ height:18px; }
   @media print{
-    .bh-page{ height:auto; min-height:calc(297mm - 16mm); }
+    .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
     table.bh-grid td{ height:14px; }
-    .dec-page{ min-height:calc(297mm - 16mm); }
+    .dec-page{ min-height:calc(210mm - 16mm); }
   }
 `;
 
