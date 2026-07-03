@@ -694,26 +694,31 @@ function _passagemImprimir(){
     const dnBR = r.dn ? fmtD(r.dn) : '&nbsp;';
     // Calcular idade a partir do DN
     const idadeTxt = r.dn ? (_calcIdade(r.dn) + ' anos') : '&nbsp;';
+    // ADM: data de admissão na UTI, convertida de YYYY-MM-DD para DD/MM/AAAA
+    const admBR = r.adm ? fmtD(r.adm) : '&nbsp;';
 
     return `
     <table class="bloco">
       <tr>
-        <td class="lbl leito-cel" colspan="4">LEITO ${pad(r.leito)} — ${_esc(r.paciente)||'&nbsp;'}</td>
+        <td class="lbl leito-cel" style="width:14%;">LEITO ${pad(r.leito)}</td>
+        <td class="paciente-cel" colspan="5">${_esc(r.paciente)||'&nbsp;'}</td>
       </tr>
       <tr>
         <td class="lbl" style="width:14%;">DN</td>
-        <td style="width:22%;">${dnBR}</td>
-        <td class="lbl" style="width:14%;">IDADE</td>
-        <td style="width:50%;">${idadeTxt}</td>
+        <td style="width:18%;">${dnBR}</td>
+        <td class="lbl" style="width:12%;">IDADE</td>
+        <td style="width:16%;">${idadeTxt}</td>
+        <td class="lbl" style="width:14%;">ADM UTI</td>
+        <td style="width:26%;">${admBR}</td>
       </tr>
-      <tr><td class="lbl">DIAGNÓSTICO</td><td colspan="3">${_esc(r.diagnostico)||'&nbsp;'}</td></tr>
-      <tr><td class="lbl">COMORBIDADES</td><td colspan="3">${_esc(r.comorbidades)||'&nbsp;'}</td></tr>
-      <tr><td class="lbl">DISPOSITIVOS</td><td colspan="3">${_esc(r.dispositivos)||'&nbsp;'}</td></tr>
-      <tr><td class="lbl">ANTIBIÓTICO</td><td colspan="3">${_esc(r.antibiotico)||'&nbsp;'}</td></tr>
-      <tr><td class="lbl">ELIMINAÇÕES</td><td colspan="3">${_esc(r.eliminacoes)||'&nbsp;'}</td></tr>
-      <tr><td class="lbl">LESÃO</td><td colspan="3">${_esc(r.lesao)||'&nbsp;'}</td></tr>
-      <tr class="destaque"><td class="lbl">PENDÊNCIAS</td><td colspan="3">${_esc(r.pendencias)||'&nbsp;'}</td></tr>
-      <tr class="destaque"><td class="lbl">OBSERVAÇÃO</td><td colspan="3">${_esc(r.observacoes)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">DIAGNÓSTICO</td><td colspan="5">${_esc(r.diagnostico)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">COMORBIDADES</td><td colspan="5">${_esc(r.comorbidades)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">DISPOSITIVOS</td><td colspan="5">${_esc(r.dispositivos)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">ANTIBIÓTICO</td><td colspan="5">${_esc(r.antibiotico)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">ELIMINAÇÕES</td><td colspan="5">${_esc(r.eliminacoes)||'&nbsp;'}</td></tr>
+      <tr><td class="lbl">LESÃO</td><td colspan="5">${_esc(r.lesao)||'&nbsp;'}</td></tr>
+      <tr class="destaque"><td class="lbl">PENDÊNCIAS</td><td colspan="5">${_esc(r.pendencias)||'&nbsp;'}</td></tr>
+      <tr class="destaque"><td class="lbl">OBSERVAÇÃO</td><td colspan="5">${_esc(r.observacoes)||'&nbsp;'}</td></tr>
     </table>`;
   }).join('');
 
@@ -736,6 +741,7 @@ function _passagemImprimir(){
     table.bloco td{border:1px solid #000;padding:2px 4px;vertical-align:top;font-size:8px;}
     td.lbl{font-weight:bold;background:#f0f0f0;white-space:nowrap;}
     td.leito-cel{background:#0d47a1;color:#fff;font-weight:bold;font-size:9px;text-align:center;}
+    td.paciente-cel{font-weight:bold;color:#000;font-size:10px;background:#fff;}
     tr.destaque td.lbl{background:#fff3cd;}
     @media print{ button{display:none;} }
   </style></head><body>
