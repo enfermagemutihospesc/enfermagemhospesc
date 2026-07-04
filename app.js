@@ -1035,6 +1035,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
       <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       <td></td><td></td><td></td><td></td><td></td><td></td>
       <td></td><td></td><td></td><td></td><td></td>
+      <td></td>
     </tr>`).join('');
 
   const blocos = BALANCO_BLOCOS.map(b => {
@@ -1045,6 +1046,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
         <td></td><td></td><td></td><td></td><td></td><td></td>
         <td colspan="2" style="text-align:right;">BALANÇO PARCIAL</td>
         <td colspan="2" style="background:#fff;"></td>
+        <td></td>
         <td></td></tr>`;
     }
     if(b.totalFinal){
@@ -1053,6 +1055,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
         <td></td><td></td><td></td><td></td><td></td><td></td>
         <td colspan="2" style="text-align:right;">BALANÇO TOTAL</td>
         <td colspan="2" style="background:#fff;"></td>
+        <td></td>
         <td></td></tr>`;
     }
     return h;
@@ -1090,6 +1093,8 @@ function _balancoHtmlLeito(leito, dados, dataRef){
         <col style="width:4%"><col style="width:4.5%"><col style="width:3.5%"><col style="width:3.5%"><col style="width:3.5%"><col style="width:4%">
         <!-- CUIDADOS: 5 colunas -->
         <col style="width:3.5%"><col style="width:3.5%"><col style="width:4%"><col style="width:4%"><col style="width:4%">
+        <!-- ASSINATURA -->
+        <col style="width:4%">
       </colgroup>
       <tr>
         <th rowspan="2" class="bh-th-hora">HORA</th>
@@ -1097,6 +1102,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
         <th colspan="9" class="bh-th-grupo">CONTROLE HÍDRICO — INFUNDIDO</th>
         <th colspan="6" class="bh-th-grupo">CONTROLE HÍDRICO — ELIMINADO</th>
         <th colspan="5" class="bh-th-grupo">CUIDADOS ESPECIAIS</th>
+        <th rowspan="2" class="bh-th-hora">ASSINATURA</th>
       </tr>
       <tr>
         <th>T°</th><th>FR</th><th>FC</th><th>PA</th><th>PAM</th><th>PVC</th><th>SpO²</th>
