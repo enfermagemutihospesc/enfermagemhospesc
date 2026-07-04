@@ -1040,12 +1040,20 @@ function _balancoHtmlLeito(leito, dados, dataRef){
   const blocos = BALANCO_BLOCOS.map(b => {
     let h = linhasHora(b.horas);
     if(b.subtotal){
-      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">SUB-TOTAIS</td><td colspan="9"></td>
-        <td colspan="6" style="text-align:right;">BALANÇO PARCIAL</td><td colspan="5"></td></tr>`;
+      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">SUB-TOTAIS</td>
+        <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+        <td></td><td></td><td></td><td></td><td></td><td></td>
+        <td colspan="2" style="text-align:right;">BALANÇO PARCIAL</td>
+        <td colspan="2" style="background:#fff;"></td>
+        <td></td></tr>`;
     }
     if(b.totalFinal){
-      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">TOTAIS</td><td colspan="9"></td>
-        <td colspan="6" style="text-align:right;">BALANÇO TOTAL</td><td colspan="5"></td></tr>`;
+      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">TOTAIS</td>
+        <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+        <td></td><td></td><td></td><td></td><td></td><td></td>
+        <td colspan="2" style="text-align:right;">BALANÇO TOTAL</td>
+        <td colspan="2" style="background:#fff;"></td>
+        <td></td></tr>`;
     }
     return h;
   }).join('');
