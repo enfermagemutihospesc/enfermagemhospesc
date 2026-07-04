@@ -778,7 +778,8 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
   const admBR  = dados.adm      ? fmtD(dados.adm)      : '';
   const admHBR = dados.admHosp  ? fmtD(dados.admHosp)  : '';
   const dataBR = (dataRef||dataDoTurno()).split('-').reverse().join('/');
-  const chk = '(&nbsp;&nbsp;&nbsp;)';   // checkbox vazio, preenchido à mão
+  const chk = '<span class="tec-chk"></span>';        // checkbox real, marcado à caneta
+  const linha = (px) => `<span class="tec-linha" style="min-width:${px}px"></span>`; // linha p/ escrever à mão
 
   // ── PÁGINA 1 — ficha de checklist (cabeçalho preenchido + restante em branco) ──
   const pg1 = `
@@ -805,31 +806,35 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
         <td class="tec-lbl">DATA ADMISSÃO HOSPESC: <span class="tec-val">${admHBR||'&nbsp;'}</span></td>
       </tr>
       <tr>
-        <td colspan="3" class="tec-lbl">ALERGIAS: ${chk} SIM &nbsp; ${chk} NÃO &nbsp; QUAIS? ____________________ &nbsp; ${chk} SEM INFORMAÇÃO</td>
+        <td colspan="3" class="tec-lbl">ALERGIAS: ${chk} SIM &nbsp; ${chk} NÃO &nbsp; QUAIS? ${linha(160)} &nbsp; ${chk} SEM INFORMAÇÃO</td>
       </tr>
       <tr><td colspan="3" class="tec-lbl">ESTÁ COM PULSEIRA DE IDENTIFICAÇÃO? ${chk} SIM &nbsp; ${chk} NÃO</td></tr>
-      <tr><td colspan="3" class="tec-lbl">ISOLAMENTO: ${chk} SIM &nbsp; ${chk} NÃO &nbsp;&nbsp; VIGILÂNCIA ${chk} &nbsp; CONTATO ${chk} &nbsp; GOTÍCULAS ${chk} &nbsp; AEROSSÓIS ${chk} &nbsp; MICRO-ORGANISMO: ___________________</td></tr>
+      <tr><td colspan="3" class="tec-lbl">ISOLAMENTO: ${chk} SIM &nbsp; ${chk} NÃO &nbsp;&nbsp; VIGILÂNCIA ${chk} &nbsp; CONTATO ${chk} &nbsp; GOTÍCULAS ${chk} &nbsp; AEROSSÓIS ${chk} &nbsp; MICRO-ORGANISMO: ${linha(160)}</td></tr>
       <tr><td colspan="3" class="tec-lbl">GRAU DE DEPENDÊNCIA: ${chk} INDEPENDENTE &nbsp; ${chk} PARCIALMENTE DEPENDENTE &nbsp; ${chk} DEPENDENTE &nbsp;&nbsp; DEAMBULA? ${chk} SIM ${chk} NÃO &nbsp;&nbsp; CADEIRA DE RODAS? ${chk} SIM ${chk} NÃO</td></tr>
     </table>
 
-    <table class="tec-tb">
-      <tr><td colspan="2" class="tec-sec">RISCOS ASSISTENCIAIS</td></tr>
-      <tr>
-        <td class="tec-c1">QUEDAS</td>
-        <td>GRADES DO LEITO ELEVADAS? ${chk} SIM ${chk} NÃO<br>
-            NECESSITA DE CONTENÇÃO MECÂNICA? ${chk} SIM ${chk} NÃO<br>
-            CONTENÇÃO SEM APERTAR/GARROTEAR? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
-            TROCADA CONTENÇÃO HOJE? ${chk} SIM ${chk} NÃO ${chk} N/A — SE NÃO, REALIZAR TROCA!</td>
-      </tr>
-      <tr>
-        <td class="tec-c1">LESÃO POR PRESSÃO (LPP)</td>
-        <td>USO DE COLCHÃO DE AR? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
-            CALCÂNEOS SUSPENSOS? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
-            APLICADO HIDRATANTE NA PELE? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
-            APLICADO PROTETOR CUTÂNEO NAS TROCAS DE FRALDA? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
-            MUDANÇA DE DECÚBITO CONFORME ORIENTAÇÃO (2/2H; 3/3H)? ${chk} SIM ${chk} NÃO ${chk} N/A</td>
-      </tr>
-    </table>
+    <div class="tec-sec">RISCOS ASSISTENCIAIS</div>
+    <div class="tec-riscos">
+      <div class="tec-card">
+        <div class="tec-card-h">Quedas</div>
+        <div class="tec-card-b">
+          GRADES DO LEITO ELEVADAS? ${chk} SIM ${chk} NÃO<br>
+          NECESSITA DE CONTENÇÃO MECÂNICA? ${chk} SIM ${chk} NÃO<br>
+          CONTENÇÃO SEM APERTAR/GARROTEAR? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+          TROCADA CONTENÇÃO HOJE? ${chk} SIM ${chk} NÃO ${chk} N/A — SE NÃO, REALIZAR TROCA!
+        </div>
+      </div>
+      <div class="tec-card">
+        <div class="tec-card-h">Lesão por Pressão (LPP)</div>
+        <div class="tec-card-b">
+          USO DE COLCHÃO DE AR? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+          CALCÂNEOS SUSPENSOS? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+          APLICADO HIDRATANTE NA PELE? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+          APLICADO PROTETOR CUTÂNEO NAS TROCAS DE FRALDA? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
+          MUDANÇA DE DECÚBITO CONFORME ORIENTAÇÃO (2/2H; 3/3H)? ${chk} SIM ${chk} NÃO ${chk} N/A
+        </div>
+      </div>
+    </div>
 
     <table class="tec-tb tec-grid3">
       <tr>
@@ -838,7 +843,7 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
         <th colspan="2">HIDRATAÇÃO VENOSA</th>
       </tr>
       <tr><td>CONSCIENTE</td><td></td><td></td><td>PRESENTE</td><td></td><td></td><td colspan="2" rowspan="6" style="vertical-align:top;">
-        ${chk} SRS &nbsp; ${chk} SRL &nbsp; ${chk} SF 0,9% &nbsp; ${chk} SG 5%<br>M____/T____/N____ ml/h &nbsp; ${chk} NENHUMA
+        ${chk} SRS &nbsp; ${chk} SRL &nbsp; ${chk} SF 0,9% &nbsp; ${chk} SG 5%<br>M${linha(26)}/T${linha(26)}/N${linha(26)} ml/h &nbsp; ${chk} NENHUMA
         <div class="tec-sec" style="margin-top:6px;">DROGAS EM BOMBAS DE INFUSÃO</div>
         <table class="tec-mini"><tr><th></th><th>M</th><th>T</th><th>N</th></tr>
         ${[1,2,3,4,5,6].map(n=>`<tr><td style="min-width:80px;">${n}.</td><td></td><td></td><td></td></tr>`).join('')}
@@ -865,12 +870,12 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
             SVD FIXADA NO PACIENTE? ${chk} SIM ${chk} NÃO ${chk} N/A<br>
             HIGIENE DO MEATO URETRAL REALIZADA? ${chk} SIM ${chk} NÃO ${chk} N/A
           </td></tr>
-      <tr><td>C.N.: ____ L/MIN</td><td colspan="2">SEM ACESSO VENOSO ${chk} SIM ${chk} NÃO</td></tr>
-      <tr><td>M.V.: ____ %</td><td colspan="2">AVP LOCAL: __________ DATA: ____/____/______</td></tr>
-      <tr><td>MÁSC. NÃO REINALANTE ____ L/MIN</td><td colspan="2">AVC LOCAL: __________ DATA CURATIVO: ____/____/______ &nbsp; ${chk} FILME ${chk} GAZE+MICROPORE</td></tr>
-      <tr><td>VNI: ${chk} BIPAP ${chk} HELMET</td><td colspan="2" rowspan="2">CDL P/ HD LOCAL: __________ DATA CURATIVO: ____/____/______</td></tr>
+      <tr><td>C.N.: ${linha(28)} L/MIN</td><td colspan="2">SEM ACESSO VENOSO ${chk} SIM ${chk} NÃO</td></tr>
+      <tr><td>M.V.: ${linha(28)} %</td><td colspan="2">AVP LOCAL: ${linha(90)} DATA: ${linha(60)}</td></tr>
+      <tr><td>MÁSC. NÃO REINALANTE ${linha(28)} L/MIN</td><td colspan="2">AVC LOCAL: ${linha(90)} DATA CURATIVO: ${linha(60)} &nbsp; ${chk} FILME ${chk} GAZE+MICROPORE</td></tr>
+      <tr><td>VNI: ${chk} BIPAP ${chk} HELMET</td><td colspan="2" rowspan="2">CDL P/ HD LOCAL: ${linha(90)} DATA CURATIVO: ${linha(60)}</td></tr>
       <tr><td>VENTILAÇÃO MECÂNICA INVASIVA ${chk}</td></tr>
-      <tr><td>TRAQUEOSTOMIA ${chk}</td><td colspan="2">DRENO DE TÓRAX ${chk} D ${chk} E &nbsp; INSERÇÃO: ____/____/______ &nbsp; DÉBITO APÓS TROCA SELO D'ÁGUA 06H: _______</td></tr>
+      <tr><td>TRAQUEOSTOMIA ${chk}</td><td colspan="2">DRENO DE TÓRAX ${chk} D ${chk} E &nbsp; INSERÇÃO: ${linha(60)} &nbsp; DÉBITO APÓS TROCA SELO D'ÁGUA 06H: ${linha(60)}</td></tr>
       <tr><td colspan="3"></td></tr>
       <tr><td colspan="3"></td></tr>
     </table>
@@ -878,18 +883,18 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
     <table class="tec-tb tec-grid3">
       <tr><th>DIETA</th><th colspan="2">DIURESE</th><th colspan="2">ASPECTOS DA URINA</th></tr>
       <tr><td>ORAL ${chk}</td><td colspan="2">PRESENTE ${chk}</td><td colspan="2" rowspan="6" style="vertical-align:top;">
-        CLARA ${chk} &nbsp; CONCENTRADA ${chk} &nbsp; COLÚRIA ${chk}<br>HEMATÚRIA ${chk} &nbsp; PIÚRIA ${chk} &nbsp; OUTRO: ____________
+        CLARA ${chk} &nbsp; CONCENTRADA ${chk} &nbsp; COLÚRIA ${chk}<br>HEMATÚRIA ${chk} &nbsp; PIÚRIA ${chk} &nbsp; OUTRO: ${linha(90)}
       </td></tr>
-      <tr><td>SNE VAZÃO: ______</td><td colspan="2">AUSENTE ${chk}</td></tr>
-      <tr><td>SOE VAZÃO: ______</td><td colspan="2">ESPONTÂNEA – BANHEIRO ${chk}</td></tr>
-      <tr><td>SNG VAZÃO: ______</td><td colspan="2">ESPONTÂNEA – FRALDA ${chk}</td></tr>
-      <tr><td>GTM VAZÃO: ______</td><td colspan="2">DISP. NÃO INVASIVO (JONTEX) ${chk} &nbsp; APARADEIRA/PAPAGARO ${chk}</td></tr>
+      <tr><td>SNE VAZÃO: ${linha(50)}</td><td colspan="2">AUSENTE ${chk}</td></tr>
+      <tr><td>SOE VAZÃO: ${linha(50)}</td><td colspan="2">ESPONTÂNEA – BANHEIRO ${chk}</td></tr>
+      <tr><td>SNG VAZÃO: ${linha(50)}</td><td colspan="2">ESPONTÂNEA – FRALDA ${chk}</td></tr>
+      <tr><td>GTM VAZÃO: ${linha(50)}</td><td colspan="2">DISP. NÃO INVASIVO (JONTEX) ${chk} &nbsp; APARADEIRA/PAPAGARO ${chk}</td></tr>
       <tr><td>JEJUNOSTOMIA ${chk} &nbsp; ZERO ATÉ 2ª ORDEM ${chk}</td><td colspan="2">SVD ${chk} &nbsp; CISTOSTOMIA ${chk} &nbsp; NEFROSTOMIA ${chk} D ${chk} E</td></tr>
     </table>
 
     <table class="tec-tb tec-grid3">
       <tr><th colspan="2">INTEGRIDADE DA PELE E MUCOSAS</th><th colspan="3">LESÕES E CURATIVOS</th></tr>
-      <tr><td colspan="2">${chk} PELE ÍNTEGRA &nbsp;&nbsp; ${chk} PELE NÃO ÍNTEGRA<br>LESÃO EM MUCOSA? ${chk} SIM ${chk} NÃO &nbsp; DESCRIÇÃO: ___________________________</td>
+      <tr><td colspan="2">${chk} PELE ÍNTEGRA &nbsp;&nbsp; ${chk} PELE NÃO ÍNTEGRA<br>LESÃO EM MUCOSA? ${chk} SIM ${chk} NÃO &nbsp; DESCRIÇÃO: ${linha(180)}</td>
           <td colspan="3" rowspan="2" style="height:34px;"></td></tr>
       <tr><td colspan="2">FIXAÇÃO DO TOT LIMPA? ${chk} SIM ${chk} NÃO ${chk} N/A &nbsp;&nbsp; SNE/SNG COM FIXAÇÃO LIMPA? ${chk} SIM ${chk} NÃO ${chk} N/A<br>TROCADA FIXAÇÃO DO TOT/TQT? ${chk} SIM ${chk} NÃO ${chk} N/A &nbsp;&nbsp; CABECEIRA ELEVADA A 30°? ${chk} SIM ${chk} NÃO</td></tr>
     </table>
@@ -947,6 +952,15 @@ const TEC_ANOTACOES_CSS = `
   table.tec-mini td, table.tec-mini th{border:1px solid #999;padding:1px 3px;font-size:7.5px;}
   table.tec-anot td{height:15px;}
   td.tec-hor{text-align:center;}
+  /* checkbox real (marcado à caneta) no lugar do "(   )" de texto */
+  .tec-chk{display:inline-block;width:8.5px;height:8.5px;border:1.2px solid #000;vertical-align:-1.5px;margin:0 3px 0 1px;background:#fff;}
+  /* linha de escrita (substitui sequências de "____") — mais espaço p/ caneta */
+  .tec-linha{display:inline-block;border-bottom:1.1px solid #000;height:11px;vertical-align:-3px;margin:0 3px;}
+  /* RISCOS ASSISTENCIAIS em cards lado a lado, mais fácil de escanear */
+  .tec-riscos{display:flex;gap:6px;margin-bottom:5px;}
+  .tec-card{flex:1;border:1.3px solid #0d47a1;border-radius:5px;overflow:hidden;}
+  .tec-card-h{background:#dce6f1;font-weight:bold;text-align:center;text-transform:uppercase;font-size:8.5px;padding:2.5px 4px;border-bottom:1.2px solid #0d47a1;}
+  .tec-card-b{padding:5px 7px;font-size:8.5px;line-height:1.65;}
   @media print{ button{display:none;} }
 `;
 
