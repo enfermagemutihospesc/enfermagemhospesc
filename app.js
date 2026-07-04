@@ -1018,7 +1018,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
   const linhasHora = (horas) => horas.map(h => `
     <tr><td class="bh-h">${String(h).padStart(2,'0')}h</td>
       <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
-      <td></td><td></td><td></td><td></td><td></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       <td></td><td></td><td></td><td></td><td></td>
       <td></td><td></td><td></td><td></td><td></td>
     </tr>`).join('');
@@ -1026,11 +1026,11 @@ function _balancoHtmlLeito(leito, dados, dataRef){
   const blocos = BALANCO_BLOCOS.map(b => {
     let h = linhasHora(b.horas);
     if(b.subtotal){
-      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">SUB-TOTAIS</td><td colspan="5"></td>
+      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">SUB-TOTAIS</td><td colspan="9"></td>
         <td colspan="5" style="text-align:right;">BALANÇO PARCIAL</td><td colspan="5"></td></tr>`;
     }
     if(b.totalFinal){
-      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">TOTAIS</td><td colspan="5"></td>
+      h += `<tr class="bh-sub"><td colspan="8" style="text-align:right;">TOTAIS</td><td colspan="9"></td>
         <td colspan="5" style="text-align:right;">BALANÇO TOTAL</td><td colspan="5"></td></tr>`;
     }
     return h;
@@ -1061,8 +1061,9 @@ function _balancoHtmlLeito(leito, dados, dataRef){
         <col style="width:4%"><!-- HORA -->
         <!-- SINAIS VITAIS: 7 colunas, mais largas -->
         <col style="width:3.5%"><col style="width:3.5%"><col style="width:3.5%"><col style="width:6%"><col style="width:3.5%"><col style="width:3.5%"><col style="width:3.5%">
-        <!-- INFUNDIDO: 5 colunas -->
+        <!-- INFUNDIDO: 5 colunas nomeadas + 4 em branco (infusões não programadas) -->
         <col style="width:4.5%"><col style="width:4%"><col style="width:4%"><col style="width:4%"><col style="width:5%">
+        <col style="width:4%"><col style="width:4%"><col style="width:4%"><col style="width:4%">
         <!-- ELIMINADO: 5 colunas -->
         <col style="width:4%"><col style="width:4.5%"><col style="width:3.5%"><col style="width:3.5%"><col style="width:3.5%">
         <!-- CUIDADOS: 5 colunas -->
@@ -1071,13 +1072,14 @@ function _balancoHtmlLeito(leito, dados, dataRef){
       <tr>
         <th rowspan="2" class="bh-th-hora">HORA</th>
         <th colspan="7" class="bh-th-grupo">SINAIS VITAIS</th>
-        <th colspan="5" class="bh-th-grupo">CONTROLE HÍDRICO — INFUNDIDO</th>
+        <th colspan="9" class="bh-th-grupo">CONTROLE HÍDRICO — INFUNDIDO</th>
         <th colspan="5" class="bh-th-grupo">CONTROLE HÍDRICO — ELIMINADO</th>
         <th colspan="5" class="bh-th-grupo">CUIDADOS ESPECIAIS</th>
       </tr>
       <tr>
         <th>T°</th><th>FR</th><th>FC</th><th>PA</th><th>PAM</th><th>PVC</th><th>SpO²</th>
         <th>ORAL/<br>MED.</th><th>SNG/<br>SNE</th><th>SORO</th><th>MED.<br>EV</th><th>SANGUE/<br>DERIV.</th>
+        <th></th><th></th><th></th><th></th>
         <th>DIURESE</th><th>DREN.<br>GÁSTR.</th><th>FEZES</th><th>VÔMIT.</th><th>DRENO</th>
         <th>FiO²</th><th>HGT</th><th>HIG.<br>ORAL</th><th>HIG.<br>MEATO</th><th>DECÚB.</th>
       </tr>
