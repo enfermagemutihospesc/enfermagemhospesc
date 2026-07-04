@@ -979,13 +979,20 @@ function _decubitoHtmlLeito(leito, dados, dataRef){
   const [y,m,d] = dataRef.split('-').map(Number);
   const dataMais1 = new Date(y, m-1, d+1);
   const dataMais1BR = dataMais1.getDate().toString().padStart(2,'0')+'/'+(dataMais1.getMonth()+1).toString().padStart(2,'0')+'/'+dataMais1.getFullYear();
+  const chk = '<span class="tec-chk"></span>';        // checkbox real, marcado à caneta
+  const linha = (px) => `<span class="tec-linha" style="min-width:${px}px"></span>`; // linha p/ escrever à mão
 
-  const linhas = DECUBITO_HORARIOS.map(h => {
+  const linhas = DECUBITO_HORARIOS.map((h, i) => {
     const diaLinha = (h==='00:00'||h==='02:00'||h==='04:00') ? dataMais1BR : dataBR;
-    return `<tr>
+    const clsBloco = (i===6) ? ' dec-bloco' : ''; // divisor visual entre os dois blocos de 12h (06h-16h / 18h-04h)
+    return `<tr class="${clsBloco.trim()}">
       <td class="tec-hor">${diaLinha}</td>
       <td class="tec-hor">${h}</td>
-      <td style="padding:2px 6px;">DORSAL (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL E (&nbsp;&nbsp;&nbsp;) &nbsp;&nbsp; DECÚBITO LATERAL D (&nbsp;&nbsp;&nbsp;)</td>
+      <td class="dec-pos">
+        <span class="dec-opt">${chk} DORSAL</span>
+        <span class="dec-opt">${chk} DECÚBITO LATERAL E</span>
+        <span class="dec-opt">${chk} DECÚBITO LATERAL D</span>
+      </td>
       <td></td>
     </tr>`;
   }).join('');
@@ -997,7 +1004,7 @@ function _decubitoHtmlLeito(leito, dados, dataRef){
       <div class="tec-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES</div>
       <div class="tec-data">LEITO ${pad(leito)} — ${dataBR}</div>
     </div>
-    <div class="tec-sec" style="text-align:center;padding:4px 0;">REGISTRO DE MUDANÇA POSTURAL</div>
+    <div class="tec-sec" style="text-align:center;padding:4px 0;">REGISTRO DE MUDANÇA POSTURAL <span style="font-weight:normal;text-transform:none;">— a cada 2 horas, ou conforme prescrição médica</span></div>
     <table class="tec-tb" style="margin-bottom:4px;">
       <tr><td class="tec-lbl" style="width:75%;">PACIENTE: <span class="tec-val">${_esc(dados.pac)||'&nbsp;'}</span></td>
           <td class="tec-lbl">UTI GERAL — LEITO ${pad(leito)}</td></tr>
@@ -1008,9 +1015,10 @@ function _decubitoHtmlLeito(leito, dados, dataRef){
     </table>
     <div class="dec-spacer"></div>
     <table class="tec-tb" style="margin-top:8px;">
-      <tr><td style="width:60%;">ENFERMEIRO: _______________________________________________</td>
+      <tr><td style="width:60%;">ENFERMEIRO: ${linha(280)}</td>
           <td>DATA: ${dataBR}</td></tr>
     </table>
+    <div class="dec-legenda">ASSINATURA E CARIMBO DO ENFERMEIRO RESPONSÁVEL</div>
   </div>`;
 }
 
@@ -1140,6 +1148,11 @@ const BALANCO_CSS = `
   .dec-grid{ flex:0 0 auto; }
   .dec-spacer{ flex:1 1 auto; }
   table.dec-grid.tec-anot td{ height:32px; }
+  table.dec-grid tr:nth-child(even) td{ background:#f7f9fc; }
+  table.dec-grid tr.dec-bloco td{ border-top:2px solid #000; }
+  td.dec-pos{ display:flex; align-items:center; justify-content:space-between; gap:6px; padding:2.5px 8px; }
+  .dec-opt{ white-space:nowrap; font-size:8.5px; }
+  .dec-legenda{ text-align:center; font-size:7.3px; color:#555; margin-top:-2px; margin-bottom:6px; }
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
     table.bh-grid td{ height:20px; }
