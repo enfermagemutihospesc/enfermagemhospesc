@@ -6236,6 +6236,21 @@ async function gerarPreview() {
   // Preserva a SAE existente ao salvar (para não sobrescrever)
   if(jaTemSAE && !d.sae) d.sae = evExistente.sae;
 
+  // Herança da SAE do DIURNO para o NOTURNO do MESMO dia e MESMO paciente:
+  // evita chamar a API de novo à noite só porque mudou o turno — a SAE vale
+  // para o dia inteiro e só é regerada manualmente pelo botão "Gerar SAE".
+  let saeHerdada = false;
+  if(!jaTemSAE && !d.sae && d.turno === 'NOTURNO'){
+    try {
+      const evDiurno = await dbGet('uti_ev_'+d.leito+'_DIURNO_'+d.data);
+      if(evDiurno && evDiurno.sae && evDiurno.sae.diagnosticos && evDiurno.sae.diagnosticos.length
+         && _normNome(evDiurno.pac) === _normNome(d.pac)){
+        d.sae = evDiurno.sae;
+        saeHerdada = true;
+      }
+    } catch(e){ console.warn('Herdar SAE do diurno:', e); }
+  }
+
   await dbSet(evKey, d);
 
   // Sincroniza dados de identificação com o cadastro do leito
@@ -6262,10 +6277,20 @@ async function gerarPreview() {
   window.scrollTo(0,0);
   btn.disabled = false; btn.textContent = 'Gerar Impressão →';
   toast('✓ Evolução salva'+(modoOffline?' localmente':' na nuvem'));
+  if(saeHerdada){
+    const status = document.getElementById('pdf-status');
+    if(status){
+      status.style.color = '#0d47a1';
+      status.textContent = '🩺 SAE do diurno reaproveitada (sem nova chamada à IA).';
+      setTimeout(() => { if(status.textContent.startsWith('🩺 SAE do diurno')) status.textContent = ''; }, 5000);
+    }
+  }
 
-  // Auto-geração da SAE: só dispara se ainda não existir uma para este turno
-  // e se houver dados mínimos (paciente preenchido).
-  if(!jaTemSAE && d.pac){
+  // Auto-geração da SAE: só dispara no turno DIURNO (primeira evolução do dia
+  // para o leito/paciente), quando não há SAE própria nem herdada. O NOTURNO
+  // nunca aciona a API automaticamente — ele reaproveita a SAE do diurno
+  // (herdada acima) ou fica sem SAE até o usuário clicar em "Gerar SAE".
+  if(!jaTemSAE && !saeHerdada && d.pac && d.turno === 'DIURNO'){
     _autoGerarSAE(d).catch(err => console.warn('[SAE auto]', err));
   }
 }
