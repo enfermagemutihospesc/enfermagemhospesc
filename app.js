@@ -1073,7 +1073,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
   <div class="tec-pg bh-page">
     <div class="bh-header-top">
       <div class="bh-logo">${_logoImg(55)}</div>
-      <div class="bh-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES<br><span style="font-size:9px;font-weight:normal;">UNIDADE DE TERAPIA INTENSIVA — UTI GERAL</span></div>
+      <div class="bh-orgao">PREFEITURA MUNICIPAL DO NATAL · HOSPITAL DOS PESCADORES<br><span style="font-size:10px;font-weight:normal;">UNIDADE DE TERAPIA INTENSIVA — UTI GERAL</span></div>
       <div class="bh-leito-data">LEITO ${pad(leito)}<br>${dataBR}</div>
     </div>
     <table class="tec-tb bh-cab">
@@ -1131,20 +1131,20 @@ const BALANCO_CSS = `
   .bh-header-top{ display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .bh-logo{ flex-shrink:0; }
   .bh-logo img{ height:46px; width:auto; display:block; }
-  .bh-orgao{ flex:1; text-align:center; font-weight:bold; font-size:10px; line-height:1.4; }
-  .bh-leito-data{ font-weight:bold; font-size:10px; text-align:right; white-space:nowrap; }
+  .bh-orgao{ flex:1; text-align:center; font-weight:bold; font-size:11px; line-height:1.4; }
+  .bh-leito-data{ font-weight:bold; font-size:11.5px; text-align:right; white-space:nowrap; }
   table.bh-cab{ margin-bottom:3px; }
-  table.bh-cab td{ font-size:8px; }
+  table.bh-cab td{ font-size:9.5px; }
   .tec-pg.bh-page table.bh-grid{ flex:0 0 auto; }
   .bh-spacer{ flex:1 1 auto; }
-  table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:7px; }
-  table.bh-grid th{ font-size:6.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; height:26px; }
-  table.bh-grid td{ padding:0 1px; height:20px; border:1px solid #000; vertical-align:middle; text-align:center; }
-  th.bh-th-hora{ background:#dce6f1; font-size:7px; }
-  th.bh-th-grupo{ background:#c8d8f0; font-size:6.5px; font-weight:bold; }
-  td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7px; }
-  tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:6.8px; height:16px; }
-  tr.bh-tr-sub th{ height:38px; }
+  table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:9px; }
+  table.bh-grid th{ font-size:8.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; height:27px; }
+  table.bh-grid td{ padding:0 1px; height:21px; border:1px solid #000; vertical-align:middle; text-align:center; }
+  th.bh-th-hora{ background:#dce6f1; font-size:9px; }
+  th.bh-th-grupo{ background:#c8d8f0; font-size:8.5px; font-weight:bold; }
+  td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:9px; }
+  tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:8.5px; height:17px; }
+  tr.bh-tr-sub th{ height:39px; }
   .dec-page{ display:flex; flex-direction:column; }
   .dec-grid{ flex:0 0 auto; }
   .dec-spacer{ flex:1 1 auto; }
@@ -1156,9 +1156,9 @@ const BALANCO_CSS = `
   .dec-legenda{ text-align:center; font-size:7.3px; color:#555; margin-top:-2px; margin-bottom:6px; }
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
-    table.bh-grid th{ height:26px; }
-    tr.bh-tr-sub th{ height:38px; }
-    table.bh-grid td{ height:20px; }
+    table.bh-grid th{ height:27px; }
+    tr.bh-tr-sub th{ height:39px; }
+    table.bh-grid td{ height:21px; }
     .dec-page{ min-height:calc(210mm - 16mm); }
   }
 `;
