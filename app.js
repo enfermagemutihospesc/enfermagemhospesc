@@ -901,9 +901,9 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
   </div>`;
 
   // ── PÁGINA 2 — anotações de enfermagem (em branco) + assinaturas ──
-  // Linhas com altura fixa de 22px — suficiente para escrita à mão quando impresso.
-  // A quantidade (30) preenche naturalmente a página deixando espaço para a assinatura.
-  const linhas = Array.from({length:36}, ()=> '<tr><td class="tec-hor" style="height:20px;"></td><td></td><td></td></tr>').join('');
+  // Linhas com altura fixa de 20px — suficiente para escrita à mão quando impresso.
+  // A quantidade (44) preenche a página com mais espaço para anotações.
+  const linhas = Array.from({length:44}, ()=> '<tr><td class="tec-hor" style="height:20px;"></td><td></td><td></td></tr>').join('');
   const pg2 = `
   <div class="tec-pg">
     <div class="tec-top">
@@ -913,7 +913,7 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
     </div>
     <div class="tec-sec" style="text-align:center;">ANOTAÇÕES DE ENFERMAGEM</div>
     <table class="tec-tb tec-anot">
-      <tr><th style="width:12%;">HORÁRIO</th><th>DESCRIÇÃO</th><th style="width:24%;">ASSINATURA + CARIMBO DO TÉC. DE ENF.</th></tr>
+      <tr><th style="width:12%;">HORÁRIO</th><th>DESCRIÇÃO</th><th style="width:15%;">ASSINATURA + CARIMBO DO TÉC. DE ENF.</th></tr>
       ${linhas}
     </table>
     <table class="tec-tb" style="margin-top:6px;">
@@ -940,7 +940,7 @@ const TEC_ANOTACOES_CSS = `
   table.tec-tb{width:100%;border-collapse:collapse;margin-bottom:5px;}
   table.tec-tb td, table.tec-tb th{border:1px solid #000;padding:2.5px 5px;vertical-align:top;font-size:8.5px;}
   table.tec-tb th{background:#eee;font-size:8px;text-align:center;}
-  .tec-faixa{background:#0d47a1;color:#fff;font-weight:bold;text-align:center;font-size:10px;}
+  .tec-faixa{background:#0d47a1;color:#000;font-weight:bold;text-align:center;font-size:10px;}
   .tec-tit{background:#e8e8e8;font-weight:bold;text-align:center;font-size:10px;}
   .tec-sec{background:#dce6f1;font-weight:bold;text-align:center;text-transform:uppercase;font-size:9px;}
   .tec-lbl{font-weight:bold;}
@@ -1139,7 +1139,7 @@ const BALANCO_CSS = `
   .bh-spacer{ flex:1 1 auto; }
   table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:7px; }
   table.bh-grid th{ font-size:6.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; }
-  table.bh-grid td{ padding:0 1px; height:20px; border:1px solid #000; vertical-align:middle; text-align:center; }
+  table.bh-grid td{ padding:0 1px; height:28px; border:1px solid #000; vertical-align:middle; text-align:center; }
   th.bh-th-hora{ background:#dce6f1; font-size:7px; }
   th.bh-th-grupo{ background:#c8d8f0; font-size:6.5px; font-weight:bold; }
   td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7px; }
@@ -1155,7 +1155,7 @@ const BALANCO_CSS = `
   .dec-legenda{ text-align:center; font-size:7.3px; color:#555; margin-top:-2px; margin-bottom:6px; }
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
-    table.bh-grid td{ height:20px; }
+    table.bh-grid td{ height:28px; }
     .dec-page{ min-height:calc(210mm - 16mm); }
   }
 `;
