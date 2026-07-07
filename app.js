@@ -1138,8 +1138,8 @@ const BALANCO_CSS = `
   .tec-pg.bh-page table.bh-grid{ flex:0 0 auto; }
   .bh-spacer{ flex:1 1 auto; }
   table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:7px; }
-  table.bh-grid th{ font-size:6.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; }
-  table.bh-grid td{ padding:0 1px; height:28px; border:1px solid #000; vertical-align:middle; text-align:center; }
+  table.bh-grid th{ font-size:6.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; height:26px; }
+  table.bh-grid td{ padding:0 1px; height:20px; border:1px solid #000; vertical-align:middle; text-align:center; }
   th.bh-th-hora{ background:#dce6f1; font-size:7px; }
   th.bh-th-grupo{ background:#c8d8f0; font-size:6.5px; font-weight:bold; }
   td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7px; }
@@ -1155,7 +1155,8 @@ const BALANCO_CSS = `
   .dec-legenda{ text-align:center; font-size:7.3px; color:#555; margin-top:-2px; margin-bottom:6px; }
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
-    table.bh-grid td{ height:28px; }
+    table.bh-grid th{ height:26px; }
+    table.bh-grid td{ height:20px; }
     .dec-page{ min-height:calc(210mm - 16mm); }
   }
 `;
@@ -9525,9 +9526,14 @@ function _renderIRAS(d){
 
     if(!ativo){
       html += `<div style="padding:10px 14px;font-size:.8rem;color:var(--muted);background:#f8f9fa;font-style:italic;">
-        ⚠ Dispositivo não registrado na evolução — itens marcados como N/A automaticamente. Altere se aplicável.
+        ⚠ Dispositivo não registrado na evolução — bundle bloqueado como N/A. Se o paciente possui o dispositivo, atualize a evolução primeiro.
       </div>`;
     }
+
+    // Itens de um bundle sem o dispositivo presente ficam bloqueados (somente
+    // leitura) — não faz sentido preencher um checklist de cuidados com um
+    // dispositivo que o paciente não tem (ex.: AVC já retirado).
+    const desabilitado = !ativo;
 
     itens.forEach(item => {
       const resp = _irasRespostas[item.id] || '';
@@ -9536,7 +9542,7 @@ function _renderIRAS(d){
       const itemCls = itemAv === 'aderente' ? ' aderente'
                     : itemAv === 'nao_aderente' ? ' nao-aderente'
                     : itemAv === 'na' ? ' item-na' : '';
-      html += `<div class="iras-item${itemCls}" data-item-id="${item.id}" data-bundle-id="${bundle.id}">
+      html += `<div class="iras-item${itemCls}${desabilitado?' iras-item-bloqueado':''}" data-item-id="${item.id}" data-bundle-id="${bundle.id}">
         <div class="iras-item-texto">${item.texto}</div>
         <div class="iras-radios">`;
 
@@ -9545,13 +9551,13 @@ function _renderIRAS(d){
           const opId = op.toLowerCase().replace(/\//g,'_');
           const ativo_cls = resp === opId ? ' ativo' : '';
           html += `<button type="button" class="iras-radio-btn na${ativo_cls}"
-            data-resp="${opId}">${op}</button>`;
+            data-resp="${opId}"${desabilitado?' disabled':''}>${op}</button>`;
         });
       } else {
         html += `
-          <button type="button" class="iras-radio-btn sim${resp==='sim'?' ativo':''}" data-resp="sim">✓ SIM</button>
-          <button type="button" class="iras-radio-btn nao${resp==='nao'?' ativo':''}" data-resp="nao">✗ NÃO</button>
-          <button type="button" class="iras-radio-btn na${resp==='na'?' ativo':''}" data-resp="na">N/A</button>`;
+          <button type="button" class="iras-radio-btn sim${resp==='sim'?' ativo':''}" data-resp="sim"${desabilitado?' disabled':''}>✓ SIM</button>
+          <button type="button" class="iras-radio-btn nao${resp==='nao'?' ativo':''}" data-resp="nao"${desabilitado?' disabled':''}>✗ NÃO</button>
+          <button type="button" class="iras-radio-btn na${resp==='na'?' ativo':''}" data-resp="na"${desabilitado?' disabled':''}>N/A</button>`;
       }
 
       html += `</div></div>`;
