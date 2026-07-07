@@ -1112,7 +1112,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
         <th colspan="5" class="bh-th-grupo">CUIDADOS ESPECIAIS</th>
         <th rowspan="2" class="bh-th-hora">ASSINATURA</th>
       </tr>
-      <tr>
+      <tr class="bh-tr-sub">
         <th>T°</th><th>FR</th><th>FC</th><th>PA</th><th>PAM</th><th>PVC</th><th>SpO²</th>
         <th>ORAL/<br>MED.</th><th>SNG/<br>SNE</th><th>SORO</th><th>MED.<br>EV</th><th>SANGUE/<br>DERIV.</th>
         <th></th><th></th><th></th><th></th>
@@ -1144,6 +1144,7 @@ const BALANCO_CSS = `
   th.bh-th-grupo{ background:#c8d8f0; font-size:6.5px; font-weight:bold; }
   td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7px; }
   tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:6.8px; height:16px; }
+  tr.bh-tr-sub th{ height:38px; }
   .dec-page{ display:flex; flex-direction:column; }
   .dec-grid{ flex:0 0 auto; }
   .dec-spacer{ flex:1 1 auto; }
@@ -1156,6 +1157,7 @@ const BALANCO_CSS = `
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
     table.bh-grid th{ height:26px; }
+    tr.bh-tr-sub th{ height:38px; }
     table.bh-grid td{ height:20px; }
     .dec-page{ min-height:calc(210mm - 16mm); }
   }
@@ -11419,6 +11421,13 @@ function _dispParaCamposLegado(lista){
     const def = _dispDef(d.tipo);
     const leg = def.legado || {};
     const localComposto = [d.localizacao, (d.lado && d.lado!=='—')?d.lado:''].filter(Boolean).join(' ');
+    // Dispositivos já retirados: só grava a data de retirada no campo legado (_ret),
+    // mas NÃO popula local/número/data — assim a condicao dos bundles IRAS
+    // (ex.: !!(avc_l || avc_d)) retorna false e o checklist CDL/AVC some corretamente.
+    if(d.dataRetirada){
+      if(leg.ret) r[leg.ret] = d.dataRetirada;
+      return;
+    }
     if(leg.avpArray){
       r.avps.push({ local: localComposto || d.localizacao || '·', data: d.dataInsercao||'' });
     } else if(leg.outros){
