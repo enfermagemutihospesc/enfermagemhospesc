@@ -1038,7 +1038,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
   const dnBR = dados.dn ? fmtD(dados.dn) : '';
 
   const linhasHora = (horas) => horas.map(h => `
-    <tr><td class="bh-h">${String(h).padStart(2,'0')}h</td>
+    <tr${h%2===0?' class="bh-even"':''}><td class="bh-h">${String(h).padStart(2,'0')}h</td>
       <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       <td></td><td></td><td></td><td></td><td></td><td></td>
@@ -1053,8 +1053,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
         <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
         <td></td><td></td><td></td><td></td><td></td><td></td>
         <td colspan="2" style="text-align:right;">BALANÇO PARCIAL</td>
-        <td colspan="2" style="background:#fff;"></td>
-        <td></td>
+        <td colspan="3" style="background:#fff;"></td>
         <td></td></tr>`;
     }
     if(b.totalFinal){
@@ -1062,8 +1061,7 @@ function _balancoHtmlLeito(leito, dados, dataRef){
         <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
         <td></td><td></td><td></td><td></td><td></td><td></td>
         <td colspan="2" style="text-align:right;">BALANÇO TOTAL</td>
-        <td colspan="2" style="background:#fff;"></td>
-        <td></td>
+        <td colspan="3" style="background:#fff;"></td>
         <td></td></tr>`;
     }
     return h;
@@ -1131,20 +1129,22 @@ const BALANCO_CSS = `
   .bh-header-top{ display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .bh-logo{ flex-shrink:0; }
   .bh-logo img{ height:46px; width:auto; display:block; }
-  .bh-orgao{ flex:1; text-align:center; font-weight:bold; font-size:11px; line-height:1.4; }
-  .bh-leito-data{ font-weight:bold; font-size:11.5px; text-align:right; white-space:nowrap; }
+  .bh-orgao{ flex:1; text-align:center; font-weight:bold; font-size:10.5px; line-height:1.4; }
+  .bh-leito-data{ font-weight:bold; font-size:10.5px; text-align:right; white-space:nowrap; }
   table.bh-cab{ margin-bottom:3px; }
-  table.bh-cab td{ font-size:9.5px; }
+  table.bh-cab td{ font-size:8.5px; }
   .tec-pg.bh-page table.bh-grid{ flex:0 0 auto; }
   .bh-spacer{ flex:1 1 auto; }
-  table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:9px; }
-  table.bh-grid th{ font-size:8.5px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; height:27px; }
-  table.bh-grid td{ padding:0 1px; height:21px; border:1px solid #000; vertical-align:middle; text-align:center; }
-  th.bh-th-hora{ background:#dce6f1; font-size:9px; }
-  th.bh-th-grupo{ background:#c8d8f0; font-size:8.5px; font-weight:bold; }
-  td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:9px; }
-  tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:8.5px; height:17px; }
-  tr.bh-tr-sub th{ height:39px; }
+  table.bh-grid{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:7.5px; }
+  table.bh-grid th{ font-size:7px; padding:2px 1px; text-align:center; background:#e8e8e8; border:1px solid #000; word-break:break-word; line-height:1.2; vertical-align:middle; height:26px; }
+  table.bh-grid td{ padding:0 1px; height:20px; border:1px solid #000; vertical-align:middle; text-align:center; }
+  th.bh-th-hora{ background:#dce6f1; font-size:7.5px; }
+  th.bh-th-grupo{ background:#c8d8f0; font-size:7px; font-weight:bold; }
+  td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7.5px; }
+  tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:7.2px; height:16px; }
+  tr.bh-tr-sub th{ height:38px; }
+  tr.bh-even td{ background:#f4f6f8; }
+  tr.bh-even td.bh-h{ background:#eaeef2; }
   .dec-page{ display:flex; flex-direction:column; }
   .dec-grid{ flex:0 0 auto; }
   .dec-spacer{ flex:1 1 auto; }
@@ -1156,9 +1156,9 @@ const BALANCO_CSS = `
   .dec-legenda{ text-align:center; font-size:7.3px; color:#555; margin-top:-2px; margin-bottom:6px; }
   @media print{
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
-    table.bh-grid th{ height:27px; }
-    tr.bh-tr-sub th{ height:39px; }
-    table.bh-grid td{ height:21px; }
+    table.bh-grid th{ height:26px; }
+    tr.bh-tr-sub th{ height:38px; }
+    table.bh-grid td{ height:20px; }
     .dec-page{ min-height:calc(210mm - 16mm); }
   }
 `;
