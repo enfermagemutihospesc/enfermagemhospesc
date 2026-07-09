@@ -1143,8 +1143,8 @@ const BALANCO_CSS = `
   td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7.5px; }
   tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:7.2px; height:16px; }
   tr.bh-tr-sub th{ height:38px; }
-  tr.bh-even td{ background:#f4f6f8; }
-  tr.bh-even td.bh-h{ background:#eaeef2; }
+  tr.bh-even td{ background:#f4f6f8; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
+  tr.bh-even td.bh-h{ background:#eaeef2; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
   .dec-page{ display:flex; flex-direction:column; }
   .dec-grid{ flex:0 0 auto; }
   .dec-spacer{ flex:1 1 auto; }
@@ -1155,6 +1155,7 @@ const BALANCO_CSS = `
   .dec-opt{ white-space:nowrap; font-size:8.5px; }
   .dec-legenda{ text-align:center; font-size:7.3px; color:#555; margin-top:-2px; margin-bottom:6px; }
   @media print{
+    .bh-page, .bh-page *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
     .bh-page{ height:auto; min-height:calc(210mm - 16mm); }
     table.bh-grid th{ height:26px; }
     tr.bh-tr-sub th{ height:38px; }
