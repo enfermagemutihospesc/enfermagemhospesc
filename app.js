@@ -4036,12 +4036,13 @@ function _indDiagnosticos(periodo){
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
   const admPer = admissoes.filter(a => _dentroPeriodo(a.admUTI, periodo));
 
-  // 2) Pega CID + diagnóstico únicos POR PACIENTE/admissão (evita contar mesmo paciente várias vezes)
-  // Identifica paciente por: leito + dia da admissão (mais robusto)
-  const pacientesUnicos = new Map(); // chave: pac+admUTI -> {cid, diag, leito, admUTI}
+  // 2) Pega CID + diagnóstico únicos POR PACIENTE (evita contar a mesma pessoa várias vezes)
+  const normNome = s => (s||'').trim().toUpperCase().replace(/\s+/g,' ');
+
+  const pacientesUnicos = new Map(); // chave: pacienteNormalizado+admUTI -> {cid, diag, paciente, admUTI}
   admPer.forEach(a => {
     if(!a.cid && !a.diagnostico) return;
-    const k = (a.paciente||'')+'_'+(a.admUTI||'');
+    const k = normNome(a.paciente)+'_'+(a.admUTI||'');
     pacientesUnicos.set(k, {
       cid: (a.cid||'').toUpperCase().trim(),
       diag: (a.diagnostico||'').trim(),
@@ -4049,19 +4050,28 @@ function _indDiagnosticos(periodo){
       admUTI: a.admUTI
     });
   });
-  // Complementa com evoluções (para casos sem registro no log de admissão)
+  // Complementa com evoluções, para pacientes sem registro no log de admissão —
+  // agrupando por PACIENTE (nome normalizado), não por evolução/dia. Antes,
+  // quando a evolução não trazia a data de admissão, a chave caía para a data
+  // da própria evolução (que muda todo dia), fazendo a mesma pessoa ser
+  // contada uma vez por evolução em vez de uma vez só.
+  const nomesComAdm = new Set(admPer.map(a => normNome(a.paciente)));
+  const porPacienteEvol = new Map(); // nomeNormalizado -> registro consolidado
   evPer.forEach(e => {
     if(!e.cid && !e.diag) return;
-    const k = (e.pac||'')+'_'+(e.adm||e.data||'');
-    if(!pacientesUnicos.has(k)){
-      pacientesUnicos.set(k, {
-        cid: (e.cid||'').toUpperCase().trim(),
-        diag: (e.diag||'').trim(),
+    const nomeN = normNome(e.pac);
+    if(!nomeN || nomesComAdm.has(nomeN)) return; // já coberto pelo log de admissão
+    const atual = porPacienteEvol.get(nomeN);
+    if(!atual || (e.adm && (!atual.admUTI || e.adm < atual.admUTI))){
+      porPacienteEvol.set(nomeN, {
+        cid: ((e.cid||'').toUpperCase().trim()) || (atual ? atual.cid : ''),
+        diag: ((e.diag||'').trim()) || (atual ? atual.diag : ''),
         paciente: e.pac,
-        admUTI: e.adm
+        admUTI: e.adm || (atual ? atual.admUTI : '')
       });
     }
   });
+  porPacienteEvol.forEach((v, k) => pacientesUnicos.set('EV_'+k, v));
 
   const lista = Array.from(pacientesUnicos.values());
   const total = lista.length;
