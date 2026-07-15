@@ -564,6 +564,7 @@ const PASSAGEM_CAMPOS = [
 
 let _passagemRegistros = [];   // estado em memória enquanto o modal está aberto
 let _passagemChaveAtual = '';  // uti_passagem_<data>_<turno>
+let _passagemSujo = false;     // true enquanto houver edições no modal ainda não gravadas via "Salvar"
 
 // Abre o modal: coleta das evoluções (ou recarrega edição em andamento) e renderiza.
 async function atualizarPassagemPlantao(){
@@ -656,9 +657,15 @@ function _passagemAbrirModal(){
   }).join('');
 
   modal.classList.add('show');
+  _passagemSujo = false; // recém-carregada: ainda sem alterações não salvas
 }
 
-function _passagemFecharModal(){ document.getElementById('modal-passagem').classList.remove('show'); }
+// true enquanto houver edições no modal ainda não gravadas via "Salvar".
+function _passagemFecharModal(){
+  if(_passagemSujo && !confirm('Existem alterações na passagem que ainda não foram salvas.\n\nFechar agora e perder essas alterações?')) return;
+  _passagemSujo = false;
+  document.getElementById('modal-passagem').classList.remove('show');
+}
 
 // Atualiza o estado em memória conforme o usuário edita os campos do modal.
 function _passagemAtualizarCampo(el){
@@ -666,16 +673,25 @@ function _passagemAtualizarCampo(el){
   const campo = el.dataset.campo;
   const r = _passagemRegistros.find(x=>x.leito===leito);
   if(r) r[campo] = el.value;
+  _passagemSujo = true;
 }
 
 // Salva o estado atual (permite fechar e continuar depois) sem imprimir.
+// Reporta com precisão se a gravação chegou à nuvem (Firestore) ou ficou
+// apenas neste dispositivo — para não dar falsa sensação de "salvo" quando
+// só gravou local (ver dbSet: falha no Firestore é engolida e retorna false).
 async function _passagemSalvar(){
   try {
-    await dbSet(_passagemChaveAtual, {
+    const sincronizado = await dbSet(_passagemChaveAtual, {
       data: dataDoTurno(), turno, registros: _passagemRegistros,
       salvoPor: usuarioEmail, salvoEm: new Date().toISOString()
     });
-    toast('✓ Passagem salva. Pode continuar editando depois pelo mesmo botão.');
+    _passagemSujo = false;
+    if(sincronizado){
+      toast('✓ Passagem salva e sincronizada. Pode continuar editando depois pelo mesmo botão.');
+    } else {
+      toast('⚠ Passagem salva apenas NESTE dispositivo (sem conexão com o servidor). Outros postos não verão essa versão até sincronizar — tente salvar de novo com internet estável.', true);
+    }
   } catch(e){ toast('Erro ao salvar: '+e.message, true); }
 }
 
@@ -7512,6 +7528,12 @@ async function adicionarUsuario() {
 }
 
 // ── INICIALIZAÇÃO ──────────────────────────────────────────────────────────────
+// Aviso do navegador ao fechar/atualizar a aba com edições da passagem não salvas
+// (o confirm() do _passagemFecharModal só cobre o botão "Fechar" do modal).
+window.addEventListener('beforeunload', (e) => {
+  if(_passagemSujo){ e.preventDefault(); e.returnValue = ''; }
+});
+
 window.addEventListener('load', () => {
   const firebaseOk = initFirebase();
   const telaConfig = document.getElementById('t-config');
