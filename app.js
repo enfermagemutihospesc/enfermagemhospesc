@@ -1143,8 +1143,8 @@ const BALANCO_CSS = `
   td.bh-h{ font-weight:bold; text-align:center; background:#f5f5f5; font-size:7.5px; }
   tr.bh-sub td{ background:#dce6f1; font-weight:bold; font-size:7.2px; height:16px; }
   tr.bh-tr-sub th{ height:38px; }
-  tr.bh-even td{ background:#f4f6f8; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
-  tr.bh-even td.bh-h{ background:#eaeef2; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
+  tr.bh-even td{ background:#d4dae1; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
+  tr.bh-even td.bh-h{ background:#c2cad4; -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
   .dec-page{ display:flex; flex-direction:column; }
   .dec-grid{ flex:0 0 auto; }
   .dec-spacer{ flex:1 1 auto; }
