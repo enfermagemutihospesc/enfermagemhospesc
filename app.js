@@ -10407,16 +10407,8 @@ function _clMontarFormulario() {
   // Inicializar estado do carrossel
   clCarrAtualizarUI();
 
-  // ── Swipe (touch) no carrossel ────────────────────────────────────────────
-  let _tsX = null;
-  carrBody.addEventListener('touchstart', e => { _tsX = e.touches[0].clientX; }, { passive: true });
-  carrBody.addEventListener('touchend', e => {
-    if (_tsX === null) return;
-    const dx = e.changedTouches[0].clientX - _tsX;
-    _tsX = null;
-    if (Math.abs(dx) < 40) return;
-    clCarrNavegar(dx < 0 ? 1 : -1);
-  }, { passive: true });
+  // Navegação por swipe (touch) foi removida por estar excessivamente sensível;
+  // a troca de leito no carrossel agora ocorre apenas pelas setas e pelos dots.
 
   // ── Navegação Enter no carrossel ──────────────────────────────────────────
   // Recriada toda vez que o formulário é montado, por isso não acumula listeners.
