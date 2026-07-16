@@ -164,6 +164,10 @@ body{font-family:var(--fonte);background:var(--grad-bg);background-attachment:fi
 .secao-c{padding:10px 12px;display:flex;flex-direction:column;gap:9px;}
 .sub-t{font-size:.71rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
 .sub-blk{background:var(--cinza);border:1px solid var(--borda);border-radius:7px;padding:8px 10px;display:flex;flex-direction:column;gap:7px;}
+/* Maiúsculas apenas visuais (não reescreve o value durante a digitação) —
+   preserva o autocomplete/QuickType do Safari no iOS. O valor real só é
+   normalizado para maiúsculas quando o campo perde o foco (ver _ativarCaixaAlta). */
+.uc-live{text-transform:uppercase;}
 .fl{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
 .fl label{font-size:.76rem;color:var(--muted);min-width:110px;font-weight:500;}
 .fl input[type=text],.fl input[type=date],.fl input[type=number],.fl select,
