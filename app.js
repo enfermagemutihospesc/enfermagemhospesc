@@ -41,6 +41,41 @@ function _aplicarBloqueioAdmissao() {
   });
 }
 
+// Trava o campo "Evolução de Admissão" assim que ele tiver conteúdo salvo —
+// diferente dos demais campos de admissão (data-adm-field), que continuam
+// editáveis pelo admin indefinidamente, esta é uma nota clínica de um momento
+// específico (a admissão) e não deve ser reescrita depois. Um admin ainda pode
+// destravar manualmente para corrigir um erro de digitação, via confirmação.
+function _aplicarBloqueioEvolAdmissao(temConteudoSalvo){
+  const el = document.getElementById('f-evol-adm');
+  if (!el) return;
+  const badge = document.getElementById('evol-adm-lock-badge');
+  const btnDesbloquear = document.getElementById('btn-desbloquear-evol-adm');
+  if (temConteudoSalvo) {
+    el.setAttribute('readonly', true);
+    el.style.background = '#f0f4fa'; el.style.color = '#5a6a85'; el.style.cursor = 'not-allowed';
+    if (badge) badge.style.display = 'inline';
+    if (btnDesbloquear) btnDesbloquear.style.display = _isAdmin() ? 'inline-block' : 'none';
+  } else {
+    el.removeAttribute('readonly');
+    el.style.background = ''; el.style.color = ''; el.style.cursor = '';
+    if (badge) badge.style.display = 'none';
+    if (btnDesbloquear) btnDesbloquear.style.display = 'none';
+  }
+}
+function _desbloquearEvolAdmissao(){
+  if (!_isAdmin()) return;
+  if (!confirm('Esta evolução de admissão já foi registrada e travada. Liberar edição apenas para corrigir um erro?')) return;
+  const el = document.getElementById('f-evol-adm');
+  if (!el) return;
+  el.removeAttribute('readonly');
+  el.style.background = ''; el.style.color = ''; el.style.cursor = '';
+  const badge = document.getElementById('evol-adm-lock-badge');
+  if (badge) badge.style.display = 'none';
+  const btn = document.getElementById('btn-desbloquear-evol-adm');
+  if (btn) btn.style.display = 'none';
+}
+
 // Perfil padrão (seed) — usado para popular o Firestore na 1ª execução e como
 // fallback caso o documento do usuário ainda não exista. Chave = e-mail.
 const PERFIS_SEED = {
@@ -5325,6 +5360,7 @@ async function salvarAdmissao() {
     origem: origem,
     origemOutro: origem==='Transferência de outro serviço' ? origemOutro : '',
     sexo: gf('m-sexo'),
+    evolAdmissao: leitoExistente.evolAdmissao || '',
     admissaoRegistradaEm: leitoExistente.admissaoRegistradaEm || new Date().toISOString()
   };
   await dbSet('uti_leitos', d);
@@ -6079,6 +6115,8 @@ function limparForm(){
   document.getElementById('sedo-outros').innerHTML='';
   const cultLista = document.getElementById('culturas-lista');
   if(cultLista) cultLista.innerHTML='';
+  const origemOutroWrap = document.getElementById('f-origem-outro-wrap');
+  if(origemOutroWrap) origemOutroWrap.style.display = 'none';
 }
 
 async function getAnterior(n) {
@@ -6146,6 +6184,21 @@ async function abrirForm(n) {
   // admHosp e alergia: usa leito primeiro, cai pro evolução anterior se o leito não tem
   setF('f-adm-hosp', pac.admHosp || (anterior && anterior.admHosp) || (evHoje && evHoje.admHosp) || '');
   setF('f-alergia',  pac.alergia || (anterior && anterior.alergia) || (evHoje && evHoje.alergia) || '');
+
+  // Procedência: dado fixado na admissão (leito), com fallback para evoluções
+  // anteriores (compatibilidade com pacientes já internados antes desta feature).
+  const origemFinal = pac.origem || (anterior && anterior.origem) || (evHoje && evHoje.origem) || '';
+  const origemOutroFinal = pac.origemOutro || (anterior && anterior.origemOutro) || (evHoje && evHoje.origemOutro) || '';
+  setF('f-origem', origemFinal);
+  setF('f-origem-outro', origemOutroFinal);
+  document.getElementById('f-origem-outro-wrap').style.display = origemFinal==='Transferência de outro serviço' ? 'flex' : 'none';
+
+  // Evolução de admissão: preenchida uma única vez, na admissão do paciente, e
+  // repetida (somente leitura) em todas as evoluções seguintes. Busca no leito
+  // primeiro; cai para evolução anterior/de hoje por compatibilidade.
+  const evolAdmFinal = pac.evolAdmissao || (anterior && anterior.evolAdmissao) || (evHoje && evHoje.evolAdmissao) || '';
+  setF('f-evol-adm', evolAdmFinal);
+  _aplicarBloqueioEvolAdmissao(!!evolAdmFinal);
 
   // Sexo: tenta pac → evolução anterior → log de admissão (fallback para pacientes antigos)
   let sexoFinal = pac.sexo || (anterior && anterior.sexo) || (evHoje && evHoje.sexo) || '';
@@ -6388,6 +6441,9 @@ function coletarDados() {
     leito:leitoAtual, turno, data:gf('f-data'), pac:gf('f-pac'), dn:gf('f-dn'), adm:gf('f-adm'), ...(() => { const ds=_getDiagsFromContainer('f'); const f=ds[0]||{diag:'',cid:''}; return {diag:f.diag, cid:f.cid, diags:ds}; })(), comor:gf('f-comor'),admHosp:    gf('f-adm-hosp'),
 alergia:    gf('f-alergia'),
 sexo:       gf('f-sexo'),
+origem:     gf('f-origem'),
+origemOutro: gf('f-origem')==='Transferência de outro serviço' ? gf('f-origem-outro') : '',
+evolAdmissao: gf('f-evol-adm'),
 pulseira:   gRadio('pulseira'),
 isolamento: gRadio('isolamento'),
 microorg:   gf('f-microorg'),
@@ -6468,7 +6524,9 @@ async function gerarPreview() {
       ld[d.leito] = {
         ...ld[d.leito],
         pac: d.pac, dn: d.dn, adm: d.adm, admHosp: d.admHosp,
-        diag: d.diag, comor: d.comor, alergia: d.alergia
+        diag: d.diag, comor: d.comor, alergia: d.alergia,
+        origem: d.origem, origemOutro: d.origemOutro,
+        evolAdmissao: d.evolAdmissao
       };
       await dbSet('uti_leitos', ld);
     }
@@ -6560,6 +6618,12 @@ function renderPreview(d) {
     : (d.diag + (d.cid ? '  –  CID: '+d.cid : ''));
   h+=br('DIAGNÓSTICO', _diagsStr); h+=br('COMORBIDADES',d.comor);
   h+=br('ALERGIAS', d.alergia||'NKDA');
+  const origemTxt = d.origem ? (d.origem==='Transferência de outro serviço' && d.origemOutro ? d.origem+' – '+d.origemOutro : d.origem) : '';
+  h+=br('PROCEDÊNCIA', origemTxt);
+  if(d.evolAdmissao){
+    h+=st('Evolução de Admissão');
+    h+=`<div class="obs-box" style="min-height:45px;">${d.evolAdmissao}</div>`;
+  }
 h+=st('Segurança do Paciente');
 h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseira||'–'}</span>
     <span class="pl" style="margin-left:1rem;">ISOLAMENTO</span><span class="pv">${d.isolamento||'–'}</span>
@@ -7102,7 +7166,7 @@ async function confirmarAltaFinal(){
     } catch(e){ console.warn('Log alta:', e); }
 
     // Libera o leito (zera TODOS os campos de admissão, incluindo cid/sexo/idade)
-    ld[leitoParaAlta] = {ocupado:false, pac:'', diag:'', cid:'', dn:'', sexo:'', adm:'', admHosp:'', comor:'', alergia:'', origem:'', origemOutro:''};
+    ld[leitoParaAlta] = {ocupado:false, pac:'', diag:'', cid:'', dn:'', sexo:'', adm:'', admHosp:'', comor:'', alergia:'', origem:'', origemOutro:'', evolAdmissao:''};
     await dbSet('uti_leitos', ld);
 
     // Apaga TODAS as evoluções deste leito (qualquer turno/data) para que a
@@ -7414,18 +7478,28 @@ function _capitalizar(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 // ── CAIXA ALTA AUTOMÁTICA EM CAMPOS DE TEXTO ─────────────────────────────────
 // Aplica em todos os inputs type=text e textareas do formulário de evolução e
 // do modal de admissão. Campos de data/número ficam fora.
+// Antes, este handler reescrevia o `value` do campo a cada tecla digitada
+// (no evento 'input') para forçar maiúsculas. No Safari/iOS isso quebra o
+// autocomplete e o QuickType: reatribuir programaticamente o value durante a
+// digitação reseta o estado interno de sugestão do teclado, então usuários de
+// iPhone/iPad paravam de ver sugestões nesses campos (funcionava normalmente
+// no Android/desktop, que são mais tolerantes a isso).
+//
+// Correção: o campo passa a exibir maiúsculas só visualmente via CSS
+// (.uc-live → text-transform:uppercase), sem tocar no value enquanto o
+// usuário digita — o autocomplete/QuickType do iOS funciona normalmente.
+// O value real só é normalizado para maiúsculas quando o campo perde o foco
+// (blur), depois que a digitação/autocomplete já terminou.
 function _ativarCaixaAlta(){
   const seletor = '#t-form input[type=text], #t-form textarea, #modal-adm input[type=text]';
   document.querySelectorAll(seletor).forEach(el=>{
     if (el.dataset.upperBound) return; // evita duplicar o handler
     el.dataset.upperBound = '1';
-    el.addEventListener('input', function(){
-      const pos = this.selectionStart;
-      const up  = this.value.toUpperCase();
-      if (this.value !== up) {
-        this.value = up;
-        try { this.setSelectionRange(pos, pos); } catch(e){}
-      }
+    el.classList.add('uc-live');
+    el.setAttribute('autocapitalize','characters');
+    el.addEventListener('blur', function(){
+      const up = this.value.toUpperCase();
+      if (this.value !== up) this.value = up;
     });
   });
 }
