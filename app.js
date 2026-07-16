@@ -549,8 +549,18 @@ function _passagemFmtEliminacoes(ev){
   return s;
 }
 
-// Monta o objeto de passagem de um leito a partir da evolução salva.
-async function _passagemDadosLeito(leito){
+// Monta o objeto de passagem de um leito.
+// `l` é o registro ATUAL do leito (vindo de leitosData()) — é a fonte da
+// verdade sobre QUEM está internado agora. A evolução (ev) só é usada como
+// fonte de DETALHE clínico, e somente quando pertence comprovadamente ao
+// mesmo paciente que está no leito neste momento. Isso resolve dois problemas:
+//   1) Leito com alta recente cuja evolução residual não tenha sido limpa
+//      (ex.: falha de rede na limpeza) não é mais exibido como se fosse o
+//      paciente atual — a checagem de nome descarta a evolução divergente.
+//   2) Paciente recém-admitido (comum à noite) que ainda não tem evolução
+//      registrada neste plantão não soma mais da passagem — ele aparece
+//      com os dados básicos da admissão, mesmo sem evolução.
+async function _passagemDadosLeito(leito, l){
   const dataAtual = dataDoTurno();
   let ev = await dbGet(`uti_ev_${leito}_${turno}_${dataAtual}`);
   if(!ev){
@@ -560,30 +570,48 @@ async function _passagemDadosLeito(leito){
   if(!ev){
     ev = await dbGet(`uti_ev_${leito}_${turno}_${ontem()}`);
   }
-  if(!ev) return null;   // sem evolução → não atualiza este leito
 
-  // Diagnóstico: principal + adicionais
-  let diagTxt = ev.diag || '';
-  if(Array.isArray(ev.diags) && ev.diags.length>1){
+  const pacienteAtual = (l && l.pac) || '';
+  // Evolução só é aproveitada se for do MESMO paciente que está no leito agora.
+  if(ev && pacienteAtual && _normNome(ev.pac) !== _normNome(pacienteAtual)){
+    ev = null;
+  }
+  if(!ev && !pacienteAtual) return null; // nem evolução, nem cadastro → nada a mostrar
+
+  // Diagnóstico: evolução (mais completa, com diags adicionais) > cadastro do leito
+  let diagTxt = (ev && ev.diag) || (l && l.diag) || '';
+  if(ev && Array.isArray(ev.diags) && ev.diags.length>1){
     const extras = ev.diags.slice(1).map(x=>x.diag).filter(Boolean);
     if(extras.length) diagTxt = [diagTxt, ...extras].filter(Boolean).join(' + ');
   }
 
   return {
     leito: parseInt(leito),
-    paciente: ev.pac || '',
-    dn: ev.dn || '',
-    adm: ev.adm || '',
+    paciente: (ev && ev.pac) || pacienteAtual,
+    dn: (ev && ev.dn) || (l && l.dn) || '',
+    adm: (ev && ev.adm) || (l && l.adm) || '',
     diagnostico: diagTxt,
-    comorbidades: ev.comor || '',
-    dispositivos: _passagemFmtDispositivos(ev),
-    antibiotico: _passagemFmtATB(ev),
-    eliminacoes: _passagemFmtEliminacoes(ev),
-    lesao: ev.les || '',
-    evolAdmissao: ev.evolAdmissao || '',   // só entra na impressão se preenchida
-    observacoes: ev.examesReal || '',     // Exames e Procedimentos Realizados
-    pendencias: ev.examesSolic || ''      // Exames e Pareceres Solicitados
+    comorbidades: (ev && ev.comor) || (l && l.comor) || '',
+    dispositivos: ev ? _passagemFmtDispositivos(ev) : '',
+    antibiotico: ev ? _passagemFmtATB(ev) : '',
+    eliminacoes: ev ? _passagemFmtEliminacoes(ev) : '',
+    lesao: (ev && ev.les) || '',
+    evolAdmissao: (ev && ev.evolAdmissao) || (l && l.evolAdmissao) || '',
+    observacoes: (ev && ev.examesReal) || '',   // Exames e Procedimentos Realizados
+    pendencias: ev ? (ev.examesSolic || '') : '',  // Exames e Pareceres Solicitados
+    _temEvolucao: !!ev   // uso interno; removido em _passagemMarcarSemEvolucao
   };
+}
+
+// Se o leito não tem evolução registrada neste plantão (ex.: paciente
+// recém-admitido), sinaliza isso em Pendências para não passar despercebido —
+// só entra quando Pendências ainda está vazio (nunca sobrescreve texto já escrito).
+function _passagemMarcarSemEvolucao(dado){
+  if(!dado._temEvolucao && !dado.pendencias){
+    dado.pendencias = 'SEM EVOLUÇÃO REGISTRADA NESTE PLANTÃO — conferir dados com a equipe';
+  }
+  delete dado._temEvolucao;
+  return dado;
 }
 
 // Campos editáveis do modal, na ordem de exibição (igual ao bloco da planilha)
@@ -608,18 +636,9 @@ async function atualizarPassagemPlantao(){
   const dataAtual = dataDoTurno();
   _passagemChaveAtual = `uti_passagem_${dataAtual}_${turno}`;
 
-  // Se já existe uma passagem salva para este turno/data, pergunta se quer continuar editando.
-  let existente = null;
-  try { existente = await dbGet(_passagemChaveAtual); } catch(_) {}
-
-  if(existente && existente.registros && existente.registros.length){
-    if(confirm(`Já existe uma passagem salva para ${turno} de hoje (${existente.registros.length} leito(s)).\n\nContinuar editando essa versão?\n\n(Cancelar gera uma nova a partir das evoluções atuais — Pendências e Observações já escritas são preservadas para o mesmo paciente; só são descartadas se o leito tiver outro paciente agora.)`)){
-      _passagemRegistros = existente.registros;
-      _passagemAbrirModal();
-      return;
-    }
-  }
-
+  // Ocupação ATUAL dos leitos — sempre lida antes de decidir o que exibir,
+  // para que altas/admissões feitas durante o plantão sejam refletidas mesmo
+  // ao reabrir uma passagem já salva.
   let leitos;
   try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
 
@@ -627,18 +646,49 @@ async function atualizarPassagemPlantao(){
   for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
   if(!ocupados.length){ toast('Nenhum leito ocupado para gerar a passagem.', true); return; }
 
-  // Índice da passagem anterior por leito, para mesclar Pendências/Observações
-  // manuais sem depender do usuário escolher "continuar editando".
+  // Se já existe uma passagem salva para este turno/data, pergunta se quer continuar editando.
+  let existente = null;
+  try { existente = await dbGet(_passagemChaveAtual); } catch(_) {}
+
   const anteriorPorLeito = {};
   if(existente && existente.registros){
     existente.registros.forEach(r => { anteriorPorLeito[r.leito] = r; });
+  }
+
+  if(existente && existente.registros && existente.registros.length){
+    if(confirm(`Já existe uma passagem salva para ${turno} de hoje (${existente.registros.length} leito(s)).\n\nContinuar editando essa versão?\n\n(Cancelar gera uma nova a partir das evoluções atuais — Pendências e Observações já escritas são preservadas para o mesmo paciente; só são descartadas se o leito tiver outro paciente agora.)`)){
+      // IMPORTANTE: não reabre a lista salva "como estava" — ela pode conter
+      // leitos que já tiveram alta ou não conter leitos admitidos depois que
+      // a passagem foi salva. Reconcilia com a ocupação atual: mantém a
+      // edição manual de quem continua o mesmo paciente, remove quem já
+      // saiu, e acrescenta quem foi admitido depois.
+      toast('⏳ Conferindo ocupação atual...');
+      const reconciliados = [];
+      for(const n of ocupados){
+        const l = leitos[n];
+        const salvo = anteriorPorLeito[n];
+        if(salvo && _normNome(salvo.paciente) === _normNome(l.pac)){
+          reconciliados.push(salvo); // mesmo paciente: preserva edições já feitas
+          continue;
+        }
+        try {
+          const dado = await _passagemDadosLeito(n, l);
+          if(dado) reconciliados.push(_passagemMarcarSemEvolucao(dado));
+        } catch(e){ console.warn('Passagem leito '+n+':', e); }
+      }
+      reconciliados.sort((a,b)=>a.leito-b.leito);
+      _passagemRegistros = reconciliados;
+      _passagemAbrirModal();
+      return;
+    }
   }
 
   toast('⏳ Coletando dados das evoluções...');
   const registros = [];
   for(const n of ocupados){
     try {
-      const dado = await _passagemDadosLeito(n);
+      const l = leitos[n];
+      const dado = await _passagemDadosLeito(n, l);
       if(dado && dado.paciente){
         // Mescla Pendências/Observações da passagem anterior salva, MAS só se
         // for comprovadamente o mesmo paciente no leito (evita herdar texto de
@@ -649,7 +699,7 @@ async function atualizarPassagemPlantao(){
           if(!dado.pendencias && ant.pendencias)   dado.pendencias  = ant.pendencias;
           if(!dado.observacoes && ant.observacoes) dado.observacoes = ant.observacoes;
         }
-        registros.push(dado);
+        registros.push(_passagemMarcarSemEvolucao(dado));
       }
     } catch(e){ console.warn('Passagem leito '+n+':', e); }
   }
@@ -686,7 +736,7 @@ function _passagemAbrirModal(){
 
     return `<div style="border:1.5px solid #d6e4f5;border-radius:10px;padding:10px 13px;margin-bottom:10px;background:${i%2?'#fafcff':'#fff'};">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <span style="background:var(--azul);color:#fff;font-weight:800;font-size:.78rem;padding:3px 10px;border-radius:7px;">LEITO ${pad(r.leito)}</span>
+        <span style="background:#fff;color:#000;border:2px solid #000;font-weight:800;font-size:.78rem;padding:3px 10px;border-radius:7px;">LEITO ${pad(r.leito)}</span>
         <input type="text" data-leito="${r.leito}" data-campo="paciente" value="${_esc(r.paciente)}" placeholder="Paciente" style="flex:1;min-width:160px;font-weight:700;font-size:.82rem;" oninput="_passagemAtualizarCampo(this)">
       </div>
       ${camposHtml}
@@ -794,7 +844,7 @@ function _passagemImprimir(){
     }
     table.bloco td{border:1px solid #000;padding:2px 4px;vertical-align:top;font-size:8px;}
     td.lbl{font-weight:bold;background:#f0f0f0;white-space:nowrap;}
-    td.leito-cel{background:#0d47a1;color:#fff;font-weight:bold;font-size:9px;text-align:center;}
+    td.leito-cel{background:#fff;color:#000;font-weight:800;font-size:9px;text-align:center;border:2px solid #000;}
     td.paciente-cel{font-weight:bold;color:#000;font-size:10px;background:#fff;}
     tr.destaque td.lbl{background:#fff3cd;}
     @media print{ button{display:none;} }
