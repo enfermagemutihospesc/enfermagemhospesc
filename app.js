@@ -909,7 +909,7 @@ function _tecAnotacoesHtmlLeito(leito, dados, dataRef){
     <table class="tec-tb tec-grid3">
       <tr><th colspan="2">INTEGRIDADE DA PELE E MUCOSAS</th><th colspan="3">LESÕES E CURATIVOS</th></tr>
       <tr><td colspan="2">${chk} PELE ÍNTEGRA &nbsp;&nbsp; ${chk} PELE NÃO ÍNTEGRA<br>LESÃO EM MUCOSA? ${chk} SIM ${chk} NÃO &nbsp; DESCRIÇÃO: ${linha(180)}</td>
-          <td colspan="3" rowspan="2" style="height:40px;"></td></tr>
+          <td colspan="3" rowspan="2" style="height:30px;"></td></tr>
       <tr><td colspan="2">FIXAÇÃO DO TOT LIMPA? ${chk} SIM ${chk} NÃO ${chk} N/A &nbsp;&nbsp; SNE/SNG COM FIXAÇÃO LIMPA? ${chk} SIM ${chk} NÃO ${chk} N/A<br>TROCADA FIXAÇÃO DO TOT/TQT? ${chk} SIM ${chk} NÃO ${chk} N/A &nbsp;&nbsp; CABECEIRA ELEVADA A 30°? ${chk} SIM ${chk} NÃO</td></tr>
     </table>
   </div>`;
@@ -981,34 +981,37 @@ const TEC_ANOTACOES_CSS = `
      Escopados por .tec-pg1 para não afetar em nada a Página 2 (anotações +
      assinaturas), que compartilha várias das mesmas classes (.tec-tb, .tec-sec,
      .tec-top, .tec-chk, .tec-linha etc.) e deve permanecer como está. */
-  .tec-pg1 .tec-top{margin-bottom:10px;}
-  .tec-pg1 .tec-orgao{font-size:12.5px;}
-  .tec-pg1 .tec-data{font-size:11px;}
-  .tec-pg1 .tec-faixa{font-size:11px;padding:4.5px 7px;}
-  .tec-pg1 .tec-tit{font-size:11px;padding:4.5px 7px;}
-  .tec-pg1 table.tec-tb{margin-bottom:7px;}
-  .tec-pg1 table.tec-tb td, .tec-pg1 table.tec-tb th{padding:3.5px 6px;font-size:9px;}
-  .tec-pg1 table.tec-tb th{font-size:8.5px;}
-  .tec-pg1 .tec-sec{font-size:9.4px;padding:3.5px 0;}
-  .tec-pg1 .tec-grid3 td, .tec-pg1 .tec-grid3 th{font-size:8.5px;padding:4px 6px;}
-  .tec-pg1 table.tec-mini{margin-top:4px;}
-  .tec-pg1 table.tec-mini td, .tec-pg1 table.tec-mini th{padding:2px 3.5px;font-size:7.8px;}
-  .tec-pg1 .tec-chk{width:9.5px;height:9.5px;margin:0 3.5px 0 1px;}
-  .tec-pg1 .tec-linha{height:13px;margin:0 3.5px;}
-  .tec-pg1 .tec-riscos{gap:9px;margin-bottom:7px;}
-  .tec-pg1 .tec-card-h{font-size:8.8px;padding:3px 5px;}
-  .tec-pg1 .tec-card-b{padding:6px 9px;font-size:8.8px;line-height:1.55;}
-  /* Caixa de Cuidados Gerais: mais espaço entre cada linha de pergunta */
-  .tec-pg1 .tec-cuidados{line-height:1.55;padding:5px 8px;}
-  .tec-pg1 .tec-cuidados br{content:"";display:block;margin-top:2px;}
-  /* Linhas de Ventilação Pulmonar / Dispositivos Médicos: mais altas e
+  .tec-pg1 .tec-top{margin-bottom:7px;}
+  .tec-pg1 .tec-orgao{font-size:12px;}
+  .tec-pg1 .tec-data{font-size:10.5px;}
+  .tec-pg1 .tec-faixa{font-size:10.5px;padding:3.5px 7px;}
+  .tec-pg1 .tec-tit{font-size:10.5px;padding:3.5px 7px;}
+  .tec-pg1 table.tec-tb{margin-bottom:5px;}
+  .tec-pg1 table.tec-tb td, .tec-pg1 table.tec-tb th{padding:3px 5px;font-size:8.8px;}
+  .tec-pg1 table.tec-tb th{font-size:8.3px;}
+  .tec-pg1 .tec-sec{font-size:9.1px;padding:2.5px 0;}
+  .tec-pg1 .tec-grid3 td, .tec-pg1 .tec-grid3 th{font-size:8.3px;padding:3.5px 5px;}
+  .tec-pg1 table.tec-mini{margin-top:3px;}
+  .tec-pg1 table.tec-mini td, .tec-pg1 table.tec-mini th{padding:1.5px 3px;font-size:7.6px;}
+  .tec-pg1 .tec-chk{width:9px;height:9px;margin:0 3px 0 1px;}
+  .tec-pg1 .tec-linha{height:12px;margin:0 3px;}
+  .tec-pg1 .tec-riscos{gap:7px;margin-bottom:5px;}
+  .tec-pg1 .tec-card-h{font-size:8.5px;padding:2.5px 4px;}
+  .tec-pg1 .tec-card-b{padding:4.5px 7px;font-size:8.5px;line-height:1.4;}
+  /* Caixa de Cuidados Gerais: um pouco mais de espaço entre cada linha de pergunta */
+  .tec-pg1 .tec-cuidados{line-height:1.4;padding:4px 6px;}
+  .tec-pg1 .tec-cuidados br{content:"";display:block;margin-top:1.5px;}
+  /* Linhas de Ventilação Pulmonar / Dispositivos Médicos: levemente mais altas e
      centralizadas verticalmente, acompanhando a altura da coluna de
      Cuidados Gerais ao lado */
-  .tec-pg1 .tec-vent-tbl td{padding-top:5px;padding-bottom:5px;vertical-align:middle;}
+  .tec-pg1 .tec-vent-tbl td{padding-top:3.5px;padding-bottom:3.5px;vertical-align:middle;}
   .tec-pg1 .tec-vent-tbl td.tec-cuidados,
   .tec-pg1 .tec-vent-tbl td[rowspan]{vertical-align:top;}
   /* Quadro de identificação (NOME, DN, IDADE, DIAGNÓSTICO, ALERGIAS etc.) */
-  .tec-pg1 .tec-ident td.tec-lbl{font-size:9.7px;padding:4.5px 7px;}
+  .tec-pg1 .tec-ident td.tec-lbl{font-size:9.4px;padding:3.5px 5px;}
+  /* Margem reduzida só na 1ª folha (a 2ª mantém a margem original de 8mm) —
+     folga extra para absorver diferenças de motor de impressão entre navegadores */
+  @page :first{ margin:5mm 8mm; }
 `;
 
 // ════════════════════════════════════════════════════════════════════════════
