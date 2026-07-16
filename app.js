@@ -5399,12 +5399,43 @@ async function salvarAdmissao() {
     toast('Informe o serviço de origem',true);
     return;
   }
+  const dPre = await leitosData();
+  const leitoExistentePre = dPre[modalLeito] || {};
+  // ── Proteção contra troca acidental de identidade em leito já ocupado ──────
+  // Editar dados de um leito ocupado deve alterar detalhes do MESMO paciente.
+  // Se o nome digitado diverge do nome já cadastrado nesse leito, é sinal de
+  // que o usuário pode estar editando/colando os dados de outro leito por
+  // engano (ex.: leito 7 sobrescrevendo leito 6). Pede confirmação explícita
+  // antes de prosseguir — alta + nova admissão é o caminho correto para troca
+  // real de paciente.
+  if (leitoExistentePre.ocupado && _normNome(leitoExistentePre.pac) && _normNome(gf('m-pac')) !== _normNome(leitoExistentePre.pac)) {
+    const confirma = confirm(
+      `⚠️ ATENÇÃO: o leito ${pad(modalLeito)} está registrado para "${leitoExistentePre.pac}".\n\n` +
+      `Você está prestes a salvar um nome diferente: "${gf('m-pac')}".\n\n` +
+      `Se for realmente uma TROCA de paciente, dê ALTA no paciente atual primeiro e depois faça uma nova admissão — isso preserva o histórico de ambos corretamente.\n\n` +
+      `Se isso for um engano (ex.: dados de outro leito), CANCELE agora.\n\n` +
+      `Deseja continuar mesmo assim e sobrescrever "${leitoExistentePre.pac}" no leito ${pad(modalLeito)}?`
+    );
+    if (!confirma) { return; }
+  }
   showLoading('Salvando admissão...');
   try {
   const d = await leitosData();
   const leitoExistente = d[modalLeito] || {};
   // Se está admitindo (não estava ocupado) → registra data/hora e log
   const novaAdmissao = !leitoExistente.ocupado;
+  // ── Auditoria: guarda o estado anterior do leito antes de sobrescrever ────
+  // Não deleta nada, só acrescenta — serve para recuperar dados em caso de
+  // sobrescrita indevida (mesmo quando confirmada). Log é apendado, nunca
+  // sobrescrito, então cresce ao longo do tempo mas cada entrada é pequena.
+  if (leitoExistente.ocupado) {
+    try {
+      const auditKey = 'uti_leito_audit_' + modalLeito;
+      const audit = (await dbGet(auditKey)) || [];
+      audit.push({ estadoAnterior: leitoExistente, substituidoPor: gf('m-pac'), autor: usuarioEmail, em: new Date().toISOString() });
+      await dbSet(auditKey, audit);
+    } catch(e){ console.warn('Auditoria leito:', e); }
+  }
   d[modalLeito] = {
     ocupado:true,
     pac:gf('m-pac'), ...(_mDiagsAdm()), dn:gf('m-dn'),
