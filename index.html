@@ -36,15 +36,17 @@
       <h1>PREFEITURA MUNICIPAL DO NATAL<br>HOSPITAL DOS PESCADORES – UTI</h1>
       <p>Acesso do Enfermeiro</p>
     </div>
-    <div class="login-field">
-      <label>E-mail institucional</label>
-      <input type="email" id="li-email" placeholder="enfermeiro@pescadores.natal.br" autocomplete="email">
-    </div>
-    <div class="login-field">
-      <label>Senha</label>
-      <input type="password" id="li-senha" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') fazerLogin()">
-    </div>
-    <button class="btn-login" id="btn-entrar" onclick="fazerLogin()">Entrar</button>
+    <form id="form-login" autocomplete="on" onsubmit="event.preventDefault(); fazerLogin(); return false;">
+      <div class="login-field">
+        <label>E-mail institucional</label>
+        <input type="email" id="li-email" name="username" placeholder="enfermeiro@pescadores.natal.br" autocomplete="username">
+      </div>
+      <div class="login-field">
+        <label>Senha</label>
+        <input type="password" id="li-senha" name="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-login" id="btn-entrar" type="submit">Entrar</button>
+    </form>
     <div class="login-err" id="login-err"></div>
     <p class="login-msg">Primeiro acesso? Peça ao administrador para cadastrar seu e-mail.</p>
   </div>
@@ -97,15 +99,17 @@
       <h1>Definir senha</h1>
       <p id="ts-sub">Defina uma nova senha de acesso.</p>
     </div>
-    <div class="login-field">
-      <label>Nova senha</label>
-      <input type="password" id="ts-nova" placeholder="mínimo 6 caracteres" autocomplete="new-password">
-    </div>
-    <div class="login-field">
-      <label>Confirmar nova senha</label>
-      <input type="password" id="ts-conf" placeholder="repita a senha" autocomplete="new-password" onkeydown="if(event.key==='Enter') confirmarTrocaSenha()">
-    </div>
-    <button class="btn-login" id="btn-trocar-senha" onclick="confirmarTrocaSenha()">Salvar nova senha</button>
+    <form id="form-trocasenha" autocomplete="on" onsubmit="event.preventDefault(); confirmarTrocaSenha(); return false;">
+      <div class="login-field">
+        <label>Nova senha</label>
+        <input type="password" id="ts-nova" name="new-password" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+      </div>
+      <div class="login-field">
+        <label>Confirmar nova senha</label>
+        <input type="password" id="ts-conf" name="new-password-confirm" placeholder="repita a senha" autocomplete="new-password">
+      </div>
+      <button class="btn-login" id="btn-trocar-senha" type="submit">Salvar nova senha</button>
+    </form>
     <button class="btn btn-sec btn-sm" id="btn-pular-troca" style="display:none;margin-top:8px;width:100%;" onclick="irTelaTurno(true);mostrarTela('t-turno');">Cancelar</button>
     <div class="login-err" id="ts-err"></div>
   </div>
@@ -279,6 +283,31 @@
         <div class="fl"><label>Comorbidades</label><input type="text" id="f-comor" placeholder="Ex: DM, HAS, tabagista..." data-adm-field></div>
         <div class="dc"><div class="fl"><label>Adm. HOSPESC</label><input type="date" id="f-adm-hosp" data-adm-field></div><div class="fl"><label>Sexo</label><select id="f-sexo" data-adm-field><option value="">–</option><option value="M">Masculino</option><option value="F">Feminino</option></select></div></div>
 <div class="fl"><label>Alergias</label><input type="text" id="f-alergia" placeholder="Ex: Dipirona... ou NKDA" data-adm-field></div>
+<div class="fl"><label>Procedência</label>
+  <select id="f-origem" data-adm-field onchange="document.getElementById('f-origem-outro-wrap').style.display=this.value==='Transferência de outro serviço'?'flex':'none'">
+    <option value="">– selecione –</option>
+    <option value="Pronto Socorro">Pronto Socorro</option>
+    <option value="Transferência de outro serviço">Transferência de outro serviço</option>
+    <option value="Centro Cirúrgico">Centro Cirúrgico</option>
+    <option value="Enfermarias">Enfermarias</option>
+  </select>
+</div>
+<div class="fl" id="f-origem-outro-wrap" style="display:none;">
+  <label>Qual serviço?</label>
+  <input type="text" id="f-origem-outro" placeholder="Ex: UPA Esperança, Hospital Walfredo..." data-adm-field>
+</div>
+      </div>
+    </div>
+
+    <!-- EVOLUÇÃO DE ADMISSÃO -->
+    <div class="secao">
+      <div class="secao-t" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+        <span>Evolução de Admissão <span class="herd-tag" id="evol-adm-lock-badge" style="display:none;">🔒 travada – registro da admissão</span></span>
+        <button type="button" id="btn-desbloquear-evol-adm" style="display:none;font-size:.68rem;padding:3px 9px;background:#fff3cd;border:1px solid #e0b400;color:#7a5c00;border-radius:5px;cursor:pointer;" onclick="_desbloquearEvolAdmissao()">🔓 Admin: liberar edição</button>
+      </div>
+      <div class="secao-c">
+        <p class="sub-t" style="font-size:.68rem;color:var(--muted);font-weight:400;">Registre aqui a evolução do momento da admissão do paciente na UTI. Depois de salva, ela permanece fixa e é exibida (somente leitura) em todas as evoluções seguintes deste paciente.</p>
+        <textarea id="f-evol-adm" style="min-height:100px;" placeholder="Descreva a evolução de admissão do paciente (condição na chegada, procedimentos iniciais, etc.)..."></textarea>
       </div>
     </div>
 
