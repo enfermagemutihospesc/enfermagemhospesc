@@ -580,6 +580,7 @@ async function _passagemDadosLeito(leito){
     antibiotico: _passagemFmtATB(ev),
     eliminacoes: _passagemFmtEliminacoes(ev),
     lesao: ev.les || '',
+    evolAdmissao: ev.evolAdmissao || '',   // só entra na impressão se preenchida
     observacoes: ev.examesReal || '',     // Exames e Procedimentos Realizados
     pendencias: ev.examesSolic || ''      // Exames e Pareceres Solicitados
   };
@@ -593,6 +594,7 @@ const PASSAGEM_CAMPOS = [
   { id:'antibiotico',   label:'ANTIBIÓTICO',    tag:'textarea' },
   { id:'eliminacoes',   label:'ELIMINAÇÕES',    tag:'input' },
   { id:'lesao',         label:'LESÃO',          tag:'input' },
+  { id:'evolAdmissao',  label:'EVOLUÇÃO DE ADMISSÃO', tag:'textarea' },
   { id:'pendencias',    label:'PENDÊNCIAS',     tag:'textarea', destaque:true },
   { id:'observacoes',   label:'OBSERVAÇÃO',     tag:'textarea', destaque:true },
 ];
@@ -768,6 +770,7 @@ function _passagemImprimir(){
       <tr><td class="lbl">ANTIBIÓTICO</td><td colspan="5">${_esc(r.antibiotico)||'&nbsp;'}</td></tr>
       <tr><td class="lbl">ELIMINAÇÕES</td><td colspan="5">${_esc(r.eliminacoes)||'&nbsp;'}</td></tr>
       <tr><td class="lbl">LESÃO</td><td colspan="5">${_esc(r.lesao)||'&nbsp;'}</td></tr>
+      ${r.evolAdmissao ? `<tr><td class="lbl">EVOLUÇÃO DE ADMISSÃO</td><td colspan="5">${_esc(r.evolAdmissao)}</td></tr>` : ''}
       <tr class="destaque"><td class="lbl">PENDÊNCIAS</td><td colspan="5">${_esc(r.pendencias)||'&nbsp;'}</td></tr>
       <tr class="destaque"><td class="lbl">OBSERVAÇÃO</td><td colspan="5">${_esc(r.observacoes)||'&nbsp;'}</td></tr>
     </table>`;
