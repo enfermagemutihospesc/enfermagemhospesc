@@ -6837,7 +6837,7 @@ async function gerarPDF(){
     const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
     const pageW = pdf.internal.pageSize.getWidth();   // 210 mm
     const pageH = pdf.internal.pageSize.getHeight();  // 297 mm
-    const margin = 8;
+    const margin = 5;
     const contentW = pageW - margin*2;   // 194 mm
     const contentH = pageH - margin*2;   // 281 mm
 
@@ -6854,19 +6854,31 @@ async function gerarPDF(){
 
     const PAGINAS_ALVO = 2;
 
-    // Localiza o ponto de quebra preferencial: se há SAE, quebra no início dela
-    // (página 1 = evolução, página 2 = SAE + assinatura); senão, no início de
-    // Antimicrobianos.
-    let breakPx = null;
-    const saeBreak = area.querySelector('#sae-cmp-break');
-    const breakEl = saeBreak || area.querySelector('#pdf-break-point');
-    if (breakEl) {
-      const areaTop  = area.getBoundingClientRect().top;
-      const breakTop = breakEl.getBoundingClientRect().top;
-      // Posição em pixels do canvas (html2canvas usou scale:2)
-      breakPx = Math.round((breakTop - areaTop) * 2);
+    // Localiza os pontos de quebra candidatos e escolhe o que melhor EQUILIBRA
+    // as duas páginas (menor necessidade de compressão em qualquer uma delas).
+    // Antes disso sempre preferíamos a quebra no início da SAE, mas quando a
+    // SAE é curta isso empurra Antimicrobianos+Exames+Escalas+Observações todos
+    // para a página 1, deixando ELA grande demais e a página 2 pequena — o
+    // problema inverso do que motivou essa mudança.
+    const areaTop = area.getBoundingClientRect().top;
+    function _candidato(el){
+      if (!el) return null;
+      const bpx = Math.round((el.getBoundingClientRect().top - areaTop) * 2);
+      if (!(bpx > 0 && bpx < canvas.height)) return null;
+      return bpx;
     }
-    const temQuebraValida = breakPx && breakPx > 0 && breakPx < canvas.height;
+    const candAntimicro = _candidato(area.querySelector('#pdf-break-point'));
+    const candSAE = _candidato(area.querySelector('#sae-cmp-break'));
+    function _maiorSegmentoMM(bpx){
+      return Math.max(bpx, canvas.height - bpx) / canvas.width * contentW;
+    }
+    let breakPx = null;
+    if (candAntimicro !== null && candSAE !== null) {
+      breakPx = _maiorSegmentoMM(candAntimicro) <= _maiorSegmentoMM(candSAE) ? candAntimicro : candSAE;
+    } else {
+      breakPx = candSAE !== null ? candSAE : candAntimicro;
+    }
+    const temQuebraValida = breakPx !== null;
 
     // Largura "padrão" (sem quebra / fallback natural): só comprime o total se
     // realmente precisar de mais de 2 páginas.
@@ -7101,7 +7113,7 @@ async function _gerarPDFdaArea(area, d){
   const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
-  const margin = 8;
+  const margin = 5;
   const contentW = pageW - margin*2;
   const contentH = pageH - margin*2;
   const LARGURA_FIXA = 780;
@@ -7114,18 +7126,27 @@ async function _gerarPDFdaArea(area, d){
 
   const PAGINAS_ALVO = 2;
 
-  // Localiza quebra preferencial. Se há SAE no preview, prefere quebrar no início
-  // dela (página 1 = evolução; página 2 = SAE + assinatura). Caso contrário, usa
-  // o ponto antigo (início de Antimicrobianos).
-  let breakPx = null;
-  const saeBreak = area.querySelector('#sae-cmp-break');
-  const breakEl = saeBreak || area.querySelector('#pdf-break-point');
-  if (breakEl) {
-    const areaTop = area.getBoundingClientRect().top;
-    const breakTop = breakEl.getBoundingClientRect().top;
-    breakPx = Math.round((breakTop - areaTop) * 2);
+  // Localiza os pontos de quebra candidatos e escolhe o que melhor EQUILIBRA
+  // as duas páginas (menor necessidade de compressão em qualquer uma delas).
+  const areaTop = area.getBoundingClientRect().top;
+  function _candidato(el){
+    if (!el) return null;
+    const bpx = Math.round((el.getBoundingClientRect().top - areaTop) * 2);
+    if (!(bpx > 0 && bpx < canvas.height)) return null;
+    return bpx;
   }
-  const temQuebraValida = breakPx && breakPx > 0 && breakPx < canvas.height;
+  const candAntimicro = _candidato(area.querySelector('#pdf-break-point'));
+  const candSAE = _candidato(area.querySelector('#sae-cmp-break'));
+  function _maiorSegmentoMM(bpx){
+    return Math.max(bpx, canvas.height - bpx) / canvas.width * contentW;
+  }
+  let breakPx = null;
+  if (candAntimicro !== null && candSAE !== null) {
+    breakPx = _maiorSegmentoMM(candAntimicro) <= _maiorSegmentoMM(candSAE) ? candAntimicro : candSAE;
+  } else {
+    breakPx = candSAE !== null ? candSAE : candAntimicro;
+  }
+  const temQuebraValida = breakPx !== null;
 
   // Largura "padrão" (sem quebra / fallback natural): só comprime o total se
   // realmente precisar de mais de 2 páginas.
