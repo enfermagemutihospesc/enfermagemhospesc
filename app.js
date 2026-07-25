@@ -6852,33 +6852,43 @@ async function gerarPDF(){
       windowWidth: LARGURA_FIXA
     });
 
-    // Altura total do conteúdo, convertida para mm considerando a largura do PDF
-    const mmTotal = (canvas.height / canvas.width) * contentW;
-
-    // Quantas páginas o conteúdo ocuparia naturalmente?
-    const paginasNaturais = Math.ceil(mmTotal / contentH);
-
     const PAGINAS_ALVO = 2;
-    let larguraUso = contentW;
 
-    // Se passar de 2 páginas naturais, comprime proporcionalmente
-    if (paginasNaturais > PAGINAS_ALVO) {
-      const fator = (PAGINAS_ALVO * contentH) / mmTotal;
-      larguraUso = contentW * fator;
-    }
-
-    // Altura de UMA página A4 convertida em pixels do canvas
-    const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
-
-    // Localiza o ponto de quebra preferencial (início da seção Antimicrobianos)
+    // Localiza o ponto de quebra preferencial: se há SAE, quebra no início dela
+    // (página 1 = evolução, página 2 = SAE + assinatura); senão, no início de
+    // Antimicrobianos.
     let breakPx = null;
-    const breakEl = area.querySelector('#pdf-break-point');
+    const saeBreak = area.querySelector('#sae-cmp-break');
+    const breakEl = saeBreak || area.querySelector('#pdf-break-point');
     if (breakEl) {
       const areaTop  = area.getBoundingClientRect().top;
       const breakTop = breakEl.getBoundingClientRect().top;
       // Posição em pixels do canvas (html2canvas usou scale:2)
       breakPx = Math.round((breakTop - areaTop) * 2);
     }
+    const temQuebraValida = breakPx && breakPx > 0 && breakPx < canvas.height;
+
+    // Largura de desenho no PDF. Quando há quebra, comprime o suficiente para
+    // que o MAIOR dos dois blocos (antes/depois da quebra) caiba inteiro numa
+    // página — evita que a página 2 (ex.: SAE longa + assinatura) seja cortada.
+    let larguraUso = contentW;
+    if (temQuebraValida) {
+      const segMaiorPx = Math.max(breakPx, canvas.height - breakPx);
+      const segMaiorMM = (segMaiorPx / canvas.width) * contentW;
+      if (segMaiorMM > contentH) {
+        larguraUso = contentW * (contentH / segMaiorMM);
+      }
+    } else {
+      // Sem ponto de quebra utilizável: comprime pelo total, se necessário
+      const mmTotal = (canvas.height / canvas.width) * contentW;
+      const paginasNaturais = Math.ceil(mmTotal / contentH);
+      if (paginasNaturais > PAGINAS_ALVO) {
+        larguraUso = contentW * ((PAGINAS_ALVO * contentH) / mmTotal);
+      }
+    }
+
+    // Altura de UMA página A4 convertida em pixels do canvas (só usada no fallback)
+    const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
 
     const offsetX = margin + (contentW - larguraUso) / 2;
 
@@ -6895,22 +6905,16 @@ async function gerarPDF(){
 
     // ── DECISÃO DE QUEBRA ────────────────────────────────────────────────────
     // Caso 1: conteúdo cabe numa página só → gera 1 página
-    // Caso 2: ponto de quebra (Antimicrobianos) existe e cabe dentro de uma
-    //         página → corta ali (página 1 termina antes de Antimicrobianos,
-    //         página 2 começa com Antimicrobianos)
-    // Caso 3: não tem ponto de quebra válido → usa paginação natural (recurso antigo)
-    // Se a página 2 passar do limite → o conteúdo foi pré-comprimido lá em cima,
-    //         então vai caber sem ultrapassar os 2 páginas-alvo.
+    // Caso 2: há ponto de quebra → página 1 termina ali, página 2 recebe TODO
+    //         o restante (já comprimido acima para caber sem cortar nada)
+    // Caso 3: sem ponto de quebra válido → paginação natural (recurso antigo)
     if (canvas.height <= pxPorPagina) {
       // Cabe em 1 página só
       addFatia(0, canvas.height);
-    } else if (breakPx && breakPx > 0 && breakPx < canvas.height && breakPx <= pxPorPagina) {
-      // Corta no início de Antimicrobianos
+    } else if (temQuebraValida) {
       addFatia(0, breakPx);
       pdf.addPage();
-      // Segunda página: resto do conteúdo (máximo pxPorPagina)
-      const restoFim = Math.min(breakPx + pxPorPagina, canvas.height);
-      addFatia(breakPx, restoFim);
+      addFatia(breakPx, canvas.height); // resto inteiro, sem corte
     } else {
       // Fallback: paginação natural por altura
       let yStart = 0, pag = 0;
@@ -7108,19 +7112,11 @@ async function _gerarPDFdaArea(area, d){
     width: LARGURA_FIXA, windowWidth: LARGURA_FIXA
   });
 
-  const mmTotal = (canvas.height / canvas.width) * contentW;
-  const paginasNaturais = Math.ceil(mmTotal / contentH);
   const PAGINAS_ALVO = 2;
-  let larguraUso = contentW;
-  if (paginasNaturais > PAGINAS_ALVO) {
-    const fator = (PAGINAS_ALVO * contentH) / mmTotal;
-    larguraUso = contentW * fator;
-  }
-  const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
 
   // Localiza quebra preferencial. Se há SAE no preview, prefere quebrar no início
-  // dela (página 1 = evolução; página 2 = SAE). Caso contrário, usa o ponto antigo
-  // (início de Antimicrobianos).
+  // dela (página 1 = evolução; página 2 = SAE + assinatura). Caso contrário, usa
+  // o ponto antigo (início de Antimicrobianos).
   let breakPx = null;
   const saeBreak = area.querySelector('#sae-cmp-break');
   const breakEl = saeBreak || area.querySelector('#pdf-break-point');
@@ -7129,6 +7125,28 @@ async function _gerarPDFdaArea(area, d){
     const breakTop = breakEl.getBoundingClientRect().top;
     breakPx = Math.round((breakTop - areaTop) * 2);
   }
+  const temQuebraValida = breakPx && breakPx > 0 && breakPx < canvas.height;
+
+  // Largura de desenho no PDF. Quando há quebra, comprime o suficiente para que
+  // o MAIOR dos dois blocos (antes/depois da quebra) caiba inteiro numa página —
+  // evita que a página 2 (ex.: SAE longa + assinatura) seja cortada.
+  let larguraUso = contentW;
+  if (temQuebraValida) {
+    const segMaiorPx = Math.max(breakPx, canvas.height - breakPx);
+    const segMaiorMM = (segMaiorPx / canvas.width) * contentW;
+    if (segMaiorMM > contentH) {
+      larguraUso = contentW * (contentH / segMaiorMM);
+    }
+  } else {
+    const mmTotal = (canvas.height / canvas.width) * contentW;
+    const paginasNaturais = Math.ceil(mmTotal / contentH);
+    if (paginasNaturais > PAGINAS_ALVO) {
+      larguraUso = contentW * ((PAGINAS_ALVO * contentH) / mmTotal);
+    }
+  }
+
+  // Altura de UMA página A4 convertida em pixels do canvas (só usada no fallback)
+  const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
 
   const offsetX = margin + (contentW - larguraUso) / 2;
 
@@ -7145,11 +7163,10 @@ async function _gerarPDFdaArea(area, d){
 
   if (canvas.height <= pxPorPagina) {
     addFatia(0, canvas.height);
-  } else if (breakPx && breakPx > 0 && breakPx < canvas.height && breakPx <= pxPorPagina) {
+  } else if (temQuebraValida) {
     addFatia(0, breakPx);
     pdf.addPage();
-    const restoFim = Math.min(breakPx + pxPorPagina, canvas.height);
-    addFatia(breakPx, restoFim);
+    addFatia(breakPx, canvas.height); // resto inteiro, sem corte
   } else {
     let yStart = 0, pag = 0;
     while (yStart < canvas.height && pag < PAGINAS_ALVO) {
