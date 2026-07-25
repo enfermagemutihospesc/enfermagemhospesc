@@ -6821,6 +6821,7 @@ async function gerarPDF(){
   const origWrapWidth    = wrap.style.width;
   const origWrapMaxWidth = wrap.style.maxWidth;
   const origBodyOverflow = document.body.style.overflow;
+  const origRootFontSize = document.documentElement.style.fontSize;
 
   // FORÇA largura fixa de "desktop" durante a captura para o PDF ficar
   // igual independentemente do dispositivo (celular x PC).
@@ -6831,6 +6832,14 @@ async function gerarPDF(){
   wrap.style.width = LARGURA_FIXA + 'px';
   wrap.style.maxWidth = 'none';
   document.body.style.overflow = 'hidden'; // evita scroll horizontal durante render
+
+  // Todo o texto do preview usa rem (relativo à fonte-raiz do <html>), então
+  // aumentar a fonte-raiz aqui deixa TODO o conteúdo — página 1 e página 2 —
+  // proporcionalmente maior antes mesmo de calcular a paginação. A margem
+  // menor por si só só ajuda a página que precisa ser comprimida; isto aqui
+  // aumenta a fonte de verdade em ambas.
+  const rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  document.documentElement.style.fontSize = (rootFontPx * 1.12) + 'px';
 
   try{
     const {jsPDF} = window.jspdf;
@@ -6967,6 +6976,7 @@ async function gerarPDF(){
     wrap.style.width = origWrapWidth;
     wrap.style.maxWidth = origWrapMaxWidth;
     document.body.style.overflow = origBodyOverflow;
+    document.documentElement.style.fontSize = origRootFontSize;
   }
 
   btn.disabled = false; btn.textContent = '☁ Salvar PDF no Drive';
@@ -7118,6 +7128,14 @@ async function _gerarPDFdaArea(area, d){
   const contentH = pageH - margin*2;
   const LARGURA_FIXA = 780;
 
+  // Mesmo ajuste de fonte-raiz do gerarPDF (texto usa rem): deixa o conteúdo
+  // de ambas as páginas proporcionalmente maior antes da captura.
+  const origRootFontSize = document.documentElement.style.fontSize;
+  const rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  document.documentElement.style.fontSize = (rootFontPx * 1.12) + 'px';
+
+  try {
+
   await _aguardarImagens(area, 3000);
   const canvas = await html2canvas(area, {
     scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
@@ -7214,6 +7232,10 @@ async function _gerarPDFdaArea(area, d){
   const base64  = dataUri.split(',')[1];
 
   await _apsFetch({ titulo, arquivoBase64: base64, pasta: pastaNome }, true);
+
+  } finally {
+    document.documentElement.style.fontSize = origRootFontSize;
+  }
 }
 
 // ── FUNÇÃO DE ALTA (modal com tipo de alta, data, hora) ──────────────────────
