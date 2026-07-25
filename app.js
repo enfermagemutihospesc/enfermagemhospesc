@@ -7117,24 +7117,17 @@ function renderPreviewEm(area, d){
   }
 }
 
-// Gera PDF a partir de uma área específica (usado no envio em lote)
-async function _gerarPDFdaArea(area, d){
-  const {jsPDF} = window.jspdf;
-  const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+// Adiciona o conteúdo renderizado em `area` ao PDF já aberto `pdf`, respeitando
+// no máximo 2 páginas (mesma lógica de quebra/compressão usada no envio ao
+// Drive). Não chama pdf.addPage() antes de começar — quem chama decide se
+// precisa de uma página nova (ex.: ao concatenar várias evoluções).
+async function _adicionarEvolucaoAoPDF(pdf, area){
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
   const margin = 5;
   const contentW = pageW - margin*2;
   const contentH = pageH - margin*2;
   const LARGURA_FIXA = 780;
-
-  // Mesmo ajuste de fonte-raiz do gerarPDF (texto usa rem): deixa o conteúdo
-  // de ambas as páginas proporcionalmente maior antes da captura.
-  const origRootFontSize = document.documentElement.style.fontSize;
-  const rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  document.documentElement.style.fontSize = (rootFontPx * 1.12) + 'px';
-
-  try {
 
   await _aguardarImagens(area, 3000);
   const canvas = await html2canvas(area, {
@@ -7218,6 +7211,22 @@ async function _gerarPDFdaArea(area, d){
       pag++;
     }
   }
+}
+
+// Gera PDF a partir de uma área específica (usado no envio em lote ao Drive)
+async function _gerarPDFdaArea(area, d){
+  const {jsPDF} = window.jspdf;
+  const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+
+  // Mesmo ajuste de fonte-raiz do gerarPDF (texto usa rem): deixa o conteúdo
+  // de ambas as páginas proporcionalmente maior antes da captura.
+  const origRootFontSize = document.documentElement.style.fontSize;
+  const rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  document.documentElement.style.fontSize = (rootFontPx * 1.12) + 'px';
+
+  try {
+
+  await _adicionarEvolucaoAoPDF(pdf, area);
 
   // Nome e pasta
   const [ano, mes, dia] = d.data.split('-');
@@ -7893,61 +7902,61 @@ async function imprimirTurnoCompleto(){
   if(!comEvolucao.length){ toast('Nenhuma evolução salva neste turno.', true); return; }
 
   const total = comEvolucao.length;
-  if(!confirm(`Imprimir ${total} evolução${total>1?'ões':''} do turno ${turno}?\n\nUma janela única será aberta com todas em sequência. Use a opção "Imprimir" do navegador (Ctrl+P) ou aguarde o diálogo de impressão automático.`)) return;
+  if(!confirm(`Imprimir ${total} evolução${total>1?'ões':''} do turno ${turno}?\n\nCada evolução ocupará no máximo 2 páginas. Um PDF será gerado e o diálogo de impressão abrirá automaticamente.`)) return;
 
-  showLoading('Renderizando evoluções...');
+  showLoading('Gerando PDF...');
 
-  // Renderiza todos os previews em sequência usando renderPreviewEm
+  // Renderiza cada evolução em sequência usando renderPreviewEm e adiciona ao
+  // mesmo PDF com o motor de paginação (html2canvas + jsPDF) que garante no
+  // máximo 2 páginas por evolução — o mesmo usado no envio individual ao Drive.
   const areaTemp = document.createElement('div');
   areaTemp.style.cssText = 'position:fixed;top:0;left:-9999px;width:780px;background:white;z-index:-1;';
   document.body.appendChild(areaTemp);
 
-  const blocos = [];
-  for(const item of comEvolucao){
-    try {
-      renderPreviewEm(areaTemp, item.ev);
-      await new Promise(r => setTimeout(r, 50));
-      blocos.push(areaTemp.innerHTML);
-    } catch(e){
-      console.warn('Erro renderizando leito '+item.leito+':', e);
+  const {jsPDF} = window.jspdf;
+  const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+
+  // Mesmo ajuste de fonte-raiz usado no PDF individual, para manter o
+  // conteúdo proporcionalmente do mesmo tamanho.
+  const origRootFontSize = document.documentElement.style.fontSize;
+  const rootFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  document.documentElement.style.fontSize = (rootFontPx * 1.12) + 'px';
+
+  let processados = 0;
+  try {
+    for(const item of comEvolucao){
+      try {
+        renderPreviewEm(areaTemp, item.ev);
+        await new Promise(r => setTimeout(r, 50));
+        if (processados > 0) pdf.addPage();
+        await _adicionarEvolucaoAoPDF(pdf, areaTemp);
+        processados++;
+      } catch(e){
+        console.warn('Erro renderizando leito '+item.leito+':', e);
+      }
     }
-  }
-  document.body.removeChild(areaTemp);
-
-  // Coleta CSS atual da página
-  let cssFull = '';
-  for(const ss of document.styleSheets){
-    try {
-      cssFull += Array.from(ss.cssRules).map(r=>r.cssText).join('\n');
-    } catch(e){ /* CORS pode bloquear */ }
+  } finally {
+    document.documentElement.style.fontSize = origRootFontSize;
+    document.body.removeChild(areaTemp);
   }
 
-  // Abre janela nova com todos os previews
-  const w = window.open('', '_blank', 'width=900,height=700');
-  if(!w){ hideLoading(); toast('Bloqueador de pop-up impediu abrir janela. Permita pop-ups e tente novamente.', true); return; }
+  if(!processados){
+    hideLoading();
+    toast('Não foi possível gerar nenhuma evolução.', true);
+    return;
+  }
 
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Evoluções ${turno} – ${hj.split('-').reverse().join('/')}</title>
-    <style>${cssFull}
-      body { background:white; padding:0; margin:0; }
-      .pg { page-break-after: always; padding:20px; }
-      .pg:last-child { page-break-after: auto; }
-      @media print { .no-print { display:none !important; } }
-      .no-print { background:#1a6b3a; color:white; padding:10px; text-align:center; position:sticky; top:0; z-index:99; }
-      .no-print button { background:white; color:#1a6b3a; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-weight:600; margin-left:10px; }
-    </style>
-  </head><body>
-    <div class="no-print">
-      ${total} evolução${total>1?'ões':''} do turno ${turno} – ${hj.split('-').reverse().join('/')}
-      <button onclick="window.print()">🖨 Imprimir tudo</button>
-      <button onclick="window.close()">Fechar</button>
-    </div>
-    ${blocos.map(b => `<div class="pg">${b}</div>`).join('')}
-    <script>setTimeout(()=>window.print(), 800);<\/script>
-  </body></html>`);
-  w.document.close();
+  // Abre o PDF numa nova aba e já dispara o diálogo de impressão do navegador
+  pdf.autoPrint();
+  const blobUrl = pdf.output('bloburl');
+  const w = window.open(blobUrl, '_blank');
 
   hideLoading();
-  toast(`✓ ${total} evoluções abertas em nova janela`);
+  if(!w){
+    toast('Bloqueador de pop-up impediu abrir o PDF. Permita pop-ups e tente novamente.', true);
+    return;
+  }
+  toast(`✓ PDF com ${processados} de ${total} evolução${total>1?'ões':''} gerado (máx. 2 páginas cada)`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
