@@ -6868,60 +6868,60 @@ async function gerarPDF(){
     }
     const temQuebraValida = breakPx && breakPx > 0 && breakPx < canvas.height;
 
-    // Largura de desenho no PDF. Quando há quebra, comprime o suficiente para
-    // que o MAIOR dos dois blocos (antes/depois da quebra) caiba inteiro numa
-    // página — evita que a página 2 (ex.: SAE longa + assinatura) seja cortada.
+    // Largura "padrão" (sem quebra / fallback natural): só comprime o total se
+    // realmente precisar de mais de 2 páginas.
+    const mmTotal = (canvas.height / canvas.width) * contentW;
+    const paginasNaturais = Math.ceil(mmTotal / contentH);
     let larguraUso = contentW;
-    if (temQuebraValida) {
-      const segMaiorPx = Math.max(breakPx, canvas.height - breakPx);
-      const segMaiorMM = (segMaiorPx / canvas.width) * contentW;
-      if (segMaiorMM > contentH) {
-        larguraUso = contentW * (contentH / segMaiorMM);
-      }
-    } else {
-      // Sem ponto de quebra utilizável: comprime pelo total, se necessário
-      const mmTotal = (canvas.height / canvas.width) * contentW;
-      const paginasNaturais = Math.ceil(mmTotal / contentH);
-      if (paginasNaturais > PAGINAS_ALVO) {
-        larguraUso = contentW * ((PAGINAS_ALVO * contentH) / mmTotal);
-      }
+    if (!temQuebraValida && paginasNaturais > PAGINAS_ALVO) {
+      larguraUso = contentW * ((PAGINAS_ALVO * contentH) / mmTotal);
     }
+
+    // Largura de CADA página calculada de forma independente: a página 1
+    // (evolução) só encolhe se ela própria não couber; a página 2 (ex.: SAE
+    // longa + assinatura) só encolhe o quanto ela própria precisar. Assim uma
+    // página cheia nunca fica com margens largas só porque a outra é grande.
+    function larguraParaSegmento(px){
+      const mm = (px / canvas.width) * contentW;
+      return mm > contentH ? contentW * (contentH / mm) : contentW;
+    }
+    const larguraPg1 = temQuebraValida ? larguraParaSegmento(breakPx) : larguraUso;
+    const larguraPg2 = temQuebraValida ? larguraParaSegmento(canvas.height - breakPx) : larguraUso;
 
     // Altura de UMA página A4 convertida em pixels do canvas (só usada no fallback)
     const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
 
-    const offsetX = margin + (contentW - larguraUso) / 2;
-
-    function addFatia(yStart, yEnd){
+    function addFatia(yStart, yEnd, largura){
       const h = yEnd - yStart;
       const sc = document.createElement('canvas');
       sc.width = canvas.width; sc.height = h;
       const ctx = sc.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0,0,sc.width,h);
       ctx.drawImage(canvas, 0,yStart, canvas.width,h, 0,0, canvas.width,h);
-      const mmH = (h / canvas.width) * larguraUso;
-      pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', offsetX, margin, larguraUso, mmH);
+      const mmH = (h / canvas.width) * largura;
+      const offsetX = margin + (contentW - largura) / 2;
+      pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', offsetX, margin, largura, mmH);
     }
 
     // ── DECISÃO DE QUEBRA ────────────────────────────────────────────────────
-    // Caso 1: conteúdo cabe numa página só → gera 1 página
-    // Caso 2: há ponto de quebra → página 1 termina ali, página 2 recebe TODO
-    //         o restante (já comprimido acima para caber sem cortar nada)
+    // Caso 1: conteúdo cabe numa página só (largura cheia) → gera 1 página
+    // Caso 2: há ponto de quebra → página 1 termina ali (largura própria),
+    //         página 2 recebe TODO o restante (largura própria, sem cortar nada)
     // Caso 3: sem ponto de quebra válido → paginação natural (recurso antigo)
-    if (canvas.height <= pxPorPagina) {
-      // Cabe em 1 página só
-      addFatia(0, canvas.height);
+    if (mmTotal <= contentH) {
+      // Cabe em 1 página só, sem nenhuma compressão
+      addFatia(0, canvas.height, contentW);
     } else if (temQuebraValida) {
-      addFatia(0, breakPx);
+      addFatia(0, breakPx, larguraPg1);
       pdf.addPage();
-      addFatia(breakPx, canvas.height); // resto inteiro, sem corte
+      addFatia(breakPx, canvas.height, larguraPg2); // resto inteiro, sem corte
     } else {
       // Fallback: paginação natural por altura
       let yStart = 0, pag = 0;
       while (yStart < canvas.height && pag < PAGINAS_ALVO) {
         if (pag > 0) pdf.addPage();
         const yEnd = Math.min(yStart + pxPorPagina, canvas.height);
-        addFatia(yStart, yEnd);
+        addFatia(yStart, yEnd, larguraUso);
         yStart = yEnd;
         pag++;
       }
@@ -7127,52 +7127,54 @@ async function _gerarPDFdaArea(area, d){
   }
   const temQuebraValida = breakPx && breakPx > 0 && breakPx < canvas.height;
 
-  // Largura de desenho no PDF. Quando há quebra, comprime o suficiente para que
-  // o MAIOR dos dois blocos (antes/depois da quebra) caiba inteiro numa página —
-  // evita que a página 2 (ex.: SAE longa + assinatura) seja cortada.
+  // Largura "padrão" (sem quebra / fallback natural): só comprime o total se
+  // realmente precisar de mais de 2 páginas.
+  const mmTotal = (canvas.height / canvas.width) * contentW;
+  const paginasNaturais = Math.ceil(mmTotal / contentH);
   let larguraUso = contentW;
-  if (temQuebraValida) {
-    const segMaiorPx = Math.max(breakPx, canvas.height - breakPx);
-    const segMaiorMM = (segMaiorPx / canvas.width) * contentW;
-    if (segMaiorMM > contentH) {
-      larguraUso = contentW * (contentH / segMaiorMM);
-    }
-  } else {
-    const mmTotal = (canvas.height / canvas.width) * contentW;
-    const paginasNaturais = Math.ceil(mmTotal / contentH);
-    if (paginasNaturais > PAGINAS_ALVO) {
-      larguraUso = contentW * ((PAGINAS_ALVO * contentH) / mmTotal);
-    }
+  if (!temQuebraValida && paginasNaturais > PAGINAS_ALVO) {
+    larguraUso = contentW * ((PAGINAS_ALVO * contentH) / mmTotal);
   }
+
+  // Largura de CADA página calculada de forma independente: a página 1
+  // (evolução) só encolhe se ela própria não couber; a página 2 (ex.: SAE
+  // longa + assinatura) só encolhe o quanto ela própria precisar. Assim uma
+  // página cheia nunca fica com margens largas só porque a outra é grande.
+  function larguraParaSegmento(px){
+    const mm = (px / canvas.width) * contentW;
+    return mm > contentH ? contentW * (contentH / mm) : contentW;
+  }
+  const larguraPg1 = temQuebraValida ? larguraParaSegmento(breakPx) : larguraUso;
+  const larguraPg2 = temQuebraValida ? larguraParaSegmento(canvas.height - breakPx) : larguraUso;
 
   // Altura de UMA página A4 convertida em pixels do canvas (só usada no fallback)
   const pxPorPagina = Math.floor((contentH / contentW) * canvas.width * (contentW / larguraUso));
 
-  const offsetX = margin + (contentW - larguraUso) / 2;
-
-  function addFatia(yStart, yEnd){
+  function addFatia(yStart, yEnd, largura){
     const h = yEnd - yStart;
     const sc = document.createElement('canvas');
     sc.width = canvas.width; sc.height = h;
     const ctx = sc.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0,0,sc.width,h);
     ctx.drawImage(canvas, 0,yStart, canvas.width,h, 0,0, canvas.width,h);
-    const mmH = (h / canvas.width) * larguraUso;
-    pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', offsetX, margin, larguraUso, mmH);
+    const mmH = (h / canvas.width) * largura;
+    const offsetX = margin + (contentW - largura) / 2;
+    pdf.addImage(sc.toDataURL('image/jpeg',.92), 'JPEG', offsetX, margin, largura, mmH);
   }
 
-  if (canvas.height <= pxPorPagina) {
-    addFatia(0, canvas.height);
+  if (mmTotal <= contentH) {
+    // Cabe em 1 página só, sem nenhuma compressão
+    addFatia(0, canvas.height, contentW);
   } else if (temQuebraValida) {
-    addFatia(0, breakPx);
+    addFatia(0, breakPx, larguraPg1);
     pdf.addPage();
-    addFatia(breakPx, canvas.height); // resto inteiro, sem corte
+    addFatia(breakPx, canvas.height, larguraPg2); // resto inteiro, sem corte
   } else {
     let yStart = 0, pag = 0;
     while (yStart < canvas.height && pag < PAGINAS_ALVO) {
       if (pag > 0) pdf.addPage();
       const yEnd = Math.min(yStart + pxPorPagina, canvas.height);
-      addFatia(yStart, yEnd);
+      addFatia(yStart, yEnd, larguraUso);
       yStart = yEnd;
       pag++;
     }
