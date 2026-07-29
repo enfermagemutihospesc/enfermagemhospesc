@@ -5316,9 +5316,10 @@ async function renderLeitos() {
   // Monta todas as chaves e busca em paralelo (uma única round-trip ao Firestore)
   const keys = [];
   for (let i=1;i<=TOTAL;i++) {
-    keys.push('uti_ev_'  + i + '_' + turno      + '_' + hj);
-    keys.push('uti_nas_' + i + '_' + turno      + '_' + hj);
-    keys.push('uti_nas_' + i + '_' + outroTurno + '_' + hj);
+    keys.push('uti_ev_'   + i + '_' + turno      + '_' + hj);
+    keys.push('uti_nas_'  + i + '_' + turno      + '_' + hj);
+    keys.push('uti_nas_'  + i + '_' + outroTurno + '_' + hj);
+    keys.push('uti_iras_' + i + '_' + turno      + '_' + hj);
   }
   const data = await dbGetMany(keys);
   for (let i=1;i<=TOTAL;i++) {
@@ -5327,6 +5328,9 @@ async function renderLeitos() {
     let   nasHoje = l.ocupado ? data['uti_nas_' + i + '_' + turno + '_' + hj] : null;
     // Sem NAS no turno atual → tenta o outro turno do mesmo dia (NAS é 24h)
     if (l.ocupado && !nasHoje) nasHoje = data['uti_nas_' + i + '_' + outroTurno + '_' + hj];
+    // Bundles IRAS já salvos neste leito/turno/data? (usado para colorir o botão)
+    const irasHoje = data['uti_iras_' + i + '_' + turno + '_' + hj];
+    const irasPreenchido = !!(irasHoje && Object.keys(irasHoje).length > 0);
     const card = document.getElementById('leito-card-'+i);
     card.classList.remove('loading');
     if (l.ocupado) card.classList.add('ocupado');
@@ -5344,7 +5348,7 @@ async function renderLeitos() {
         ${l.ocupado && evHoje ? _morseBadge(evHoje.morseScore) : ''}
         ${l.ocupado ? _nasBadge(nasHoje) : ''}
       </div>
-      ${l.ocupado ? `<button class="leito-iras-btn" data-leito="${i}" title="Abrir Checklist de Bundles IRAS deste leito">📋 BUNDLES IRAS</button>` : ''}
+      ${l.ocupado ? `<button class="leito-iras-btn${irasPreenchido ? ' leito-iras-btn--preenchido' : ''}" data-leito="${i}" title="${irasPreenchido ? '✓ Bundles IRAS preenchido neste turno — clique para editar' : 'Abrir Checklist de Bundles IRAS deste leito'}"${irasPreenchido ? ' style="background:#1a6b3a;border-color:#1a6b3a;color:#fff;"' : ''}>📋 BUNDLES IRAS${irasPreenchido ? ' ✓' : ''}</button>` : ''}
       ${l.ocupado ? `<button class="leito-rx-hor-btn" data-leito="${i}" title="Ver e editar horários da prescrição médica">💊 PRESCRIÇÃO</button>` : ''}`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
     // Listener separado para o botão IRAS — para de propagar para o card
