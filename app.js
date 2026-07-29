@@ -5348,7 +5348,7 @@ async function renderLeitos() {
         ${l.ocupado && evHoje ? _morseBadge(evHoje.morseScore) : ''}
         ${l.ocupado ? _nasBadge(nasHoje) : ''}
       </div>
-      ${l.ocupado ? `<button class="leito-iras-btn${irasPreenchido ? ' leito-iras-btn--preenchido' : ''}" data-leito="${i}" title="${irasPreenchido ? '✓ Bundles IRAS preenchido neste turno — clique para editar' : 'Abrir Checklist de Bundles IRAS deste leito'}"${irasPreenchido ? ' style="background:#1a6b3a;border-color:#1a6b3a;color:#fff;"' : ''}>📋 BUNDLES IRAS${irasPreenchido ? ' ✓' : ''}</button>` : ''}
+      ${l.ocupado ? `<button class="leito-iras-btn${irasPreenchido ? ' leito-iras-btn--preenchido' : ''}" data-leito="${i}" title="${irasPreenchido ? '✓ Bundles IRAS preenchido neste turno — clique para editar' : 'Abrir Checklist de Bundles IRAS deste leito'}">📋 BUNDLES IRAS${irasPreenchido ? ' ✓' : ''}</button>` : ''}
       ${l.ocupado ? `<button class="leito-rx-hor-btn" data-leito="${i}" title="Ver e editar horários da prescrição médica">💊 PRESCRIÇÃO</button>` : ''}`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
     // Listener separado para o botão IRAS — para de propagar para o card
@@ -5368,6 +5368,50 @@ async function renderLeitos() {
         });
       }
     }
+  }
+  // Atualiza a cor do botão "Check-list Setorial" conforme o turno/data atuais
+  _atualizarBtnChecklistSetorial();
+}
+
+// ── Check-list Setorial: indicador visual de preenchimento no botão ──────────
+// Verifica se já existe um rascunho/registro salvo para o turno+data atuais
+// (mesma chave usada em abrirChecklistSetorial/salvarChecklistSetorial) e
+// pinta o botão de verde quando houver algo preenchido, voltando à cor padrão
+// (azul) quando não houver nada salvo ainda.
+async function _atualizarBtnChecklistSetorial() {
+  const btn = document.getElementById('btn-checklist-setorial');
+  if (!btn) return;
+
+  const data  = dataDoTurno ? dataDoTurno() : hoje();
+  const chave = data + '__' + (turno || 'DIURNO');
+
+  let registro = null;
+  if (db && !modoOffline) {
+    try {
+      const doc = await db.collection('checklist_setorial').doc(chave).get();
+      if (doc.exists) registro = doc.data();
+    } catch(e) { console.warn('[Setorial:btnStatus] Firestore:', e); }
+  }
+  if (!registro) {
+    try {
+      const local = JSON.parse(localStorage.getItem('cl_setorial') || '{}');
+      if (local[chave]) registro = local[chave];
+    } catch(e) {}
+  }
+
+  const temObs = !!(registro && registro.observacoes && registro.observacoes.trim().length > 0);
+  const preenchidos = registro && registro.preenchidos ? registro.preenchidos : 0;
+  const preenchido = !!registro && (preenchidos > 0 || temObs);
+  const completo = !!registro && registro.parcial === false;
+
+  if (preenchido) {
+    btn.style.background = '#1a6b3a';
+    btn.title = completo ? '✓ Check-list setorial completo neste turno' : '✓ Check-list setorial com rascunho salvo neste turno';
+    btn.textContent = completo ? '📋 Check-list Setorial ✓' : '📋 Check-list Setorial ✓ (parcial)';
+  } else {
+    btn.style.background = 'linear-gradient(135deg,#0d47a1,#1565c0)';
+    btn.title = '';
+    btn.textContent = '📋 Check-list Setorial';
   }
 }
 
@@ -10928,6 +10972,8 @@ async function salvarChecklistSetorial() {
 
   // Atualizar histórico se estiver aberto
   setTimeout(() => { _clCarregarHistorico(); }, 600);
+  // Atualizar a cor do botão na tela de leitos imediatamente
+  _atualizarBtnChecklistSetorial();
 }
 
 function _clSalvarLocal(chave, registro) {
