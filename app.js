@@ -305,9 +305,9 @@ function hoje(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMont
 function ontem(){ const d=new Date(); d.setDate(d.getDate()-1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 // Retorna a data correta do turno:
 // Diurno  → 07:00–18:59 (sempre hoje)
-// Noturno → 19:00–23:59 = hoje | 00:00–06:59 = ontem (turno começou no dia anterior)
-// A janela 0–6 cobre a madrugada do plantão noturno, que termina às 07:00.
-function dataDoTurno(){ const h=new Date().getHours(); if(turno==='NOTURNO' && h>=0 && h<7) return ontem(); return hoje(); }
+// Noturno → 19:00–23:59 = hoje | 00:00–09:59 = ontem (turno começou no dia anterior)
+// A janela 0–9 cobre a madrugada/manhã do plantão noturno, que termina às 10:00.
+function dataDoTurno(){ const h=new Date().getHours(); if(turno==='NOTURNO' && h>=0 && h<10) return ontem(); return hoje(); }
 function fmtD(s){ if(!s||s==='–') return '–'; try{ const[y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }catch(e){ return s; } }
 // Escapa HTML para evitar XSS em innerHTML
 function esc(s){ const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML; }
