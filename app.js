@@ -83,7 +83,7 @@ const PERFIS_SEED = {
   'hallyson.l@hospesc.com': { nome:'HALLYSON LENO LUCAS DA SILVA',             coren:'478.900' },
   'karla.d@hospesc.com':    { nome:'KARLA DANIELLE DA SILVA FERNANDES',        coren:'382.513' },
   'shayane.a@hospesc.com':  { nome:'AUREA SHAYANE BARBOSA DA SILVA',           coren:'511.041' },
-  'andressa.m@hospesc.com': { nome:'ANDRESSSA MÔNICA GOMES FERNANDES',         coren:'289.378' },
+  'andressa.m@hospesc.com': { nome:'ANDRESSA MÔNICA GOMES FERNANDES',         coren:'289.378' },
   'larissa.g@hospesc.com':  { nome:'LARISSA GERMANO DA SILVA',                 coren:'640.577' },
   'marinne.t@hospesc.com':  { nome:'MARINNE TRINDADE DE MIRANDA PERRUCI',      coren:'275.733' },
   'hitley.f@hospesc.com':   { nome:'HITLEY FRANKLIN XAVIER',                   coren:'342.330' },
