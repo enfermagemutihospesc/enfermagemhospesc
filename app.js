@@ -13066,8 +13066,48 @@ async function _pitGerarTexto(form){
       const ev = evData['uti_ev_'+n+'_'+turno+'_'+hj];
       const real  = ev && ev.examesReal  ? String(ev.examesReal).trim()  : '';
       const solic = ev && ev.examesSolic ? String(ev.examesSolic).trim() : '';
+
+      // Diagnóstico: evolução (mais completa, com diagnósticos adicionais) >
+      // cadastro do leito — mesmo critério usado na Passagem de Plantão.
+      let diagTxt = (ev && ev.diag) || (l && l.diag) || '';
+      if(ev && Array.isArray(ev.diags) && ev.diags.length > 1){
+        const extras = ev.diags.slice(1).map(x => x.diag).filter(Boolean);
+        if(extras.length) diagTxt = [diagTxt, ...extras].filter(Boolean).join(' + ');
+      }
+      const comorTxt = (ev && ev.comor) || (l && l.comor) || '';
+
+      // Ventilação: só existe no registro de evolução do turno.
+      let ventTxt = '';
+      if(ev && ev.vent){
+        ventTxt = ev.vent;
+        if(ev.vent === 'Cateter nasal' && ev.cnLmin)           ventTxt = 'Cateter nasal ' + ev.cnLmin + ' L/min';
+        else if(ev.vent === 'Máscara NR' && ev.mnrLmin)        ventTxt = 'Máscara NR ' + ev.mnrLmin + ' L/min';
+        else if(ev.vent === 'Macronebulização MV')             ventTxt = 'MV (macronebulização)' + (ev.mvFio2 ? ' ' + ev.mvFio2 + '%' : '');
+        else if(ev.vent.includes('TOT') && ev.tot_n)           ventTxt = ev.vent + ' (Nº ' + ev.tot_n + ')';
+        else if(ev.vent.includes('TQT') && ev.tqt_n)           ventTxt = ev.vent + ' (Nº ' + ev.tqt_n + ')';
+        if(ev.vent.includes('TOT') || ev.vent.includes('TQT')){
+          const parm = [];
+          if(ev.vmi_modo) parm.push('modo ' + ev.vmi_modo);
+          if(ev.vmi_fio2) parm.push('FiO2 ' + ev.vmi_fio2 + '%');
+          if(ev.vmi_peep) parm.push('PEEP ' + ev.vmi_peep + ' cmH₂O');
+          if(parm.length) ventTxt += ' — ' + parm.join(', ');
+        }
+      }
+
+      // Dietoterapia: array de checkboxes (dieta) + vazão (vdieta).
+      let dietaTxt = '';
+      if(ev){
+        const dietaArr = Array.isArray(ev.dieta) ? ev.dieta : (ev.dieta ? [ev.dieta] : []);
+        dietaTxt = dietaArr.join(', ');
+        if(dietaTxt && ev.vdieta) dietaTxt += ' — ' + ev.vdieta + ' ml/h';
+      }
+
       linhas.push('');
       linhas.push('Leito ' + pad(n) + ' - ' + _pitIniciais(l.pac) + (idade!==null ? ', ' + idade + ' anos' : ''));
+      linhas.push('DIAGNÓSTICO: ' + (diagTxt  || '–'));
+      linhas.push('COMORBIDADES: ' + (comorTxt || '–'));
+      linhas.push('VENTILAÇÃO: ' + (ventTxt   || '–'));
+      linhas.push('DIETOTERAPIA: ' + (dietaTxt || '–'));
       linhas.push('Exames/Pareceres realizados: ' + (real  || '–'));
       linhas.push('Exames/Pareceres solicitados: ' + (solic || '–'));
     });
