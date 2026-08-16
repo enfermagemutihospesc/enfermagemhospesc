@@ -1303,6 +1303,92 @@ const BALANCO_CSS = `
 `;
 
 // ════════════════════════════════════════════════════════════════════════════
+// SELETOR DE LEITOS — modal genérico para escolher quais leitos imprimir/emitir
+// ────────────────────────────────────────────────────────────────────────────
+// Criado 100% via JS (injetado no <body> na primeira chamada) para não depender
+// de nenhuma marcação extra no HTML. Usado por imprimirTurnoCompleto(),
+// emitirAnotacoesTecnico() e emitirBalancoDecubito() para permitir imprimir
+// apenas alguns leitos em vez de todos os ocupados.
+// ════════════════════════════════════════════════════════════════════════════
+let _slCallbackAtual = null;
+
+function _garantirModalSeletorLeitos(){
+  if(document.getElementById('modal-seletor-leitos')) return;
+  const div = document.createElement('div');
+  div.id = 'modal-seletor-leitos';
+  div.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:10px;max-width:420px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.3);">
+      <div id="sl-header" style="padding:14px 18px;background:#00695c;color:#fff;font-weight:600;">Selecionar leitos</div>
+      <div style="padding:10px 18px;display:flex;gap:8px;border-bottom:1px solid #eee;">
+        <button type="button" onclick="_slMarcarTodos(true)" style="flex:1;padding:6px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer;">Selecionar todos</button>
+        <button type="button" onclick="_slMarcarTodos(false)" style="flex:1;padding:6px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer;">Limpar seleção</button>
+      </div>
+      <div id="sl-lista" style="padding:10px 18px;overflow-y:auto;flex:1;"></div>
+      <div style="padding:12px 18px;display:flex;gap:8px;border-top:1px solid #eee;">
+        <button type="button" onclick="_slCancelar()" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Cancelar</button>
+        <button type="button" id="sl-btn-confirmar" onclick="_slConfirmar()" style="flex:1;padding:10px;border:none;border-radius:6px;background:#00695c;color:#fff;font-weight:600;cursor:pointer;">Confirmar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function _slMarcarTodos(marcar){
+  document.querySelectorAll('#sl-lista input[type=checkbox]').forEach(cb => cb.checked = marcar);
+}
+
+function _slCancelar(){
+  const modal = document.getElementById('modal-seletor-leitos');
+  if(modal) modal.style.display = 'none';
+  _slCallbackAtual = null;
+}
+
+function _slConfirmar(){
+  const marcados = Array.from(document.querySelectorAll('#sl-lista input[type=checkbox]:checked')).map(cb => parseInt(cb.value));
+  if(!marcados.length){ toast('Selecione ao menos um leito.', true); return; }
+  const modal = document.getElementById('modal-seletor-leitos');
+  if(modal) modal.style.display = 'none';
+  const cb = _slCallbackAtual;
+  _slCallbackAtual = null;
+  if(cb) cb(marcados);
+}
+
+// Abre o seletor de leitos.
+// ocupadosInfo: array de {leito, nome} já ocupados, na ordem a exibir.
+// titulo: texto do cabeçalho do modal.
+// corTema: cor do cabeçalho e do botão confirmar (diferencia cada fluxo).
+// callback(leitosSelecionados): chamado ao confirmar, com array de números de leito.
+function abrirSeletorLeitos(ocupadosInfo, titulo, corTema, callback){
+  _garantirModalSeletorLeitos();
+  const modal = document.getElementById('modal-seletor-leitos');
+  const cor = corTema || '#00695c';
+  document.getElementById('sl-header').textContent = titulo;
+  document.getElementById('sl-header').style.background = cor;
+  document.getElementById('sl-btn-confirmar').style.background = cor;
+
+  document.getElementById('sl-lista').innerHTML = ocupadosInfo.map(({leito, nome}) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
+      <input type="checkbox" value="${leito}" checked style="width:18px;height:18px;flex-shrink:0;">
+      <span><strong>Leito ${pad(leito)}</strong>${nome ? ' — '+nome : ''}</span>
+    </label>
+  `).join('');
+
+  _slCallbackAtual = callback;
+  modal.style.display = 'flex';
+}
+
+// Busca os leitos ocupados, e se houver algum, abre o seletor e chama callback
+// com os leitos escolhidos. Usado como atalho pelos fluxos de emissão.
+async function _selecionarLeitosEChamar(titulo, corTema, callback){
+  let leitos;
+  try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
+  const ocupadosInfo = [];
+  for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupadosInfo.push({leito:n, nome:leitos[n].pac||''}); }
+  if(!ocupadosInfo.length){ toast('Nenhum leito ocupado.', true); return; }
+  abrirSeletorLeitos(ocupadosInfo, titulo, corTema, callback);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // EMISSÃO CONJUNTA: Anotações do Técnico + Mudança de Decúbito + Balanço Hídrico
 // ────────────────────────────────────────────────────────────────────────────
 // Um único botão abre um modal para escolher a DATA de referência dos três
@@ -1320,27 +1406,38 @@ function abrirModalEmitirDocumentos(){
 function fecharModalEmitirDocumentos(){ document.getElementById('modal-emitir-doc').classList.remove('show'); }
 
 // ── Confirmar emissão: dois botões distintos no modal ──
+// Após escolher a data, abre o seletor de leitos para permitir emitir apenas
+// alguns leitos em vez de todos os ocupados.
 async function confirmarEmitirTecnico(){
   const dataRef = gf('emitir-doc-data');
   if(!dataRef){ toast('Selecione uma data', true); return; }
   fecharModalEmitirDocumentos();
-  await emitirAnotacoesTecnico(dataRef);
+  await _selecionarLeitosEChamar('📋 Anotações do Técnico — escolha os leitos', '#6a1b9a',
+    (leitosSel) => emitirAnotacoesTecnico(dataRef, leitosSel));
 }
 
 async function confirmarEmitirBalancoDecubito(){
   const dataRef = gf('emitir-doc-data');
   if(!dataRef){ toast('Selecione uma data', true); return; }
   fecharModalEmitirDocumentos();
-  await emitirBalancoDecubito(dataRef);
+  await _selecionarLeitosEChamar('🌊 Balanço Hídrico + Decúbito — escolha os leitos', '#00695c',
+    (leitosSel) => emitirBalancoDecubito(dataRef, leitosSel));
 }
 
 // ── Emitir apenas Anotações do Técnico de Enfermagem (retrato, frente e verso) ──
-async function emitirAnotacoesTecnico(dataRef){
+// leitosSelecionados (opcional): array de números de leito a emitir. Se omitido,
+// usa todos os leitos ocupados (compatibilidade com chamadas antigas).
+async function emitirAnotacoesTecnico(dataRef, leitosSelecionados){
   let leitos;
   try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
 
-  const ocupados = [];
-  for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
+  let ocupados;
+  if(leitosSelecionados && leitosSelecionados.length){
+    ocupados = leitosSelecionados.filter(n => leitos[n] && leitos[n].ocupado).sort((a,b)=>a-b);
+  } else {
+    ocupados = [];
+    for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
+  }
   if(!ocupados.length){ toast('Nenhum leito ocupado.', true); return; }
 
   const dataBR = dataRef.split('-').reverse().join('/');
@@ -1371,12 +1468,19 @@ async function emitirAnotacoesTecnico(dataRef){
 }
 
 // ── Emitir Mudança de Decúbito + Balanço Hídrico (paisagem) ──
-async function emitirBalancoDecubito(dataRef){
+// leitosSelecionados (opcional): array de números de leito a emitir. Se omitido,
+// usa todos os leitos ocupados (compatibilidade com chamadas antigas).
+async function emitirBalancoDecubito(dataRef, leitosSelecionados){
   let leitos;
   try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
 
-  const ocupados = [];
-  for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
+  let ocupados;
+  if(leitosSelecionados && leitosSelecionados.length){
+    ocupados = leitosSelecionados.filter(n => leitos[n] && leitos[n].ocupado).sort((a,b)=>a-b);
+  } else {
+    ocupados = [];
+    for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupados.push(n); }
+  }
   if(!ocupados.length){ toast('Nenhum leito ocupado.', true); return; }
 
   const dataBR = dataRef.split('-').reverse().join('/');
@@ -7935,19 +8039,22 @@ window.addEventListener('load', () => {
 // IMPRIMIR TURNO COMPLETO – abre todas as evoluções do turno em uma janela única
 // ════════════════════════════════════════════════════════════════════════════
 async function imprimirTurnoCompleto(){
-  const leitos = await leitosData();
-  const ocupados = Object.entries(leitos).filter(([,v])=>v.ocupado).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
-  if(!ocupados.length){ toast('Nenhum leito ocupado.'); return; }
+  await _selecionarLeitosEChamar('🖨 Imprimir Turno — escolha os leitos', '#1565c0',
+    (leitosSel) => _imprimirTurnoCompletoExec(leitosSel));
+}
 
+async function _imprimirTurnoCompletoExec(leitosSelecionados){
+  const leitos = await leitosData();
   const hj = dataDoTurno();
   const comEvolucao = [];
-  for(const [k,pac] of ocupados){
-    const leito = parseInt(k);
+  for(const leito of leitosSelecionados.slice().sort((a,b)=>a-b)){
+    if(!leitos[leito] || !leitos[leito].ocupado) continue;
+    const pac = leitos[leito];
     const ev = await dbGet(evKey(leito, turno, hj));
     if(ev) comEvolucao.push({leito, pac, ev});
   }
 
-  if(!comEvolucao.length){ toast('Nenhuma evolução salva neste turno.', true); return; }
+  if(!comEvolucao.length){ toast('Nenhuma evolução salva para os leitos selecionados neste turno.', true); return; }
 
   const total = comEvolucao.length;
   if(!confirm(`Imprimir ${total} evolução${total>1?'ões':''} do turno ${turno}?\n\nCada evolução ocupará no máximo 2 páginas. Um PDF será gerado e o diálogo de impressão abrirá automaticamente.`)) return;
