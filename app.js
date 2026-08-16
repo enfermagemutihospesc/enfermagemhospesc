@@ -623,8 +623,8 @@ const PASSAGEM_CAMPOS = [
   { id:'eliminacoes',   label:'ELIMINAÇÕES',    tag:'input' },
   { id:'lesao',         label:'LESÃO',          tag:'input' },
   { id:'evolAdmissao',  label:'EVOLUÇÃO DE ADMISSÃO', tag:'textarea' },
-  { id:'pendencias',    label:'PENDÊNCIAS',     tag:'textarea', destaque:true },
-  { id:'observacoes',   label:'OBSERVAÇÃO',     tag:'textarea', destaque:true },
+  { id:'pendencias',    label:'EXAMES E PARECERES SOLICITADOS',     tag:'textarea', destaque:true },
+  { id:'observacoes',   label:'EXAMES E PROCEDIMENTOS REALIZADOS',     tag:'textarea', destaque:true },
 ];
 
 let _passagemRegistros = [];   // estado em memória enquanto o modal está aberto
