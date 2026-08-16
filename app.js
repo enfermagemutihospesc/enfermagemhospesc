@@ -9416,6 +9416,58 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
       y += 2;
     };
 
+    // ── narrativa da IA: parser leve de markdown ────────────────────────────
+    // O Groq costuma responder com "##" para títulos, "-"/"*" para listas e
+    // "**negrito**". O jsPDF (fontes built-in) não interpreta markdown, então
+    // sem este parser esses símbolos apareciam literalmente no PDF e as
+    // "seções" da narrativa ficavam todas amontoadas num único bloco de texto.
+    // Remove marcadores de ênfase que o jsPDF não consegue renderizar inline.
+    const _stripMD = (s) => String(s ?? '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/__(.+?)__/g, '$1')
+      .replace(/`(.+?)`/g, '$1');
+
+    const narrativaFormatada = (texto, fontSize=9) => {
+      const linhasBrutas = String(texto || '').split(/\r?\n/);
+      linhasBrutas.forEach(linhaBruta => {
+        const l = linhaBruta.trim();
+        if(!l){ y += 2; return; } // linha em branco = espaço entre parágrafos
+
+        // Título markdown (#, ##, ###...)
+        const mHead = l.match(/^#{1,4}\s*(.+)$/);
+        if(mHead){
+          doc.setFont('helvetica','bold'); doc.setFontSize(fontSize+1); doc.setTextColor(26,107,58);
+          const { linhas, lhMm } = _alturaTexto(_stripMD(mHead[1]), L, fontSize+1);
+          linhas.forEach(ln => { _reserva(lhMm + 1.5); doc.text(ln, M, y); y += lhMm; });
+          doc.setTextColor(0,0,0);
+          y += 0.8;
+          return;
+        }
+
+        // Item de lista (-, *, •)
+        const mBul = l.match(/^[-*•]\s+(.+)$/);
+        if(mBul){
+          doc.setFont('helvetica','normal'); doc.setFontSize(fontSize); doc.setTextColor(40,40,40);
+          const { linhas, lhMm } = _alturaTexto(_stripMD(mBul[1]), L - 6, fontSize);
+          linhas.forEach((ln, i) => {
+            _reserva(lhMm + 1);
+            if(i === 0) doc.text('•', M + 1, y);
+            doc.text(ln, M + 6, y);
+            y += lhMm;
+          });
+          doc.setTextColor(0,0,0);
+          return;
+        }
+
+        // Parágrafo normal
+        doc.setFont('helvetica','normal'); doc.setFontSize(fontSize); doc.setTextColor(40,40,40);
+        const { linhas, lhMm } = _alturaTexto(_stripMD(l), L, fontSize);
+        linhas.forEach(ln => { _reserva(lhMm + 1); doc.text(ln, M, y); y += lhMm; });
+        doc.setTextColor(0,0,0);
+      });
+      y += 2;
+    };
+
     // ── CAPA ─────────────────────────────────────────────────────────────────
     doc.setFillColor(26,107,58); doc.rect(0,0,W,32,'F');
     doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
@@ -9434,7 +9486,7 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
 
       // ── NARRATIVA ────────────────────────────────────────────────────────────
       secTitulo('Análise Narrativa', [26,107,58]);
-      paragrafo(narrativa, 9);
+      narrativaFormatada(narrativa, 9);
       y += 2;
     }
 
