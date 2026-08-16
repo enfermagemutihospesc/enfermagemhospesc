@@ -162,6 +162,7 @@
       <button class="btn btn-sec btn-sm" onclick="abrirHistoricoDispositivosGeral()">🩺 Dispositivos</button>
       <button class="btn btn-sec btn-sm" onclick="irIndicadores()">📈 Indicadores</button>
       <button class="btn btn-sm" id="btn-checklist-setorial" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;" onclick="abrirChecklistSetorial()">📋 Check-list Setorial</button>
+      <button class="btn btn-sm" id="btn-pit-stop" style="background:linear-gradient(135deg,#e65100,#ff8f00);color:white;" onclick="abrirPitStop()">🏁 Emitir Pit Stop</button>
       <button class="btn btn-sm" style="background:#6a1b9a;color:white;" onclick="abrirModalEmitirDocumentos()">📑 Emitir Documentos</button>
       <button class="btn btn-sm" style="background:#00695c;color:white;" onclick="atualizarPassagemPlantao()">📋 Atualizar Passagem</button>
       <button class="btn btn-sm" style="background:#c62828;color:white;" onclick="abrirNotificacaoNSP()">🛡 Notificação NSP</button>
@@ -921,6 +922,75 @@
         <button class="btn btn-sec btn-sm" onclick="fecharModalAlta()">Cancelar</button>
         <button class="btn btn-imp btn-sm" onclick="confirmarAltaFinal()">Confirmar Alta</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PIT STOP UTI -->
+<div class="overlay" id="modal-pit-stop">
+  <div class="modal" style="max-width:520px;display:flex;flex-direction:column;overflow:hidden;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#e65100,#ff8f00);flex-shrink:0;">
+      <h3>🏁 Pit Stop — UTI Geral</h3>
+      <button class="modal-close" onclick="fecharPitStop()">×</button>
+    </div>
+
+    <div class="modal-body" style="overflow-y:auto;flex:1;min-height:0;">
+      <div id="pit-step-form" style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Enfermeiros</label>
+          <input type="text" id="pit-enfermeiros" placeholder="Nomes separados por vírgula" style="width:100%;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Técnicos de Enfermagem</label>
+          <input type="text" id="pit-tecnicos" placeholder="Nomes separados por vírgula" style="width:100%;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Médico</label>
+          <input type="text" id="pit-medico" placeholder="Nome do médico plantonista" style="width:100%;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Fisioterapeuta</label>
+          <input type="text" id="pit-fisio" placeholder="Nome do fisioterapeuta" style="width:100%;">
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span class="sub-t">Equipe completa?</span>
+          <label class="ri"><input type="radio" name="pit-equipe-completa" value="sim" checked onchange="_pitToggleAusencias()"> Sim</label>
+          <label class="ri"><input type="radio" name="pit-equipe-completa" value="nao" onchange="_pitToggleAusencias()"> Não</label>
+        </div>
+        <div id="pit-ausencias-wrap" style="display:none;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Informe as ausências</label>
+          <textarea id="pit-ausencias" placeholder="Ex: 1 técnico de folga médica, sem substituição" style="width:100%;min-height:50px;"></textarea>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span class="sub-t">Reservas de leitos?</span>
+          <label class="ri"><input type="radio" name="pit-reservas" value="nao" checked onchange="_pitToggleReservas()"> Não</label>
+          <label class="ri"><input type="radio" name="pit-reservas" value="sim" onchange="_pitToggleReservas()"> Sim</label>
+        </div>
+        <div id="pit-reservas-wrap" style="display:none;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Informe as reservas</label>
+          <textarea id="pit-reservas-detalhe" placeholder="Ex: Leito 04 reservado para pós-operatório de..." style="width:100%;min-height:50px;"></textarea>
+        </div>
+
+        <p style="font-size:.7rem;color:var(--muted);line-height:1.5;margin-top:2px;">
+          Ocupação, nomes (iniciais), idade e os exames/pareceres já registrados na evolução do turno atual entram automaticamente — não precisa digitar leito a leito.
+        </p>
+      </div>
+
+      <div id="pit-step-preview" style="display:none;">
+        <textarea id="pit-texto-final" style="width:100%;min-height:360px;font-family:monospace;font-size:.78rem;white-space:pre-wrap;"></textarea>
+      </div>
+    </div>
+
+    <div id="pit-footer-form" style="flex-shrink:0;display:flex;justify-content:flex-end;gap:6px;padding:12px 18px;border-top:1px solid var(--borda);">
+      <button class="btn btn-sec btn-sm" onclick="fecharPitStop()">Cancelar</button>
+      <button class="btn btn-sm" style="background:linear-gradient(135deg,#e65100,#ff8f00);color:white;" onclick="_pitGerarPreview()">🏁 Gerar Pit Stop</button>
+    </div>
+    <div id="pit-footer-preview" style="display:none;flex-shrink:0;flex-wrap:wrap;gap:6px;padding:12px 18px;border-top:1px solid var(--borda);">
+      <button class="btn btn-sec btn-sm" style="flex:1 1 100%;" onclick="_pitVoltarForm()">← Editar dados</button>
+      <button class="btn btn-sec btn-sm" style="flex:1;" onclick="_pitCopiarTexto()">📋 Copiar</button>
+      <button class="btn btn-sm" style="flex:1;background:#25D366;color:white;" onclick="_pitEnviarWhatsApp()">📲 WhatsApp</button>
     </div>
   </div>
 </div>
