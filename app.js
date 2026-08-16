@@ -12940,3 +12940,194 @@ function _ckInsPainelHTML(periodo){
     <div id="ckins-busca-result" style="margin-top:10px;"></div>
   </div>`;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// PIT STOP UTI — resumo rápido de passagem de plantão para envio via WhatsApp
+// ────────────────────────────────────────────────────────────────────────────
+// O HTML do modal (#modal-pit-stop) e o botão (#btn-pit-stop) já existem no
+// index.html, seguindo o mesmo padrão dos demais modais (.overlay/.modal +
+// classe "show"). Aqui só a lógica: coletar equipe/ocupação/leito-a-leito,
+// montar o texto e permitir copiar ou enviar direto pelo WhatsApp.
+//
+// Fluxo:
+//   1) Usuário preenche equipe de plantão / equipe completa / reservas.
+//   2) Ao gerar, busca automaticamente a ocupação dos leitos e, para cada
+//      leito ocupado, nome (anonimizado em iniciais), idade e os campos
+//      "Exames e Procedimentos Realizados" / "Exames e Pareceres
+//      Solicitados" já registrados na evolução do turno/data atual.
+//   3) O texto final pode ser copiado ou enviado direto pelo WhatsApp
+//      (abre o seletor de contato via wa.me — funciona em mobile e desktop).
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Anonimização leve do nome do paciente (iniciais) para uso no texto ──────
+function _pitIniciais(nome){
+  if(!nome) return '–';
+  return nome.trim().split(/\s+/).filter(Boolean).map(p => p.charAt(0).toUpperCase()+'.').join('');
+}
+
+// ── Abrir / Fechar ────────────────────────────────────────────────────────────
+async function abrirPitStop(){
+  document.getElementById('pit-step-form').style.display = '';
+  document.getElementById('pit-step-preview').style.display = 'none';
+  document.getElementById('pit-footer-form').style.display = 'flex';
+  document.getElementById('pit-footer-preview').style.display = 'none';
+
+  // Carrega rascunho salvo para este turno + data (se existir), para não ter
+  // que redigitar a equipe caso o modal seja reaberto no mesmo plantão.
+  const chave = 'uti_pitstop_' + (turno||'DIURNO') + '_' + dataDoTurno();
+  let salvo = null;
+  try { salvo = await dbGet(chave); } catch(e){ salvo = null; }
+
+  document.getElementById('pit-enfermeiros').value      = (salvo && salvo.enfermeiros)      || '';
+  document.getElementById('pit-tecnicos').value         = (salvo && salvo.tecnicos)         || '';
+  document.getElementById('pit-medico').value           = (salvo && salvo.medico)           || '';
+  document.getElementById('pit-fisio').value            = (salvo && salvo.fisio)            || '';
+  document.getElementById('pit-ausencias').value        = (salvo && salvo.ausencias)        || '';
+  document.getElementById('pit-reservas-detalhe').value = (salvo && salvo.reservasDetalhe)  || '';
+  setRadio('pit-equipe-completa', (salvo && salvo.equipeCompleta) || 'sim');
+  setRadio('pit-reservas',        (salvo && salvo.reservas)       || 'nao');
+  _pitToggleAusencias();
+  _pitToggleReservas();
+
+  document.getElementById('modal-pit-stop').classList.add('show');
+}
+
+function fecharPitStop(){
+  document.getElementById('modal-pit-stop').classList.remove('show');
+}
+
+function _pitToggleAusencias(){
+  const v = gRadio('pit-equipe-completa');
+  document.getElementById('pit-ausencias-wrap').style.display = v==='nao' ? 'flex' : 'none';
+}
+function _pitToggleReservas(){
+  const v = gRadio('pit-reservas');
+  document.getElementById('pit-reservas-wrap').style.display = v==='sim' ? 'flex' : 'none';
+}
+
+function _pitColetarForm(){
+  return {
+    enfermeiros:     gf('pit-enfermeiros').trim(),
+    tecnicos:        gf('pit-tecnicos').trim(),
+    medico:          gf('pit-medico').trim(),
+    fisio:           gf('pit-fisio').trim(),
+    equipeCompleta:  gRadio('pit-equipe-completa') || 'sim',
+    ausencias:       gf('pit-ausencias').trim(),
+    reservas:        gRadio('pit-reservas') || 'nao',
+    reservasDetalhe: gf('pit-reservas-detalhe').trim()
+  };
+}
+
+// ── Monta o texto final do Pit Stop ──────────────────────────────────────────
+async function _pitGerarTexto(form){
+  let leitos;
+  try { leitos = await leitosData(); } catch(e){ throw new Error('Não foi possível ler os leitos: '+e.message); }
+
+  const hj = dataDoTurno ? dataDoTurno() : hoje();
+  const ocupadosNums = [];
+  for(let n=1; n<=TOTAL; n++){ if(leitos[n] && leitos[n].ocupado) ocupadosNums.push(n); }
+
+  // Busca de uma vez só as evoluções do turno/data atual de todos os leitos
+  // ocupados, para extrair "Exames e Procedimentos Realizados" e "Exames e
+  // Pareceres Solicitados" (mesmos campos usados no restante do sistema).
+  const keys = ocupadosNums.map(n => 'uti_ev_'+n+'_'+turno+'_'+hj);
+  const evData = keys.length ? await dbGetMany(keys) : {};
+
+  const ocupPct = TOTAL ? Math.round((ocupadosNums.length / TOTAL) * 100) : 0;
+
+  const linhas = [];
+  linhas.push('UTI GERAL – PIT STOP');
+  linhas.push('Data: ' + fmtD(hj));
+  linhas.push('👥 Equipe de Plantão: ' + (turno || '—'));
+  linhas.push('Enfermeiros: ' + (form.enfermeiros || '–'));
+  linhas.push('Técnicos de Enfermagem: ' + (form.tecnicos || '–'));
+  linhas.push('Médico: ' + (form.medico || '–'));
+  linhas.push('Fisioterapeuta: ' + (form.fisio || '–'));
+  linhas.push('Equipe completa: ' + (
+    form.equipeCompleta === 'nao'
+      ? 'NÃO — Ausências: ' + (form.ausencias || '–')
+      : 'SIM'
+  ));
+  linhas.push('Ocupação: ' + ocupadosNums.length + '/' + TOTAL + ' (' + ocupPct + '%)');
+  linhas.push('Reservas de leitos: ' + (
+    form.reservas === 'sim'
+      ? 'SIM — ' + (form.reservasDetalhe || '–')
+      : 'NÃO'
+  ));
+  linhas.push('');
+  linhas.push('INFORMAÇÕES LEITO A LEITO');
+
+  if(!ocupadosNums.length){
+    linhas.push('Nenhum leito ocupado no momento.');
+  } else {
+    ocupadosNums.forEach(n => {
+      const l = leitos[n];
+      const idade = _calcIdade(l.dn);
+      const ev = evData['uti_ev_'+n+'_'+turno+'_'+hj];
+      const real  = ev && ev.examesReal  ? String(ev.examesReal).trim()  : '';
+      const solic = ev && ev.examesSolic ? String(ev.examesSolic).trim() : '';
+      linhas.push('');
+      linhas.push('Leito ' + pad(n) + ' - ' + _pitIniciais(l.pac) + (idade!==null ? ', ' + idade + ' anos' : ''));
+      linhas.push('Exames/Pareceres realizados: ' + (real  || '–'));
+      linhas.push('Exames/Pareceres solicitados: ' + (solic || '–'));
+    });
+  }
+
+  return linhas.join('\n');
+}
+
+// ── Geração / navegação entre etapas do modal ────────────────────────────────
+async function _pitGerarPreview(){
+  const form = _pitColetarForm();
+
+  // Salva rascunho da equipe para reaproveitar caso o modal seja reaberto
+  // ainda dentro do mesmo turno/data.
+  try { await dbSet('uti_pitstop_' + (turno||'DIURNO') + '_' + dataDoTurno(), form); } catch(e){}
+
+  let texto;
+  try {
+    texto = await _pitGerarTexto(form);
+  } catch(e){
+    toast('Erro ao montar o Pit Stop: ' + e.message, true);
+    return;
+  }
+
+  document.getElementById('pit-texto-final').value = texto;
+  document.getElementById('pit-step-form').style.display = 'none';
+  document.getElementById('pit-step-preview').style.display = 'block';
+  document.getElementById('pit-footer-form').style.display = 'none';
+  document.getElementById('pit-footer-preview').style.display = 'flex';
+}
+
+function _pitVoltarForm(){
+  document.getElementById('pit-step-form').style.display = '';
+  document.getElementById('pit-step-preview').style.display = 'none';
+  document.getElementById('pit-footer-form').style.display = 'flex';
+  document.getElementById('pit-footer-preview').style.display = 'none';
+}
+
+async function _pitCopiarTexto(){
+  const txt = document.getElementById('pit-texto-final').value;
+  try {
+    await navigator.clipboard.writeText(txt);
+    toast('✓ Texto copiado!');
+    return;
+  } catch(e){ /* segue para fallback abaixo */ }
+  try {
+    const ta = document.getElementById('pit-texto-final');
+    ta.focus(); ta.select();
+    document.execCommand('copy');
+    toast('✓ Texto copiado!');
+  } catch(e2){
+    toast('Não foi possível copiar automaticamente. Selecione o texto e copie manualmente.', true);
+  }
+}
+
+// Envia o texto pronto direto pelo WhatsApp. Em celulares abre o app
+// (seletor de contato/grupo) com o texto já preenchido; em desktop abre o
+// WhatsApp Web. Não é preciso informar número — o usuário escolhe o destino.
+function _pitEnviarWhatsApp(){
+  const txt = document.getElementById('pit-texto-final').value;
+  const url = 'https://wa.me/?text=' + encodeURIComponent(txt);
+  window.open(url, '_blank');
+}
