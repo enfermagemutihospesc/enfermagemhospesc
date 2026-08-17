@@ -1207,6 +1207,25 @@
   </div>
 </div>
 
+<!-- MODAL RETIRADA DE DISPOSITIVO -->
+<div class="overlay" id="modal-disp-retirar">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#e65100,#ff8f00);color:white;">
+      <h3 style="color:white;margin:0;">↑ Retirar Dispositivo</h3>
+      <button class="modal-close" style="color:white;" onclick="_dispRetirarFechar()">×</button>
+    </div>
+    <div class="modal-body" style="padding:16px;">
+      <p id="disp-retirar-desc" style="font-size:.82rem;color:var(--muted);margin:0 0 12px;"></p>
+      <label style="display:block;font-size:.74rem;color:var(--muted);font-weight:700;margin-bottom:4px;">Data de retirada *</label>
+      <input type="date" id="disp-retirar-data" style="width:100%;">
+    </div>
+    <div class="modal-footer" style="background:#fff8e1;border-top:1px solid #ffe082;display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;">
+      <button class="btn btn-sec btn-sm" onclick="_dispRetirarFechar()">Cancelar</button>
+      <button class="btn btn-sm" style="background:#e65100;color:white;" onclick="_dispRetirarConfirmar()">Confirmar Retirada</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CHECKLIST DE INSERÇÃO (CVC/SVD) -->
 <div class="overlay" id="modal-ckins">
   <div class="modal" style="max-width:820px;">
