@@ -12145,10 +12145,12 @@ function _dispRenderLista(){
     // Sonda enteral/gástrica: mostra a sigla específica (SNE/SOE/SNG/SOG) no lugar do rótulo genérico
     const rotuloTipo = _dispRotulo(d);
     const dtStr = d.dataInsercao ? fmtD(d.dataInsercao) : '—';
-    // selo de checklist (apenas CVC/SVD)
+    // selo de checklist (apenas CVC/SVD, e só quando implantado nesta UTI)
     let selo = '';
     if(def.checklist){
-      if(d.checklistId){
+      if(d.implantadoUTI === 'nao'){
+        selo = `<span title="Dispositivo implantado fora desta UTI — sem checklist de inserção a preencher" style="font-size:.66rem;padding:2px 8px;background:#eceff1;border:1px solid #cfd8dc;color:#546e7a;border-radius:10px;font-weight:700;">↪ fora da UTI</span>`;
+      } else if(d.checklistId){
         selo = `<button type="button" class="btn-sec" title="Checklist de inserção preenchido — clique para visualizar/imprimir" style="font-size:.66rem;padding:2px 8px;background:#e8f5e9;border:1px solid #66bb6a;color:#1b5e20;font-weight:700;" onclick="_ckInsImprimirPorId('${d.checklistId}')">✓ checklist</button>`;
       } else {
         selo = `<button type="button" class="btn-sec" title="Checklist de inserção pendente — clique para preencher" style="font-size:.66rem;padding:2px 8px;background:#fff3cd;border:1px solid #ffd54f;color:#856404;font-weight:700;" onclick="_ckInsAbrirPorDispId('${d.id}')">⏳ checklist pendente</button>`;
@@ -12249,14 +12251,34 @@ function _dispRenderCampos(valores){
   // Data de inserção sempre presente
   h += campo('disp-c-data','Data de inserção *',
     `<input type="date" id="disp-c-data" value="${v.dataInsercao||hoje()}" style="width:170px;max-width:100%;">`);
-  // Aviso de checklist para CVC/Diálise/SVD
+  // Implantado nesta UTI? (apenas CVC/Diálise/SVD, que têm checklist de inserção CCIH).
+  // Só faz sentido preencher o checklist quando o dispositivo foi inserido aqui —
+  // se veio de outro setor/hospital, não há o que a equipe da UTI ateste.
+  if(def.checklist){
+    const implUTI = v.implantadoUTI || 'sim';
+    h += campo('disp-c-implantado-uti','Implantado nesta UTI? *',
+      `<div style="display:flex;gap:14px;">
+        <label class="ri"><input type="radio" name="disp-c-implantado-uti" value="sim" ${implUTI==='sim'?'checked':''} onchange="_dispToggleAvisoChecklist()"> Sim</label>
+        <label class="ri"><input type="radio" name="disp-c-implantado-uti" value="nao" ${implUTI==='nao'?'checked':''} onchange="_dispToggleAvisoChecklist()"> Não</label>
+      </div>`);
+  }
+  // Aviso de checklist para CVC/Diálise/SVD — só exibido quando implantado nesta UTI
   if(def.checklist){
     const nomeCk = def.checklist==='cvc' ? 'Acesso Venoso Central' : 'Sonda Vesical de Demora';
     const obsDial = (tipo==='DIALISE') ? ' (o cateter de diálise usa o mesmo checklist de inserção do CVC, pois a técnica é a mesma)' : '';
-    h += `<div style="font-size:.72rem;color:#856404;background:#fff8e1;border:1px solid #ffe082;border-radius:7px;padding:7px 10px;margin-top:4px;">
+    const implUTI = v.implantadoUTI || 'sim';
+    h += `<div id="disp-c-aviso-checklist" style="display:${implUTI==='nao'?'none':'block'};font-size:.72rem;color:#856404;background:#fff8e1;border:1px solid #ffe082;border-radius:7px;padding:7px 10px;margin-top:4px;">
       📋 Após salvar, será sugerido o preenchimento do <strong>Checklist de Inserção de ${nomeCk} (CCIH)</strong>${obsDial}.</div>`;
   }
   cont.innerHTML = h;
+}
+
+// Mostra/esconde o aviso de checklist conforme a resposta de "Implantado nesta UTI?"
+function _dispToggleAvisoChecklist(){
+  const sel = document.querySelector('input[name="disp-c-implantado-uti"]:checked');
+  const box = document.getElementById('disp-c-aviso-checklist');
+  if(!box) return;
+  box.style.display = (sel && sel.value === 'nao') ? 'none' : 'block';
 }
 
 // Mostra/esconde o campo de texto livre quando a localização selecionada é "OUTRO"
@@ -12288,6 +12310,10 @@ function _dispSalvarModal(){
     descricao: g('disp-c-descricao'),
     dataInsercao: g('disp-c-data'),
   };
+  if(def.checklist){
+    const selImpl = document.querySelector('input[name="disp-c-implantado-uti"]:checked');
+    obj.implantadoUTI = selImpl ? selImpl.value : 'sim';
+  }
   if(def.campos.includes('descricao') && !obj.descricao){ toast('Informe a descrição do dispositivo', true); return; }
   if(def.campos.includes('sondaTipo') && !obj.sondaTipo){ toast('Selecione o tipo de sonda (SNE, SOE, SNG ou SOG)', true); return; }
   if(locSel === 'OUTRO' && !obj.localizacao){ toast('Especifique a localização', true); return; }
@@ -12304,8 +12330,8 @@ function _dispSalvarModal(){
   _dispRenderLista();
   _dispFecharModal();
 
-  // Gatilho SOFT do checklist de inserção (apenas CVC/SVD, e apenas se ainda não houver)
-  if(salvo && def.checklist && !salvo.checklistId){
+  // Gatilho SOFT do checklist de inserção (apenas CVC/SVD implantados NESTA UTI, e apenas se ainda não houver)
+  if(salvo && def.checklist && salvo.implantadoUTI !== 'nao' && !salvo.checklistId){
     toast('✓ '+_dispRotulo(salvo)+' registrado');
     setTimeout(()=>_ckInsSugerir(salvo), 250);
   } else {
@@ -12321,11 +12347,32 @@ function _dispRemover(id){
   _dispRenderLista();
 }
 
-async function _dispRetirar(id){
+// ── RETIRADA DE DISPOSITIVO — solicita data de retirada num mini-modal ──────
+let _dispRetirarId = null;
+
+function _dispRetirar(id){
   const d = _dispLista.find(x=>x.id===id); if(!d) return;
-  const def = _dispDef(d.tipo);
-  if(!confirm(`Confirma a retirada do ${_dispRotulo(d)}${d.localizacao?(' ('+d.localizacao+')'):''}?`)) return;
-  d.dataRetirada = hoje();
+  _dispRetirarId = id;
+  document.getElementById('disp-retirar-desc').textContent =
+    `Confirma a retirada do ${_dispRotulo(d)}${d.localizacao?(' ('+d.localizacao+')'):''}?`;
+  document.getElementById('disp-retirar-data').value = hoje();
+  document.getElementById('modal-disp-retirar').classList.add('show');
+}
+
+function _dispRetirarFechar(){
+  document.getElementById('modal-disp-retirar').classList.remove('show');
+  _dispRetirarId = null;
+}
+
+async function _dispRetirarConfirmar(){
+  const id = _dispRetirarId;
+  const d = _dispLista.find(x=>x.id===id); if(!d){ _dispRetirarFechar(); return; }
+  const dataRet = gf('disp-retirar-data');
+  if(!dataRet){ toast('Informe a data de retirada', true); return; }
+  if(d.dataInsercao && dataRet < d.dataInsercao){
+    if(!confirm('A data de retirada informada é anterior à data de inserção do dispositivo. Confirma mesmo assim?')) return;
+  }
+  d.dataRetirada = dataRet;
   // Log de retirada (mesma chave usada pelo histórico existente)
   try {
     const key = 'uti_disp_log';
@@ -12340,6 +12387,7 @@ async function _dispRetirar(id){
   } catch(e){ console.warn('Log retirada disp:', e); }
   _dispRenderLista();
   toast('✓ '+_dispRotulo(d)+' retirado em '+d.dataRetirada.split('-').reverse().join('/'));
+  _dispRetirarFechar();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -12439,6 +12487,7 @@ function _ckInsMetaPaciente(){
 function _ckInsSugerir(disp){
   const def = _dispDef(disp.tipo);
   if(!def.checklist) return;
+  if(disp.implantadoUTI === 'nao') return; // não implantado nesta UTI — sem checklist a sugerir
   const nomes = { CVC:'acesso venoso central', DIALISE:'cateter de diálise (checklist do CVC)', SVD:'sonda vesical de demora' };
   const nome = nomes[def.tipo] || def.nome.toLowerCase();
   if(confirm(`Deseja preencher agora o Checklist de Inserção (CCIH) do ${nome}?\n\n(Você pode preencher depois pelo selo "checklist pendente" no card do dispositivo.)`)){
@@ -12451,6 +12500,7 @@ function _ckInsAbrirPorDispId(dispId){
   const d = _dispLista.find(x=>x.id===dispId); if(!d) return;
   const def = _dispDef(d.tipo);
   if(!def.checklist){ toast('Este dispositivo não possui checklist de inserção.', true); return; }
+  if(d.implantadoUTI === 'nao'){ toast('Dispositivo implantado fora desta UTI — sem checklist de inserção a preencher.', true); return; }
   _ckInsAbrir(def.checklist, dispId);
 }
 
