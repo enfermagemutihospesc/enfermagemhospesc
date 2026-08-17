@@ -430,6 +430,45 @@ async function dbSet(key, value) {
   return false;
 }
 
+// ── Limpeza automática do localStorage, POR MÁQUINA ──────────────────────────
+// Diferente de executarLimpezaSeNecessario() (que compacta o Firestore uma vez
+// por dia, globalmente), esta roda no navegador local de CADA computador ao
+// carregar o app, sem depender de rede nem de ação manual. Remove do
+// localStorage as entradas com mais de `diasRetencao` dias, identificadas pela
+// data (YYYY-MM-DD) já embutida no nome da chave (ex:
+// uti_ckins_svd_6_2026-08-16_..., uti_ev_6_DIURNO_2026-08-16). O Firestore
+// continua com o histórico completo — isto só libera espaço do cache local.
+// Chaves sem data reconhecível no nome (ex: uti_cid_cache, cl_setorial) nunca
+// são tocadas por esta rotina.
+function _limparLocalStorageAntigo(diasRetencao = 7){
+  try {
+    const FLAG = 'uti_limpeza_local_ultima';
+    const hj = hoje();
+    if (localStorage.getItem(FLAG) === hj) return; // já rodou hoje nesta máquina
+
+    const limite = new Date();
+    limite.setDate(limite.getDate() - diasRetencao);
+    const limiteStr = limite.toISOString().slice(0, 10); // YYYY-MM-DD
+
+    const reData = /(\d{4}-\d{2}-\d{2})/;
+    const chaves = [];
+    for (let i = 0; i < localStorage.length; i++) chaves.push(localStorage.key(i));
+
+    let removidos = 0;
+    chaves.forEach(k => {
+      if (!k || k === FLAG) return;
+      const m = k.match(reData);
+      if (!m) return; // só mexe em chaves com data reconhecível no próprio nome
+      if (m[1] < limiteStr) {
+        try { localStorage.removeItem(k); removidos++; } catch(_) {}
+      }
+    });
+
+    localStorage.setItem(FLAG, hj);
+    if (removidos) console.log(`[Limpeza local] ${removidos} entrada(s) com mais de ${diasRetencao} dias removida(s) do localStorage.`);
+  } catch(e) { console.warn('[Limpeza local] Erro:', e); }
+}
+
 // Remove do localStorage as entradas mais antigas que já sabemos estar
 // sincronizadas no Firestore (marcadas via _dbSyncedKeys), para liberar
 // espaço quando a quota estoura. Mantém apenas as N mais recentes de cada
@@ -7988,6 +8027,7 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 window.addEventListener('load', () => {
+  _limparLocalStorageAntigo(); // limpeza local, roda em qualquer máquina, sem depender de rede
   const firebaseOk = initFirebase();
   const telaConfig = document.getElementById('t-config');
   if (telaConfig) telaConfig.style.display = 'none';
