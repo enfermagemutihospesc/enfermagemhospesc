@@ -973,8 +973,25 @@
           <textarea id="pit-reservas-detalhe" placeholder="Ex: Leito 04 reservado para pós-operatório de..." style="width:100%;min-height:50px;"></textarea>
         </div>
 
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span class="sub-t">Gasômetro OK?</span>
+          <label class="ri"><input type="radio" name="pit-gasometro" value="sim" checked> Sim</label>
+          <label class="ri"><input type="radio" name="pit-gasometro" value="nao"> Não</label>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span class="sub-t">ECG?</span>
+          <label class="ri"><input type="radio" name="pit-ecg" value="sim" checked> Sim</label>
+          <label class="ri"><input type="radio" name="pit-ecg" value="nao"> Não</label>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Observações Gerais</label>
+          <textarea id="pit-obs-gerais" placeholder="Campo livre" style="width:100%;min-height:50px;"></textarea>
+        </div>
+
         <p style="font-size:.7rem;color:var(--muted);line-height:1.5;margin-top:2px;">
-          Ocupação, nomes (iniciais), idade e os exames/pareceres já registrados na evolução do turno atual entram automaticamente — não precisa digitar leito a leito.
+          Ocupação, nomes (iniciais), idade, VMI/isolamento e os exames/pareceres solicitados já registrados na evolução do turno atual entram automaticamente — não precisa digitar leito a leito.
         </p>
       </div>
 
