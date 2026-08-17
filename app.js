@@ -13111,11 +13111,34 @@ async function _pitGerarTexto(form){
   const ocupadosNums = [];
   for(let n=1; n<=TOTAL; n++){ if(leitos[n] && leitos[n].ocupado) ocupadosNums.push(n); }
 
-  // Busca de uma vez só as evoluções do turno/data atual de todos os leitos
-  // ocupados, para extrair "Exames e Procedimentos Realizados" e "Exames e
-  // Pareceres Solicitados" (mesmos campos usados no restante do sistema).
-  const keys = ocupadosNums.map(n => 'uti_ev_'+n+'_'+turno+'_'+hj);
-  const evData = keys.length ? await dbGetMany(keys) : {};
+  // Busca as evoluções de todos os leitos ocupados. Usa o mesmo fallback da
+  // Passagem de Plantão: turno atual → outro turno do mesmo dia → turno atual
+  // do dia anterior — pois "Exames e Pareceres Solicitados" pode ter sido
+  // preenchido em outro registro do plantão. Só aproveita a evolução se for
+  // do MESMO paciente que está no leito agora (evita dado de paciente antigo).
+  const outroTurno = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
+  const ontemStr = (typeof ontem === 'function') ? ontem() : hj;
+  const keys = [];
+  ocupadosNums.forEach(n => {
+    keys.push('uti_ev_'+n+'_'+turno+'_'+hj);
+    keys.push('uti_ev_'+n+'_'+outroTurno+'_'+hj);
+    keys.push('uti_ev_'+n+'_'+turno+'_'+ontemStr);
+  });
+  const evDataRaw = keys.length ? await dbGetMany(keys) : {};
+
+  const evData = {};
+  ocupadosNums.forEach(n => {
+    const l = leitos[n];
+    let ev = evDataRaw['uti_ev_'+n+'_'+turno+'_'+hj]
+          || evDataRaw['uti_ev_'+n+'_'+outroTurno+'_'+hj]
+          || evDataRaw['uti_ev_'+n+'_'+turno+'_'+ontemStr]
+          || null;
+    const pacienteAtual = (l && l.pac) || '';
+    if(ev && pacienteAtual && typeof _normNome === 'function' && _normNome(ev.pac) !== _normNome(pacienteAtual)){
+      ev = null;
+    }
+    evData[n] = ev;
+  });
 
   const ocupPct = TOTAL ? Math.round((ocupadosNums.length / TOTAL) * 100) : 0;
 
@@ -13152,7 +13175,7 @@ async function _pitGerarTexto(form){
     ocupadosNums.forEach(n => {
       const l = leitos[n];
       const idade = _calcIdade(l.dn);
-      const ev = evData['uti_ev_'+n+'_'+turno+'_'+hj];
+      const ev = evData[n];
       const solic = ev && ev.examesSolic ? String(ev.examesSolic).trim() : '';
 
       // Diagnóstico: evolução (mais completa, com diagnósticos adicionais) >
