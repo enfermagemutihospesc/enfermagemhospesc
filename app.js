@@ -405,7 +405,22 @@ async function dbGetMany(keys) {
 
 async function dbSet(key, value) {
   cacheInvalidate(key);
-  localStorage.setItem(key, JSON.stringify(value));
+  const json = JSON.stringify(value);
+
+  // Grava no localStorage em paralelo, como cache rápido best-effort — nunca
+  // bloqueia nem derruba o salvamento real. Se a quota estourar, tenta liberar
+  // espaço removendo entradas antigas e tenta de novo; se ainda assim falhar,
+  // só loga e segue (o Firestore abaixo é a fonte de verdade).
+  try {
+    localStorage.setItem(key, json);
+  } catch(e) {
+    console.warn('localStorage quota excedida ao salvar', key, e);
+    _dbSetLimparAntigos();
+    try { localStorage.setItem(key, json); } catch(e2) {
+      console.error('localStorage indisponível mesmo após limpeza (seguindo apenas com Firestore):', e2);
+    }
+  }
+
   if (!modoOffline && db) {
     try {
       await db.collection('uti').doc(key).set({ value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
@@ -413,6 +428,29 @@ async function dbSet(key, value) {
     } catch(e) { console.warn('Firestore set error:', e); return false; }
   }
   return false;
+}
+
+// Remove do localStorage as entradas mais antigas que já sabemos estar
+// sincronizadas no Firestore (marcadas via _dbSyncedKeys), para liberar
+// espaço quando a quota estoura. Mantém apenas as N mais recentes de cada
+// prefixo como cache rápido.
+function _dbSetLimparAntigos(manterPorPrefixo = 50) {
+  try {
+    const porPrefixo = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      const prefixo = k.replace(/_[^_]+$/, ''); // agrupa por chave sem o timestamp final
+      (porPrefixo[prefixo] = porPrefixo[prefixo] || []).push(k);
+    }
+    Object.values(porPrefixo).forEach(chaves => {
+      if (chaves.length <= manterPorPrefixo) return;
+      chaves.sort(); // timestamps/datas no nome mantêm ordem cronológica
+      chaves.slice(0, chaves.length - manterPorPrefixo).forEach(k => {
+        try { localStorage.removeItem(k); } catch(_) {}
+      });
+    });
+  } catch(e) { console.warn('Erro ao limpar localStorage:', e); }
 }
 
 async function dbDelete(key){
