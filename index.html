@@ -543,17 +543,17 @@
         <p class="sub-t">Ritmo / Frequência Cardíaca</p>
         <div style="display:flex;flex-direction:column;gap:6px;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label class="ci"><input type="checkbox" class="f-car" value="Normocárdico"> Normocárdico</label>
+            <label class="ci"><input type="checkbox" class="f-car f-car-ritmo" value="Normocárdico" onchange="_ritmoCardExclusivo(this)"> Normocárdico</label>
             <input type="number" id="f-fc-norm" class="fc-inline" placeholder="FC" min="0" max="400">
             <span style="font-size:.74rem;color:var(--muted);">bpm</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label class="ci"><input type="checkbox" class="f-car" value="Taquicárdico"> Taquicárdico</label>
+            <label class="ci"><input type="checkbox" class="f-car f-car-ritmo" value="Taquicárdico" onchange="_ritmoCardExclusivo(this)"> Taquicárdico</label>
             <input type="number" id="f-fc-taqui" class="fc-inline" placeholder="FC" min="0" max="400">
             <span style="font-size:.74rem;color:var(--muted);">bpm</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <label class="ci"><input type="checkbox" class="f-car" value="Bradicárdico"> Bradicárdico</label>
+            <label class="ci"><input type="checkbox" class="f-car f-car-ritmo" value="Bradicárdico" onchange="_ritmoCardExclusivo(this)"> Bradicárdico</label>
             <input type="number" id="f-fc-bradi" class="fc-inline" placeholder="FC" min="0" max="400">
             <span style="font-size:.74rem;color:var(--muted);">bpm</span>
           </div>
@@ -673,7 +673,6 @@
           <div id="hv-outras-lista"></div>
           <button class="btn-add" onclick="addHVOutra()">+ Adicionar infusão</button>
         </div>
-        <p class="sub-t">DVA em uso</p>
         <p class="sub-t">DVA em uso</p>
         <div id="dva-l">
           <div class="dva-r"><input type="checkbox" class="dc-cb" value="Noradrenalina"><label>Noradrenalina</label><input type="number" class="dc-v" placeholder="ml/h"><span>ml/h</span></div>
