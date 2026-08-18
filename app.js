@@ -6295,6 +6295,21 @@ async function _sugerirCID(idDiag, idCID){
   }
 }
 
+// Ritmo / Frequência Cardíaca — só permite marcar uma das três opções por vez
+// (Normocárdico / Taquicárdico / Bradicárdico). Ao marcar uma, desmarca as
+// outras e limpa o respectivo campo de bpm.
+const RITMO_CARDIACO_FC = { 'Normocárdico':'f-fc-norm', 'Taquicárdico':'f-fc-taqui', 'Bradicárdico':'f-fc-bradi' };
+function _ritmoCardExclusivo(cb){
+  if(!cb.checked) return;
+  document.querySelectorAll('.f-car-ritmo').forEach(o=>{
+    if(o===cb) return;
+    o.checked = false;
+    const fcId = RITMO_CARDIACO_FC[o.value];
+    const fc = fcId ? document.getElementById(fcId) : null;
+    if(fc) fc.value = '';
+  });
+}
+
 // FC – limpa valor numérico ao desselecionar a opção de ritmo
 (function _initFCListeners(){
   function _bindFC(cbVal, fcId){
@@ -12162,6 +12177,10 @@ function _dispRenderLista(){
       }
     }
     const retInfo = diasStr ? `<span style="font-size:.68rem;background:#f0f4fa;color:var(--azul);font-weight:700;padding:2px 8px;border-radius:10px;">${diasStr}</span>` : '';
+    // Aviso de troca de AVP — ANVISA recomenda troca a cada 96h (4 dias) de punção.
+    const avpAviso = (d.tipo==='AVP' && dias!==null && dias>=4)
+      ? `<span title="Acesso venoso periférico com 96h ou mais — indicada a troca (ANVISA)" style="font-size:.7rem;background:#f8d7da;color:#721c24;padding:2px 8px;border-radius:10px;font-weight:700;">⚠ Trocar — 96h+</span>`
+      : '';
     return `
       <div class="disp-card" data-id="${d.id}" style="border:1.5px solid ${def.cor}55;border-left:4px solid ${def.cor};border-radius:9px;padding:8px 11px;margin-bottom:7px;background:#fff;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -12170,6 +12189,7 @@ function _dispRenderLista(){
           <span style="font-size:.76rem;color:#444;">${_esc(detalhes.join(' · ')||'—')}</span>
           <span style="font-size:.7rem;color:var(--muted);">inserido ${dtStr}</span>
           ${retInfo}
+          ${avpAviso}
           ${selo}
           <span style="margin-left:auto;display:flex;gap:5px;">
             <button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;" onclick="_dispAbrirModal('${d.id}')">✎ Editar</button>
