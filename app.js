@@ -12123,16 +12123,21 @@ function _dispParaCamposLegado(lista){
 }
 
 // ── RENDER DA LISTA DE DISPOSITIVOS NO FORMULÁRIO ────────────────────────────
+// Mostra apenas dispositivos ATIVOS (sem dataRetirada). Os já retirados
+// continuam guardados em _dispLista (necessário para os campos legado ao
+// salvar a evolução), mas só ficam visíveis para consulta no histórico
+// "📋 DISPOSITIVOS ANTERIORES" (uti_disp_log), não mais aqui na lista corrente.
 function _dispRenderLista(){
   const cont = document.getElementById('disp-cards');
   if(!cont) return;
-  if(!_dispLista.length){
-    cont.innerHTML = '<div style="font-size:.78rem;color:var(--muted);font-style:italic;padding:6px 2px;">Nenhum dispositivo registrado. Use o botão acima para adicionar.</div>';
+  const ativos = _dispLista.filter(d=>!d.dataRetirada);
+  if(!ativos.length){
+    cont.innerHTML = '<div style="font-size:.78rem;color:var(--muted);font-style:italic;padding:6px 2px;">Nenhum dispositivo ativo registrado. Use o botão acima para adicionar'
+      + (_dispLista.length ? ' — dispositivos retirados ficam em "📋 Dispositivos Anteriores".' : '.') + '</div>';
     return;
   }
-  cont.innerHTML = _dispLista.map(d=>{
+  cont.innerHTML = ativos.map(d=>{
     const def = _dispDef(d.tipo);
-    const ativo = !d.dataRetirada;
     const dias = d.dataInsercao ? _diasDeInstalacao(d.dataInsercao) : null;
     const diasStr = dias!==null ? (dias===1?'1 dia':dias+' dias') : '';
     const detalhes = [];
@@ -12156,11 +12161,9 @@ function _dispRenderLista(){
         selo = `<button type="button" class="btn-sec" title="Checklist de inserção pendente — clique para preencher" style="font-size:.66rem;padding:2px 8px;background:#fff3cd;border:1px solid #ffd54f;color:#856404;font-weight:700;" onclick="_ckInsAbrirPorDispId('${d.id}')">⏳ checklist pendente</button>`;
       }
     }
-    const retInfo = d.dataRetirada
-      ? `<span style="font-size:.68rem;color:var(--vermelho);font-weight:700;">retirado ${fmtD(d.dataRetirada)}</span>`
-      : (diasStr ? `<span style="font-size:.68rem;background:#f0f4fa;color:var(--azul);font-weight:700;padding:2px 8px;border-radius:10px;">${diasStr}</span>` : '');
+    const retInfo = diasStr ? `<span style="font-size:.68rem;background:#f0f4fa;color:var(--azul);font-weight:700;padding:2px 8px;border-radius:10px;">${diasStr}</span>` : '';
     return `
-      <div class="disp-card" data-id="${d.id}" style="border:1.5px solid ${ativo?def.cor+'55':'#ddd'};border-left:4px solid ${ativo?def.cor:'#bbb'};border-radius:9px;padding:8px 11px;margin-bottom:7px;background:${ativo?'#fff':'#fafafa'};opacity:${ativo?1:.7};">
+      <div class="disp-card" data-id="${d.id}" style="border:1.5px solid ${def.cor}55;border-left:4px solid ${def.cor};border-radius:9px;padding:8px 11px;margin-bottom:7px;background:#fff;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span style="font-size:1rem;">${def.icone}</span>
           <span style="font-weight:800;color:${def.cor};font-size:.82rem;">${rotuloTipo}</span>
@@ -12170,7 +12173,7 @@ function _dispRenderLista(){
           ${selo}
           <span style="margin-left:auto;display:flex;gap:5px;">
             <button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;" onclick="_dispAbrirModal('${d.id}')">✎ Editar</button>
-            ${ativo?`<button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;background:#fff3cd;color:#856404;border-color:#ffeeba;" onclick="_dispRetirar('${d.id}')">↑ Retirar</button>`:''}
+            <button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;background:#fff3cd;color:#856404;border-color:#ffeeba;" onclick="_dispRetirar('${d.id}')">↑ Retirar</button>
             <button type="button" class="btn-rem" onclick="_dispRemover('${d.id}')">×</button>
           </span>
         </div>
