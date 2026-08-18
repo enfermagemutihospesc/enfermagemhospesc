@@ -935,23 +935,6 @@
 
     <div class="modal-body" style="overflow-y:auto;flex:1;min-height:0;">
       <div id="pit-step-form" style="display:flex;flex-direction:column;gap:10px;">
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Enfermeiros</label>
-          <input type="text" id="pit-enfermeiros" placeholder="Nomes separados por vírgula" style="width:100%;">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Técnicos de Enfermagem</label>
-          <input type="text" id="pit-tecnicos" placeholder="Nomes separados por vírgula" style="width:100%;">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Médico</label>
-          <input type="text" id="pit-medico" placeholder="Nome do médico plantonista" style="width:100%;">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:.76rem;font-weight:600;color:var(--muted);">Fisioterapeuta</label>
-          <input type="text" id="pit-fisio" placeholder="Nome do fisioterapeuta" style="width:100%;">
-        </div>
-
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
           <span class="sub-t">Equipe completa?</span>
           <label class="ri"><input type="radio" name="pit-equipe-completa" value="sim" checked onchange="_pitToggleAusencias()"> Sim</label>
@@ -979,7 +962,7 @@
         </div>
 
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-          <span class="sub-t">ECG?</span>
+          <span class="sub-t">ECG OK?</span>
           <label class="ri"><input type="radio" name="pit-ecg" value="sim" checked> Sim</label>
           <label class="ri"><input type="radio" name="pit-ecg" value="nao"> Não</label>
         </div>
