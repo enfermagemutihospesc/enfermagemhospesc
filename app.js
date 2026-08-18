@@ -13129,10 +13129,6 @@ async function abrirPitStop(){
   let salvo = null;
   try { salvo = await dbGet(chave); } catch(e){ salvo = null; }
 
-  document.getElementById('pit-enfermeiros').value      = (salvo && salvo.enfermeiros)      || '';
-  document.getElementById('pit-tecnicos').value         = (salvo && salvo.tecnicos)         || '';
-  document.getElementById('pit-medico').value           = (salvo && salvo.medico)           || '';
-  document.getElementById('pit-fisio').value            = (salvo && salvo.fisio)            || '';
   document.getElementById('pit-ausencias').value        = (salvo && salvo.ausencias)        || '';
   document.getElementById('pit-reservas-detalhe').value = (salvo && salvo.reservasDetalhe)  || '';
   document.getElementById('pit-obs-gerais').value       = (salvo && salvo.obsGerais)        || '';
@@ -13161,10 +13157,6 @@ function _pitToggleReservas(){
 
 function _pitColetarForm(){
   return {
-    enfermeiros:     gf('pit-enfermeiros').trim(),
-    tecnicos:        gf('pit-tecnicos').trim(),
-    medico:          gf('pit-medico').trim(),
-    fisio:           gf('pit-fisio').trim(),
     equipeCompleta:  gRadio('pit-equipe-completa') || 'sim',
     ausencias:       gf('pit-ausencias').trim(),
     reservas:        gRadio('pit-reservas') || 'nao',
@@ -13219,10 +13211,6 @@ async function _pitGerarTexto(form){
   linhas.push('UTI GERAL – PIT STOP');
   linhas.push('Data: ' + fmtD(hj));
   linhas.push('👥 Equipe de Plantão: ' + (turno || '—'));
-  linhas.push('Enfermeiros: ' + (form.enfermeiros || '–'));
-  linhas.push('Técnicos de Enfermagem: ' + (form.tecnicos || '–'));
-  linhas.push('Médico: ' + (form.medico || '–'));
-  linhas.push('Fisioterapeuta: ' + (form.fisio || '–'));
   linhas.push('Equipe completa: ' + (
     form.equipeCompleta === 'nao'
       ? 'NÃO — Ausências: ' + (form.ausencias || '–')
@@ -13235,7 +13223,7 @@ async function _pitGerarTexto(form){
       : 'NÃO'
   ));
   linhas.push('Gasômetro OK: ' + (form.gasometro === 'nao' ? 'NÃO' : 'SIM'));
-  linhas.push('ECG: ' + (form.ecg === 'nao' ? 'NÃO' : 'SIM'));
+  linhas.push('ECG OK: ' + (form.ecg === 'nao' ? 'NÃO' : 'SIM'));
   if(form.obsGerais){
     linhas.push('Observações gerais: ' + form.obsGerais);
   }
