@@ -7026,7 +7026,7 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
 }
 
 // ── URL DO APPS SCRIPT ────────────────────────────────────────────────────────
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHhgR5tmL8nmvN2juaTOnUU1HWw1CCGM8jB1krDHAQf0cNwxIEk0JjxFpc-BMjAn-L/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw4wXxTwEZPTf1pVMTnN54-w0axB7IKhwFjcEdz86xaYWHNEGz_bm0AfpgJRNDCQoKM/exec';
 
 // ── WRAPPER CORS-SAFE PARA O APPS SCRIPT ─────────────────────────────────────
 async function _apsFetch(payload, fireAndForget = false) {
