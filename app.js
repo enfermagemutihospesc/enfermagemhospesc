@@ -1345,7 +1345,12 @@ function _balancoHtmlLeito(leito, dados, dataRef){
 
 // CSS específico das tabelas horárias do Balanço Hídrico (denso, muitas colunas)
 const BALANCO_CSS = `
-  .bh-page{ display:flex; flex-direction:column; height:calc(100vh - 2px); box-sizing:border-box; }
+  /* height:100vh usa o maior viewport possível (barra do navegador escondida);
+     quando a barra/botões do celular aparecem, o conteúdo do fim da página
+     fica "embaixo" deles, fora da área visível. 100dvh recalcula em tempo
+     real conforme a barra aparece/some, e o padding-bottom com
+     safe-area-inset garante espaço mesmo com barra de gestos do Android/iOS. */
+  .bh-page{ display:flex; flex-direction:column; height:calc(100vh - 2px); height:calc(100dvh - 2px); box-sizing:border-box; padding-bottom:env(safe-area-inset-bottom); }
   .bh-header-top{ display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .bh-logo{ flex-shrink:0; }
   .bh-logo img{ height:46px; width:auto; display:block; }
