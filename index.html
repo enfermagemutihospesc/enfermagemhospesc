@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -53,7 +53,7 @@
 </div>
 
 <!-- TELA CONFIGURAÇÃO (exibida quando Firebase não está configurado) -->
-<div id="t-config" class="tela" style="padding:2rem;min-height:100vh;align-items:center;justify-content:center;">
+<div id="t-config" class="tela" style="padding:2rem;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;padding-bottom:calc(2rem + env(safe-area-inset-bottom));">
   <div class="config-banner">
     <h3>⚙️ Configure o Firebase para ativar a nuvem</h3>
     <p>Para salvar os dados na nuvem e compartilhar entre todos os enfermeiros, você precisa configurar um projeto Firebase gratuito.</p>
@@ -92,7 +92,7 @@
 </div>
 
 <!-- TELA TROCA DE SENHA (primeiro acesso ou voluntária) -->
-<div id="t-trocasenha" class="tela" style="display:none;padding:2rem;min-height:100vh;align-items:center;justify-content:center;">
+<div id="t-trocasenha" class="tela" style="display:none;padding:2rem;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;padding-bottom:calc(2rem + env(safe-area-inset-bottom));">
   <div class="login-card">
     <div class="login-logo">
       <span class="login-badge">SEGURANÇA</span>
