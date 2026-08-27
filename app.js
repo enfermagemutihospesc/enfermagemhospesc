@@ -1,5 +1,10 @@
 // ── ESTADO ──────────────────────────────────────────────────────────────────
 let turno = '', leitoAtual = 0, usuarioEmail = '';
+// Trava de segurança: true enquanto abrirForm() está trocando de leito (entre
+// setar leitoAtual e repopular os campos do formulário). Enquanto true,
+// gerarPreview() é bloqueado — evita salvar dados de um leito misturados com
+// o número de outro leito, caso o usuário consiga clicar "Gerar" nessa janela.
+let _formCarregando = false;
 let db = null, auth = null, modoOffline = false;
 
 // ── BRIDGE FIREBASE MÉDICO (prescrição) ──────────────────────────────────────
@@ -6483,6 +6488,7 @@ function _normNome(s){
 
 async function abrirForm(n) {
   leitoAtual = n;
+  _formCarregando = true;
   showLoading('Carregando evolução...');
   try {
   const d = await leitosData();
@@ -6640,6 +6646,7 @@ async function abrirForm(n) {
   b.textContent = turno==='DIURNO'?'☀ DIURNO':'☽ NOTURNO';
   b.className = 'badge '+(turno==='DIURNO'?'badge-d':'badge-n');
 
+  _formCarregando = false;
   hideLoading();
   mostrarTela('t-form');
   _ativarCaixaAlta();
@@ -6655,6 +6662,7 @@ async function abrirForm(n) {
 
   } catch(e) {
     console.error('abrirForm:', e);
+    _formCarregando = false;
     hideLoading();
     toast('Erro ao abrir evolução: '+(e.message||'tente novamente'), true);
   }
@@ -6816,7 +6824,12 @@ examesSolic:gf('f-exames-solic'),
 
 // ── GERAR PREVIEW ──────────────────────────────────────────────────────────────
 async function gerarPreview() {
+  if (_formCarregando) {
+    toast('Aguarde o carregamento do leito terminar antes de gerar a evolução.', true);
+    return;
+  }
   const btn = document.getElementById('btn-gerar');
+  if (btn.disabled) return;   // evita duplo clique/duplo disparo
   btn.disabled = true; btn.textContent = 'Salvando...';
   const d = coletarDados();
 
@@ -6849,6 +6862,34 @@ async function gerarPreview() {
   try {
     const ld = await leitosData();
     if (ld[d.leito] && ld[d.leito].ocupado) {
+      // ── Proteção contra mistura de leitos ──────────────────────────────
+      // Se o nome do paciente coletado do formulário diverge do nome já
+      // cadastrado nesse leito, é sinal de que os campos do form ainda
+      // pertenciam a outro leito no momento do salvamento (condição de
+      // corrida ao trocar de leito). Não sincroniza silenciosamente —
+      // pede confirmação explícita antes de sobrescrever a identificação.
+      if (_normNome(ld[d.leito].pac) && _normNome(d.pac) !== _normNome(ld[d.leito].pac)) {
+        const confirma = confirm(
+          `⚠️ ATENÇÃO: o leito ${pad(d.leito)} está cadastrado para "${ld[d.leito].pac}", ` +
+          `mas a evolução que acabou de ser salva está em nome de "${d.pac}".\n\n` +
+          `Isso pode indicar que os dados de outro leito ficaram misturados nesta evolução ` +
+          `(ex.: troca rápida entre leitos antes do formulário terminar de carregar).\n\n` +
+          `A evolução já foi salva no histórico do leito ${pad(d.leito)}. ` +
+          `Deseja também atualizar o CADASTRO do leito ${pad(d.leito)} para "${d.pac}"?\n\n` +
+          `Se isso for um engano, clique Cancelar e revise a evolução salva antes de decidir.`
+        );
+        if (!confirma) {
+          console.warn(`Sync leito ${d.leito} abortado pelo usuário — possível mistura de leito.`);
+          return;
+        }
+        // registra em auditoria mesmo quando confirmado, para rastreio
+        try {
+          const auditKey = 'uti_leito_audit_' + d.leito;
+          const audit = (await dbGet(auditKey)) || [];
+          audit.push({ estadoAnterior: ld[d.leito], substituidoPor: d.pac + ' (via evolução)', autor: usuarioEmail, em: new Date().toISOString() });
+          await dbSet(auditKey, audit);
+        } catch(e2){ console.warn('Auditoria leito:', e2); }
+      }
       ld[d.leito] = {
         ...ld[d.leito],
         pac: d.pac, dn: d.dn, adm: d.adm, admHosp: d.admHosp,
