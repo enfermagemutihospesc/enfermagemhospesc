@@ -9444,9 +9444,20 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
     };
 
     // Mede a altura necessária de um texto longo após split, em mm
+    // A largura usada para quebrar linha é reduzida ~6% (margem de segurança):
+    // o jsPDF calcula a largura do texto com uma tabela interna aproximada da
+    // fonte padrão "helvetica" (não é uma fonte de verdade embutida no PDF —
+    // cada visualizador usa a SUA própria Helvetica). Caracteres acentuados
+    // (ç, ã, õ, é...), muito comuns em português, são medidos de forma
+    // ligeiramente diferente pelo motor de PDF do Chrome em relação ao que o
+    // jsPDF assumiu — o suficiente para uma linha "caber" no cálculo mas
+    // estourar a margem direita quando renderizada no Chrome (mesmo com o
+    // Poppler/outros leitores exibindo perfeitamente). A margem de segurança
+    // absorve essa diferença sem precisar embutir uma fonte customizada.
+    const _MARGEM_SEGURANCA_FONTE = 0.94;
     const _alturaTexto = (texto, larg, fontSize, leading=1.25) => {
       doc.setFontSize(fontSize);
-      const linhas = doc.splitTextToSize(_trans(texto), larg);
+      const linhas = doc.splitTextToSize(_trans(texto), larg * _MARGEM_SEGURANCA_FONTE);
       const lhMm = (fontSize/72) * 25.4 * leading;
       return { linhas, alturaMm: linhas.length * lhMm, lhMm };
     };
