@@ -2183,12 +2183,25 @@ async function _carregarDadosInd(){
       else if (k.startsWith('uti_iras_')) irasChaves.add(k);
       else if (k.startsWith('uti_ev_') || k.startsWith('uti_nas_')) dinamicas.add(k);
     }
-    // Firestore — UMA única varredura da coleção
+
+    // Firestore — UMA única varredura da coleção. Antes disto, o código fazia
+    // essa mesma varredura só para descobrir os NOMES das chaves, e depois
+    // buscava cada uma de novo (uma requisição por chave!) via dbGetMany —
+    // ou seja, 2x o tráfego, incluindo centenas/milhares de round-trips
+    // individuais que cresciam sem limite conforme o histórico acumulava.
+    // Agora os dados já vêm completos direto dessa varredura; dbGetMany só é
+    // usado como fallback para o que porventura não estiver no snapshot
+    // (ex.: modo offline, ou uma chave só presente no localStorage).
+    const dataMap = {};
+    let snapOk = false;
     if (!modoOffline && db) {
       try {
         const snap = await db.collection('uti').get();
+        snapOk = true;
         snap.forEach(doc => {
           const id = doc.id;
+          const val = doc.data().value ?? doc.data().v ?? null;
+          dataMap[id] = val;
           if (id.startsWith('uti_ev_resumo_'))  resumosEv.add(id);
           else if (id.startsWith('uti_nas_resumo_')) resumosNas.add(id);
           else if (id.startsWith('uti_iras_')) irasChaves.add(id);
@@ -2197,9 +2210,13 @@ async function _carregarDadosInd(){
       } catch(e) { console.warn('_carregarDadosInd: varredura:', e); }
     }
 
-    // Busca tudo em paralelo: fixas + dinâmicas + resumos + IRAS
+    // Só busca individualmente o que faltou (offline, ou snapshot indisponível)
     const todasChaves = [...fixas, ...Array.from(dinamicas), ...Array.from(resumosEv), ...Array.from(resumosNas), ...Array.from(irasChaves)];
-    const dataMap = await dbGetMany(todasChaves);
+    const faltantes = snapOk ? todasChaves.filter(k => !(k in dataMap)) : todasChaves;
+    if (faltantes.length) {
+      const extra = await dbGetMany(faltantes);
+      Object.assign(dataMap, extra);
+    }
 
     const admissoes = dataMap['uti_admissao_log'] || [];
     const altas     = dataMap['uti_alta_log']     || [];
@@ -2230,7 +2247,7 @@ async function _carregarDadosInd(){
       if (v) irasChecklists.push(v);
     }
 
-    _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList, irasChecklists };
+    _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList, irasChecklists, _carregadoEm: Date.now() };
   } finally {
     hideLoading();
   }
@@ -3183,10 +3200,15 @@ function _contarTermos(textos){
 }
 
 // ── RENDER PRINCIPAL ─────────────────────────────────────────────────────────
-async function renderIndicadores(){
+async function renderIndicadores(forcarRecarga){
   const periodo = _indPeriodo();
   if (!periodo) { toast('Informe o período personalizado',true); return; }
-  await _carregarDadosInd();
+  // Reaproveita o cache entre trocas de categoria/período — ele já contém
+  // TODO o histórico (o filtro por período acontece depois, em memória), então
+  // não há motivo pra rebuscar no Firestore só porque o usuário trocou de aba.
+  // Só recarrega se ainda não há cache, ou se foi pedido explicitamente
+  // (botão "Atualizar dados").
+  if (!_indCache || forcarRecarga) await _carregarDadosInd();
   const container = document.getElementById('ind-conteudo');
   container.innerHTML = '';
 
@@ -3211,7 +3233,11 @@ async function renderIndicadores(){
     ccih:          _indCCIH
   };
   const fn = renderers[_indCategoriaAtiva] || _indOcupacao;
-  container.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px;">Período: <strong>${periodo.rotulo}</strong></div>` + fn(periodo);
+  const atualizadoEm = _indCache._carregadoEm ? new Date(_indCache._carregadoEm).toLocaleTimeString('pt-BR') : '';
+  container.innerHTML = `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">` +
+    `<span>Período: <strong>${periodo.rotulo}</strong>${atualizadoEm ? ' · dados de ' + atualizadoEm : ''}</span>` +
+    `<button onclick="renderIndicadores(true)" style="font-size:.75rem;padding:3px 8px;" title="Recarregar do zero, buscando evoluções/admissões novas desde que você abriu os indicadores">🔄 Atualizar dados</button>` +
+    `</div>` + fn(periodo);
 }
 
 // ── 1. OCUPAÇÃO E FLUXO ──────────────────────────────────────────────────────
@@ -10462,6 +10488,10 @@ async function salvarIRAS(){
     await dbSet(chave, payload);
     toast('✓ Checklist IRAS salvo');
     fecharIRAS();   // ← fecha automaticamente após salvar
+    // Sem isto, o chip "BUNDLES IRAS" do card continuava com a cor antiga
+    // (não preenchido) até a tela de leitos ser recarregada do zero — o
+    // salvamento em si estava correto, só faltava mandar o card redesenhar.
+    if (typeof renderLeitos === 'function') renderLeitos();
   } catch(e){
     toast('Erro ao salvar: '+e.message, true);
   }
