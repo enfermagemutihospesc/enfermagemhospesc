@@ -408,6 +408,41 @@ async function dbGetMany(keys) {
   return result;
 }
 
+// ── Gravação atômica de UM leito em uti_leitos ──────────────────────────────
+// dbSet('uti_leitos', d) sempre grava o MAPA INTEIRO de leitos, depois de ter
+// lido o documento inteiro antes (leitosData()). Se dois dispositivos/abas
+// salvam leitos DIFERENTES quase ao mesmo tempo, o segundo a gravar sobrescreve
+// com uma cópia desatualizada o leito que o primeiro acabou de salvar — porque
+// leu o documento ANTES do primeiro terminar (last-write-wins no blob inteiro).
+// Isso é exatamente o tipo de bug que reaparece com usuários que mantêm mais de
+// uma aba/aparelho aberto ao mesmo tempo, mesmo com as travas de mesma-sessão
+// já existentes (elas não protegem contra OUTRA sessão/aba).
+// dbSetLeito usa update() com notação de ponto (`value.<leito>`), que o
+// Firestore aplica como um patch atômico só naquele campo aninhado — beds
+// diferentes gravados ao mesmo tempo por sessões diferentes nunca se pisam,
+// porque nenhuma delas precisa reler/reescrever o documento inteiro.
+async function dbSetLeito(leito, dadosLeito) {
+  cacheInvalidate('uti_leitos');
+  // Mantém o cache local (localStorage) coerente: atualiza só a chave do leito
+  // dentro do blob já cacheado, sem reler o Firestore.
+  try {
+    const atual = JSON.parse(localStorage.getItem('uti_leitos') || '{}');
+    atual[leito] = dadosLeito;
+    localStorage.setItem('uti_leitos', JSON.stringify(atual));
+  } catch(e) { console.warn('dbSetLeito: cache local:', e); }
+
+  if (!modoOffline && db) {
+    try {
+      await db.collection('uti').doc('uti_leitos').set(
+        { [`value.${leito}`]: dadosLeito, updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+      return true;
+    } catch(e) { console.warn('dbSetLeito: Firestore:', e); return false; }
+  }
+  return false;
+}
+
 async function dbSet(key, value) {
   cacheInvalidate(key);
   const json = JSON.stringify(value);
@@ -5712,7 +5747,7 @@ async function salvarAdmissao() {
     evolAdmissao: leitoExistente.evolAdmissao || '',
     admissaoRegistradaEm: leitoExistente.admissaoRegistradaEm || new Date().toISOString()
   };
-  await dbSet('uti_leitos', d);
+  await dbSetLeito(modalLeito, d[modalLeito]);
 
   // ── Limpeza de segurança em NOVA admissão ────────────────────────────────
   // Se o leito está recebendo um paciente novo, apaga quaisquer evoluções/NAS
@@ -6578,7 +6613,7 @@ async function abrirForm(n) {
           const leitos = await leitosData();
           if(leitos[n] && !leitos[n].sexo){
             leitos[n].sexo = sexoFinal;
-            await dbSet('uti_leitos', leitos);
+            await dbSetLeito(n, leitos[n]);
           }
         }
       }
@@ -6928,7 +6963,7 @@ async function gerarPreview() {
         origem: d.origem, origemOutro: d.origemOutro,
         evolAdmissao: d.evolAdmissao
       };
-      await dbSet('uti_leitos', ld);
+      await dbSetLeito(d.leito, ld[d.leito]);
     }
   } catch(e) { console.warn('Sync leito:', e); }
 
@@ -7638,7 +7673,7 @@ async function confirmarAltaFinal(){
 
     // Libera o leito (zera TODOS os campos de admissão, incluindo cid/sexo/idade)
     ld[leitoParaAlta] = {ocupado:false, pac:'', diag:'', cid:'', dn:'', sexo:'', adm:'', admHosp:'', comor:'', alergia:'', origem:'', origemOutro:'', evolAdmissao:''};
-    await dbSet('uti_leitos', ld);
+    await dbSetLeito(leitoParaAlta, ld[leitoParaAlta]);
 
     // Apaga TODAS as evoluções deste leito (qualquer turno/data) para que a
     // próxima admissão não herde NADA do paciente anterior. ANTES de apagar,
@@ -7740,7 +7775,12 @@ async function prepararTransferencia(){
     // move admissão
     ld[dest]={...ld[leitoAtual]};
     ld[leitoAtual]={ocupado:false,pac:'',diag:'',dn:'',adm:'',admHosp:'',comor:'',alergia:''};
-    await dbSet('uti_leitos',ld);
+    // Dois leitos mudam aqui (origem e destino) — grava cada um atomicamente,
+    // em vez de reescrever o documento uti_leitos inteiro de uma vez.
+    await Promise.all([
+      dbSetLeito(dest, ld[dest]),
+      dbSetLeito(leitoAtual, ld[leitoAtual])
+    ]);
     // move evoluções do dia
     for(const t of['DIURNO','NOTURNO']){
       const ev=await dbGet(evKey(leitoAtual,t,hoje()));
