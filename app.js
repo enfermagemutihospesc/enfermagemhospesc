@@ -5620,9 +5620,9 @@ async function renderLeitos() {
         ${l.ocupado ? _nasBadge(nasHoje) : ''}
       </div>
       ${l.ocupado ? `<button class="leito-iras-btn${irasPreenchido ? ' leito-iras-btn--preenchido' : ''}" data-leito="${i}" title="${irasPreenchido ? '✓ Bundles IRAS preenchido neste turno — clique para editar' : 'Abrir Checklist de Bundles IRAS deste leito'}">📋 BUNDLES IRAS${irasPreenchido ? ' ✓' : ''}</button>` : ''}
-      ${l.ocupado ? `<button class="leito-rx-hor-btn" data-leito="${i}" title="Ver e editar horários da prescrição médica">💊 PRESCRIÇÃO</button>` : ''}`;
+      ${l.ocupado ? `<div class="leito-acoes-row"><button class="leito-alta-btn" data-leito="${i}" title="Dar alta ou registrar saída deste paciente">🏥 ALTA</button><button class="leito-transf-btn" data-leito="${i}" title="Transferir paciente para outro leito da UTI">↔ TRANSFERIR</button></div>` : ''}`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
-    // Listener separado para o botão IRAS — para de propagar para o card
+    // Listeners separados para os botões do card — stopPropagation evita abrir o formulário
     if(l.ocupado){
       const irasBtn = card.querySelector('.leito-iras-btn');
       if(irasBtn){
@@ -5631,6 +5631,23 @@ async function renderLeitos() {
           abrirIRAS(i);
         });
       }
+      // Botão ALTA direto do card
+      const altaBtn = card.querySelector('.leito-alta-btn');
+      if(altaBtn){
+        altaBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          abrirModalAlta(i);
+        });
+      }
+      // Botão TRANSFERIR direto do card
+      const transfBtn = card.querySelector('.leito-transf-btn');
+      if(transfBtn){
+        transfBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          _transferirDoCard(i);
+        });
+      }
+      // Botão PRESCRIÇÃO — mantido no JS para uso futuro, removido do card visualmente
       const rxHorBtn = card.querySelector('.leito-rx-hor-btn');
       if(rxHorBtn){
         rxHorBtn.addEventListener('click', (ev) => {
@@ -7792,6 +7809,38 @@ async function confirmarAltaFinal(){
 }
 
 // ── FUNÇÃO DE TRANSFERÊNCIA (MOVER REGISTRO) ──────────────────────────────────
+
+// Versão chamada direto do card da grade de leitos (sem precisar abrir o formulário).
+// Recebe o número do leito como parâmetro em vez de depender de leitoAtual.
+async function _transferirDoCard(leito){
+  const ld = await leitosData();
+  const pac = (ld[leito]||{}).pac || '';
+  const novoLeito = prompt(`Transferir "${pac}" do Leito ${pad(leito)} para qual leito? (1–${TOTAL})`);
+  if(!novoLeito) return;
+  const dest = parseInt(novoLeito);
+  if(isNaN(dest)||dest<1||dest>TOTAL){ toast('Leito inválido',true); return; }
+  if(dest===leito){ toast('Destino igual à origem',true); return; }
+  showLoading('Transferindo...');
+  try{
+    const ld2 = await leitosData();
+    if(ld2[dest]&&ld2[dest].ocupado){ hideLoading(); toast('Leito '+pad(dest)+' ocupado',true); return; }
+    ld2[dest] = {...ld2[leito]};
+    ld2[leito] = {ocupado:false,pac:'',diag:'',cid:'',dn:'',sexo:'',adm:'',admHosp:'',comor:'',alergia:'',origem:'',origemOutro:'',evolAdmissao:''};
+    await Promise.all([
+      dbSetLeito(dest,  ld2[dest]),
+      dbSetLeito(leito, ld2[leito])
+    ]);
+    // Move evoluções do dia
+    for(const t of ['DIURNO','NOTURNO']){
+      const ev = await dbGet(evKey(leito,t,hoje()));
+      if(ev){ await dbSet(evKey(dest,t,hoje()),{...ev,leito:dest}); await dbDelete(evKey(leito,t,hoje())); }
+    }
+    hideLoading();
+    toast(`✓ Leito ${pad(leito)} → Leito ${pad(dest)} · ${pac}`);
+    await irLeitos();
+  }catch(e){ hideLoading(); toast('Erro: '+e.message,true); }
+}
+
 async function prepararTransferencia(){
   const novoLeito=prompt(`Transferir "${gf('f-pac')}" do Leito ${pad(leitoAtual)} para qual leito?`);
   if(!novoLeito) return;
