@@ -433,12 +433,31 @@ async function dbSetLeito(leito, dadosLeito) {
 
   if (!modoOffline && db) {
     try {
-      await db.collection('uti').doc('uti_leitos').set(
-        { [`value.${leito}`]: dadosLeito, updatedAt: firebase.firestore.FieldValue.serverTimestamp() },
-        { merge: true }
-      );
+      // update() com notação de ponto acessa o campo ANINHADO value.<leito> dentro
+      // do documento, sem tocar nos outros leitos — patch atômico real no Firestore.
+      // set(..., { merge: true }) com chave "value.1" criava um campo de nome literal
+      // "value.1" em vez de acessar value → 1, por isso a leitura posterior via
+      // doc.data().value retornava o objeto antigo sem o leito zerado.
+      await db.collection('uti').doc('uti_leitos').update({
+        [`value.${leito}`]: dadosLeito,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
       return true;
-    } catch(e) { console.warn('dbSetLeito: Firestore:', e); return false; }
+    } catch(e) {
+      // Se o documento ainda não existe (primeira execução), update() falha com
+      // NOT_FOUND — cai para set() que cria o documento inteiro.
+      if (e.code === 'not-found' || (e.message && e.message.includes('NOT_FOUND'))) {
+        try {
+          const ld = await leitosData();
+          ld[leito] = dadosLeito;
+          await db.collection('uti').doc('uti_leitos').set(
+            { value: ld, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+          );
+          return true;
+        } catch(e2) { console.warn('dbSetLeito: Firestore set fallback:', e2); return false; }
+      }
+      console.warn('dbSetLeito: Firestore update:', e); return false;
+    }
   }
   return false;
 }
