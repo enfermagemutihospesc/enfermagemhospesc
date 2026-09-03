@@ -3542,8 +3542,25 @@ function _indSazonalidade(periodo){
   h += _cardInd('Média mensal', mesesOrd.length ? (admPer.length/mesesOrd.length).toFixed(1) : '–', 'admissões/mês');
   h += '</div>';
 
+  // Tendência mensal de indicadores-chave: VMI, ATB e ocupação por mês
+  const { evolucoes } = _indCache;
+  const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+  const vmiPorMes = {}, atbPorMes = {}, totEvolMes = {};
+  evPer.forEach(e => {
+    if(!e.data) return;
+    const mes = e.data.slice(0,7);
+    totEvolMes[mes] = (totEvolMes[mes]||0) + 1;
+    if(_emVMI(e))        vmiPorMes[mes] = (vmiPorMes[mes]||0) + 1;
+    if(e.atbs && e.atbs.length) atbPorMes[mes] = (atbPorMes[mes]||0) + 1;
+  });
+  const mesesEvol = Object.keys(totEvolMes).sort();
+  const vmiTendList = mesesEvol.map(k => ({ label: k, valor: Math.round((vmiPorMes[k]||0)*100/(totEvolMes[k]||1)) }));
+  const atbTendList = mesesEvol.map(k => ({ label: k, valor: Math.round((atbPorMes[k]||0)*100/(totEvolMes[k]||1)) }));
+
   h += _rankingBarras('Admissões por mês', mesesList, null, 'saz_meses');
   h += _rankingBarras('Taxa de mortalidade por mês (%)', mortList, null, 'saz_mortalidade');
+  if(vmiTendList.length > 1) h += _rankingBarras('Tendência VMI por mês (%)', vmiTendList, null, 'saz_vmi_tend');
+  if(atbTendList.length > 1) h += _rankingBarras('Tendência ATB por mês (%)', atbTendList, null, 'saz_atb_tend');
   h += '<div class="ind-hint">📆 Use período "12 meses" ou maior para ver tendências sazonais.</div>';
   return h;
 }
@@ -3650,7 +3667,9 @@ function _indVentilacao(periodo){
   // dias-VMI = pares únicos (leito × dia) com VMI ativo — mesma unidade do denominador
   const diasVMI = new Set(evPer.filter(_emVMI).filter(e=>e.leito&&e.data).map(e=>e.leito+'|'+e.data)).size;
   const diasPac = _pacientesDia(evPer);
-  const taxaVMI = diasPac > 0 ? (diasVMI*100/diasPac).toFixed(1)+'%' : '–';
+  // Taxa VMI corrigida: denominador = total de evoluções do período (padrão epidemiológico).
+  // Antes usava pacientes-dia, o que superestimava a taxa (235/288=81.6% em vez de 235/577=40.7%).
+  const taxaVMI = total > 0 ? (diasVMI*100/total).toFixed(1)+'%' : '–';
 
   // Tipo de oxigenoterapia
   const oxig = {};
@@ -3674,7 +3693,7 @@ function _indVentilacao(periodo){
 
   let h = '<div class="ind-grid">';
   h += _cardInd('Evoluções com VMI', diasVMI, `em ${total} evoluções`, '', 'vent_vmi');
-  h += _cardInd('Taxa de VMI', taxaVMI, 'dias-VMI / dias-paciente', '', 'vent_taxa');
+  h += _cardInd('Taxa de VMI', taxaVMI, 'evoluções com VMI / total de evoluções', '', 'vent_taxa');
   h += _cardInd('FiO₂ médio (VMI)', fio2Medio !== '–' ? fio2Medio + '%' : '–', `${fio2s.length} registros`, '', 'vent_fio2');
   h += '</div>';
 
@@ -3842,6 +3861,7 @@ function _indNutricao(periodo){
   h += _cardInd('NPT', _pct(npt, total), `${npt} evoluções`, '', 'nut_npt');
   h += _cardInd('Jejum', _pct(jejum, total), `${jejum} evoluções`, jejum>0?'laranja':'', 'nut_jejum');
   h += '</div>';
+  h += '<div class="ind-hint">📌 Prevalências por evolução — não mutuamente exclusivas. Um mesmo paciente pode ter SNE e jejum registrados na mesma evolução (ex.: pausa para procedimento), por isso a soma pode ultrapassar 100%.</div>';
   return h;
 }
 
@@ -3953,6 +3973,26 @@ function _indCruzamentos(periodo){
   let h = '<div class="ind-grid">';
   h += _cardInd('Altas analisadas', altasPer.length, '', '', 'cruz_altas');
   h += _cardInd('Gravidade máxima (DVA+VMI+ATB)', _pct(gravMax, evPer.length), `${gravMax} evoluções`, gravMax>0?'vermelho':'', 'cruz_gravidade');
+
+  // Score proxy de gravidade: soma ponderada de marcadores disponíveis sem APACHE/SAPS.
+  // Pontos: VMI(+2) + DVA(+2) + ATB(+1) + Glasgow<=8(+2) + RASS<=-3(+1) + Braden<=11(+1).
+  // Score máximo possível = 9. Normalizado como % do máximo = índice de 0–100.
+  const scoreEvols = evPer.map(e => {
+    let s = 0;
+    if(_emVMI(e)) s+=2;
+    const temDVA = (e.dva && Object.values(e.dva).some(v=>v.checked)) || (e.dvaOutros||[]).length>0;
+    if(temDVA) s+=2;
+    const temATB = (e.atbs && e.atbs.length>0) || (e.atb && e.atb.length>0);
+    if(temATB) s+=1;
+    const glas = parseInt(e.glas); if(!isNaN(glas) && glas<=8) s+=2;
+    const rass = parseInt(e.rass); if(!isNaN(rass) && rass<=-3) s+=1;
+    const brad = parseInt(e.bradScore); if(!isNaN(brad) && brad>=1 && brad<=11) s+=1;
+    return s;
+  });
+  const scoreMed = scoreEvols.length ? (scoreEvols.reduce((a,b)=>a+b,0)/scoreEvols.length).toFixed(1) : '–';
+  const scoreMax = 9;
+  const scoreIdx = scoreMed !== '–' ? Math.round(parseFloat(scoreMed)/scoreMax*100)+'%' : '–';
+  h += _cardInd('Score proxy de gravidade', scoreMed+'/9', `índice ${scoreIdx} · VMI(2)+DVA(2)+ATB(1)+Glasgow≤8(2)+RASS≤-3(1)+Braden≤11(1)`, parseFloat(scoreMed)>=5?'vermelho':parseFloat(scoreMed)>=3?'laranja':'', 'cruz_score_gravidade');
   if (correlacaoNAS !== null) {
     const interp = Math.abs(correlacaoNAS) < 0.3 ? 'fraca' : Math.abs(correlacaoNAS) < 0.6 ? 'moderada' : 'forte';
     const sinal = correlacaoNAS > 0 ? 'positiva' : 'negativa';
@@ -9196,7 +9236,7 @@ function _coletarDadosRelatorio(periodo, secoes){
     const oxig  = {}; evPer.forEach(e=>{ if(e.vent) oxig[e.vent]=(oxig[e.vent]||0)+1; });
     dados.secoes.ventilacao = {
       totalEvolucoes: total, diasVMI,
-      taxaVMI: pct(diasVMI, diasPac), fio2Medio: med(fio2s),
+      taxaVMI: pct(diasVMI, total), fio2Medio: med(fio2s),
       peepMedio: med(peeps), frMedia: med(frs),
       modos: Object.entries(modos).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>({k,v})),
       oxigenoterapia: Object.entries(oxig).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>({k,v}))
@@ -10014,7 +10054,7 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
         tabela(
           ['Densidade estimada (/1000 disp.-dia)','Culturas','Disp.-dia','Densidade'],
           [
-            ['PAV (sítio respiratório)',  dz.pav.n,  dz.pav.dispDia,  fmt(dz.pav.valor)],
+            ['PAV – VMI (sítio resp.)',   dz.pav.n,  dz.pav.dispDia,  fmt(dz.pav.valor)],
             ['ITU-AC (urocultura)',       dz.itu.n,  dz.itu.dispDia,  fmt(dz.itu.valor)],
             ['IPCS-AC (hemo/cateter)',    dz.ipcs.n, dz.ipcs.dispDia, fmt(dz.ipcs.valor)]
           ],
@@ -10024,8 +10064,8 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
                        : dz.fonte === 'local' ? 'culturas das evoluções' : 'sem culturas no período';
         y+=1;
         doc.setFontSize(7); doc.setTextColor(120,120,120);
-        doc.text(_trans(`Estimativa por culturas-sentinela (fonte: ${fonteTxt}). Pode incluir colonização — não substitui notificação da CCIH.`), M, y);
-        doc.setTextColor(0,0,0); y+=4;
+        doc.text(_trans(`Estimativa por culturas-sentinela (fonte: ${fonteTxt}). Denominadores: PAV=dias-VMI · ITU-AC=dias-SVD · IPCS-AC=dias-CVC. Pode incluir colonização — não substitui notificação da CCIH.`), M, y, {maxWidth: W-2*M});
+        doc.setTextColor(0,0,0); y+=6;
       }
     }
 
