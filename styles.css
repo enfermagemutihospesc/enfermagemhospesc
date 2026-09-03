@@ -102,6 +102,15 @@ body{font-family:var(--fonte);background:var(--grad-bg);background-attachment:fi
 .leito-rx-hor-btn{display:block;width:calc(100% - 16px);margin:0 8px 8px;padding:5px 8px;font-size:.7rem;font-weight:600;background:#eaf5ee;color:#1a6b3a;border:1px solid rgba(26,107,58,.25);border-radius:7px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast),transform var(--t-fast);}
 .leito-rx-hor-btn:hover{background:#1a6b3a;color:white;transform:translateY(-1px);}
 .leito-rx-hor-btn:active{transform:scale(.97);}
+/* Linha de ações rápidas no card: Alta + Transferir */
+.leito-acoes-row{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:0 8px 8px;}
+.leito-alta-btn,.leito-transf-btn{padding:5px 4px;font-size:.68rem;font-weight:700;border-radius:7px;cursor:pointer;border:1px solid;transition:background var(--t-fast),color var(--t-fast),transform var(--t-fast);letter-spacing:.02em;}
+.leito-alta-btn{background:var(--vermelho-cl);color:var(--vermelho);border-color:rgba(139,26,26,.25);}
+.leito-alta-btn:hover{background:var(--vermelho);color:white;transform:translateY(-1px);}
+.leito-alta-btn:active{transform:scale(.97);}
+.leito-transf-btn{background:#f0eafd;color:#5b21b6;border-color:rgba(91,33,182,.25);}
+.leito-transf-btn:hover{background:#5b21b6;color:white;transform:translateY(-1px);}
+.leito-transf-btn:active{transform:scale(.97);}
  
 .nas-card{border:1.5px solid var(--borda);border-radius:11px;overflow:hidden;margin-bottom:6px;box-shadow:var(--sh-xs);transition:box-shadow var(--t-mid);}
 .nas-card:hover{box-shadow:var(--sh-s);}
