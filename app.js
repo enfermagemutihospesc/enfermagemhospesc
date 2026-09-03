@@ -6533,7 +6533,12 @@ async function getAnterior(n) {
   // tem um nome e a evolução não bate (ou está sem nome), NÃO herda.
   try {
     const ld = await leitosData();
-    const pacLeito = _normNome((ld[n]||{}).pac);
+    const leitoObj = ld[n] || {};
+    // Se o leito está vago (alta ou nunca admitido), nunca herda evolução anterior.
+    // Isso evita que evoluções residuais (limpeza falhou por erro de rede) sejam
+    // carregadas na próxima admissão ou ao reabrir o leito logo após a alta.
+    if (!leitoObj.ocupado) return null;
+    const pacLeito = _normNome(leitoObj.pac);
     const pacEv    = _normNome(cand.pac);
     // Se o leito tem paciente identificado, exige nome igual na evolução.
     if(pacLeito){
@@ -6566,9 +6571,15 @@ async function abrirForm(n) {
   // mesmo dia) — ou estiver sem nome enquanto o leito tem paciente identificado —
   // não a usa como fonte de herança.
   if(evHoje){
-    const pacLeito = _normNome(pac.pac);
-    const pacEv    = _normNome(evHoje.pac);
-    if(pacLeito && (!pacEv || pacEv !== pacLeito)) evHoje = null;
+    // Se o leito está vago, descarta qualquer evolução residual — evita herdar
+    // dados do paciente anterior quando a limpeza pós-alta falhou por erro de rede.
+    if(!pac.ocupado){
+      evHoje = null;
+    } else {
+      const pacLeito = _normNome(pac.pac);
+      const pacEv    = _normNome(evHoje.pac);
+      if(pacLeito && (!pacEv || pacEv !== pacLeito)) evHoje = null;
+    }
   }
 
   document.getElementById('herd-tag').style.display = anterior ? 'inline' : 'none';
@@ -7702,7 +7713,7 @@ async function confirmarAltaFinal(){
           ]);
           snapEv.forEach(d=>{ if(!d.id.startsWith('uti_ev_resumo_')) chavesEv.add(d.id); });
           snapNas.forEach(d=>{ if(!d.id.startsWith('uti_nas_resumo_')) chavesNas.add(d.id); });
-        }catch(e){ console.warn('[Alta] varredura:', e); }
+        }catch(e){ console.error('[Alta] FALHA na varredura Firestore — evoluções residuais do leito ' + leitoParaAlta + ' podem ter permanecido. Erro:', e); }
       }
 
       if(chavesEv.size || chavesNas.size){
