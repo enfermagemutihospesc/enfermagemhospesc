@@ -8206,7 +8206,11 @@ async function removerUsuarioPerfil(email) {
   if (!confirm(`Excluir definitivamente o usuário ${email}?\n\nA conta de login e o perfil serão removidos. Esta ação não pode ser desfeita.`)) return;
   try {
     // 1. Exclui a conta de autenticação no Firebase (backend com Service Account)
-    const r = await _apsFetch({ action: 'excluir_usuario', email });
+    const r = await _apsFetch({
+      action: 'excluir_usuario',
+      email,
+      appSecret: '097d5d127259d1dce16d65d6686a897639d735ec0caa55a2451f12499fd218c4'
+    });
     if (r.status !== 'ok' && !r.naoExiste) {
       throw new Error(r.msg || 'Falha ao excluir conta de login.');
     }
@@ -8237,7 +8241,12 @@ async function adicionarUsuario() {
   btn.disabled = true; btn.textContent = 'Criando...';
   try {
     // 1. Cria a conta de autenticação via Apps Script (não desloga o admin)
-    const r = await _apsFetch({ action: 'criar_usuario', email, senha });
+    const r = await _apsFetch({
+      action: 'criar_usuario',
+      email,
+      senha,
+      appSecret: '097d5d127259d1dce16d65d6686a897639d735ec0caa55a2451f12499fd218c4'
+    });
     if (r.status !== 'ok' && !r.jaExiste) {
       throw new Error(r.msg || 'Falha ao criar conta de login.');
     }
