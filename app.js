@@ -12372,6 +12372,61 @@ function _dispLocalizacoesPara(tipo){
 const DISP_LADOS = ['D','E','—'];
 const DISP_LUMENS = ['1 (mono)','2 (duplo)','3 (triplo)'];
 
+// ── CURATIVO DE CVC/CDL — tipos, limiares de troca e motivos ────────────────
+// Limiares em dias corridos desde a última troca registrada (curativoHistorico).
+// Filme transparente: ANVISA/CCIH recomenda troca em até 7 dias, ou antes se
+// sujo/solto/úmido. Gaze+micropore: janela de 24h — com granularidade de dias,
+// isso vira "em dia" no dia da troca e "vencido" a partir do dia seguinte (sem
+// estágio intermediário de atenção, dado o intervalo curto).
+const CURATIVO_TIPOS = [
+  { v:'FILME',          l:'Filme transparente', limiteAmarelo:6, limiteVermelho:7 },
+  { v:'GAZE_MICROPORE', l:'Gaze + Micropore',   limiteAmarelo:1, limiteVermelho:1 },
+];
+const CURATIVO_MOTIVOS = [
+  { v:'PROGRAMADA',        l:'Troca programada' },
+  { v:'SUJIDADE',          l:'Sujidade' },
+  { v:'UMIDADE',           l:'Umidade' },
+  { v:'DESCOLAMENTO',      l:'Descolamento' },
+  { v:'SANGRAMENTO_SITIO', l:'Sangramento no sítio' },
+  { v:'OUTRO',             l:'Outro motivo' },
+];
+function _curativoDef(tipo){ return CURATIVO_TIPOS.find(c=>c.v===tipo) || null; }
+
+// Última entrada do histórico de curativo do dispositivo (ou null se nunca registrado)
+function _dispCurativoAtual(d){
+  const h = d && d.curativoHistorico;
+  return (Array.isArray(h) && h.length) ? h[h.length-1] : null;
+}
+
+// Badge de status do curativo — mesma convenção visual dos badges de leito (.lb/.lb-ok/.lb-warn/.lb-high)
+function _curativoStatusBadgeHTML(d){
+  const atual = _dispCurativoAtual(d);
+  if(!atual){
+    return `<span class="lb lb-warn" title="Nenhuma troca de curativo registrada neste dispositivo">🩹 sem registro de curativo</span>`;
+  }
+  const def = _curativoDef(atual.tipo);
+  const dias = _diasDeInstalacao(atual.data);
+  if(!def || dias===null) return '';
+  let cls = 'lb-ok', rotulo = 'em dia';
+  if(dias>=def.limiteVermelho){ cls='lb-high'; rotulo='vencido'; }
+  else if(dias>=def.limiteAmarelo){ cls='lb-warn'; rotulo='atenção'; }
+  const diasStr = dias===0?'hoje':(dias===1?'1 dia':dias+' dias');
+  return `<span class="lb ${cls}" title="${_esc(def.l)} — última troca há ${diasStr}">🩹 ${_esc(def.l)} · ${diasStr} (${rotulo})</span>`;
+}
+
+// Chip de alerta quando a última avaliação do sítio de inserção teve sinal positivo
+function _curativoSitioAlertaHTML(d){
+  const atual = _dispCurativoAtual(d);
+  if(!atual) return '';
+  const sinais = [
+    atual.hiperemia && 'hiperemia',
+    atual.secrecaoPurulenta && 'secreção purulenta',
+    atual.dorPalpacao && 'dor à palpação',
+  ].filter(Boolean);
+  if(!sinais.length) return '';
+  return `<span class="lb lb-high" title="${_esc(atual.sitioObs||'Sinal registrado no sítio de inserção')}">⚠ sítio: ${sinais.join(', ')}</span>`;
+}
+
 // Estado em memória dos dispositivos do formulário atual
 let _dispLista = [];          // [{id,tipo,...}]
 let _dispEditId = null;       // id em edição no modal (null = novo)
@@ -12506,6 +12561,15 @@ function _dispRenderLista(){
     const avpAviso = (d.tipo==='AVP' && dias!==null && dias>=4)
       ? `<span title="Acesso venoso periférico com 96h ou mais — indicada a troca (ANVISA)" style="font-size:.7rem;background:#f8d7da;color:#721c24;padding:2px 8px;border-radius:10px;font-weight:700;">⚠ Trocar — 96h+</span>`
       : '';
+    // Curativo (só para CVC/CDL, mesmo grupo que tem checklist:'cvc') — badge de status +
+    // alerta de sítio de inserção + botão dedicado, separado de "Editar" (é um evento
+    // clínico próprio, não uma correção de cadastro).
+    const ehAcessoCentral = def.checklist === 'cvc';
+    const curativoBadge = ehAcessoCentral ? _curativoStatusBadgeHTML(d) : '';
+    const curativoAlerta = ehAcessoCentral ? _curativoSitioAlertaHTML(d) : '';
+    const curativoBtn = ehAcessoCentral
+      ? `<button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;background:#e3f0ff;color:#0d47a1;border-color:#bbdefb;" onclick="_dispCurativoAbrir('${d.id}')">🩹 Curativo</button>`
+      : '';
     return `
       <div class="disp-card" data-id="${d.id}" style="border:1.5px solid ${def.cor}55;border-left:4px solid ${def.cor};border-radius:9px;padding:8px 11px;margin-bottom:7px;background:#fff;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -12518,10 +12582,12 @@ function _dispRenderLista(){
           ${selo}
           <span style="margin-left:auto;display:flex;gap:5px;">
             <button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;" onclick="_dispAbrirModal('${d.id}')">✎ Editar</button>
+            ${curativoBtn}
             <button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;background:#fff3cd;color:#856404;border-color:#ffeeba;" onclick="_dispRetirar('${d.id}')">↑ Retirar</button>
             <button type="button" class="btn-rem" onclick="_dispRemover('${d.id}')">×</button>
           </span>
         </div>
+        ${(curativoBadge||curativoAlerta) ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;">${curativoBadge}${curativoAlerta}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -12736,6 +12802,101 @@ async function _dispRetirarConfirmar(){
   _dispRenderLista();
   toast('✓ '+_dispRotulo(d)+' retirado em '+d.dataRetirada.split('-').reverse().join('/'));
   _dispRetirarFechar();
+}
+
+// ── REGISTRO DE CURATIVO (CVC/CDL) — data/tipo, motivo da troca e avaliação do
+//    sítio de inserção. É uma ação clínica própria (evento auditável), separada
+//    de "Editar dispositivo": cada chamada empilha uma entrada em
+//    `curativoHistorico[]` em vez de sobrescrever o registro anterior. ─────────
+let _dispCurativoId = null;
+
+function _dispCurativoAbrir(id){
+  const d = _dispLista.find(x=>x.id===id); if(!d) return;
+  _dispCurativoId = id;
+  const def = _dispDef(d.tipo);
+  const anterior = _dispCurativoAtual(d);
+  document.getElementById('disp-cur-desc').textContent =
+    `${_dispRotulo(d)}${d.localizacao?(' — '+d.localizacao):''}`;
+  const selTipo = document.getElementById('disp-cur-tipo');
+  selTipo.innerHTML = CURATIVO_TIPOS.map(c=>`<option value="${c.v}">${c.l}</option>`).join('');
+  selTipo.value = anterior ? anterior.tipo : 'FILME';
+  document.getElementById('disp-cur-data').value = hoje();
+  const selMotivo = document.getElementById('disp-cur-motivo');
+  selMotivo.innerHTML = '<option value="">— selecione —</option>' + CURATIVO_MOTIVOS.map(m=>`<option value="${m.v}">${m.l}</option>`).join('');
+  selMotivo.value = '';
+  document.getElementById('disp-cur-motivo-outro').value = '';
+  document.getElementById('disp-cur-motivo-outro-wrap').style.display = 'none';
+  document.getElementById('disp-cur-hiperemia').checked = false;
+  document.getElementById('disp-cur-secrecao').checked = false;
+  document.getElementById('disp-cur-dor').checked = false;
+  document.getElementById('disp-cur-obs').value = '';
+  document.getElementById('disp-cur-obs-wrap').style.display = 'none';
+  if(anterior){
+    document.getElementById('disp-cur-anterior').textContent =
+      `Última troca: ${fmtD(anterior.data)} (${_curativoDef(anterior.tipo)?.l||anterior.tipo})`;
+    document.getElementById('disp-cur-anterior').style.display = 'block';
+  } else {
+    document.getElementById('disp-cur-anterior').style.display = 'none';
+  }
+  document.getElementById('modal-disp-curativo').classList.add('show');
+}
+
+function _dispCurativoFechar(){
+  document.getElementById('modal-disp-curativo').classList.remove('show');
+  _dispCurativoId = null;
+}
+
+// Mostra/esconde o campo de texto livre quando o motivo é "Outro"
+function _dispCurativoToggleMotivoOutro(){
+  const sel = document.getElementById('disp-cur-motivo');
+  document.getElementById('disp-cur-motivo-outro-wrap').style.display = (sel.value==='OUTRO') ? 'block' : 'none';
+}
+
+// Mostra/esconde a observação livre quando algum sinal do sítio é marcado
+function _dispCurativoToggleObs(){
+  const algum = ['disp-cur-hiperemia','disp-cur-secrecao','disp-cur-dor'].some(id=>document.getElementById(id).checked);
+  document.getElementById('disp-cur-obs-wrap').style.display = algum ? 'block' : 'none';
+}
+
+function _dispCurativoSalvar(){
+  const d = _dispLista.find(x=>x.id===_dispCurativoId); if(!d){ _dispCurativoFechar(); return; }
+  const tipo = gf('disp-cur-tipo');
+  const data = gf('disp-cur-data');
+  const motivo = gf('disp-cur-motivo');
+  const motivoOutroTexto = gf('disp-cur-motivo-outro').trim();
+  if(!data){ toast('Informe a data da troca', true); return; }
+  if(!motivo){ toast('Selecione o motivo da troca', true); return; }
+  if(motivo==='OUTRO' && !motivoOutroTexto){ toast('Descreva o motivo da troca', true); return; }
+  const entrada = {
+    id: _dispNovoId(), data, tipo, motivo, motivoOutroTexto,
+    hiperemia: document.getElementById('disp-cur-hiperemia').checked,
+    secrecaoPurulenta: document.getElementById('disp-cur-secrecao').checked,
+    dorPalpacao: document.getElementById('disp-cur-dor').checked,
+    sitioObs: gf('disp-cur-obs').trim(),
+    autor: usuarioEmail, registradoEm: new Date().toISOString(),
+  };
+  if(!Array.isArray(d.curativoHistorico)) d.curativoHistorico = [];
+  d.curativoHistorico.push(entrada);
+  _dispRenderLista();
+  _dispCurativoFechar();
+  const sinalPositivo = entrada.hiperemia || entrada.secrecaoPurulenta || entrada.dorPalpacao;
+  toast(sinalPositivo
+    ? '✓ Curativo registrado — sinal no sítio de inserção anotado'
+    : '✓ Curativo registrado');
+}
+
+// Consulta pública (ex.: gatilho do módulo SAE) — verdadeiro se há CVC/CDL ativo
+// sem curativo registrado ou com curativo vencido pelo limiar do tipo em uso.
+function _dispTemAlertaManutencaoCVC(){
+  return _dispLista
+    .filter(d => !d.dataRetirada && _dispDef(d.tipo).checklist === 'cvc')
+    .some(d => {
+      const atual = _dispCurativoAtual(d);
+      if(!atual) return true;
+      const def = _curativoDef(atual.tipo);
+      const dias = _diasDeInstalacao(atual.data);
+      return !!(def && dias!==null && dias>=def.limiteVermelho);
+    });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
