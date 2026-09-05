@@ -1208,6 +1208,56 @@
   </div>
 </div>
 
+<!-- MODAL REGISTRO DE CURATIVO (CVC/CDL) -->
+<div class="overlay" id="modal-disp-curativo">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;">
+      <h3 style="color:white;margin:0;">🩹 Registrar Curativo</h3>
+      <button class="modal-close" style="color:white;" onclick="_dispCurativoFechar()">×</button>
+    </div>
+    <div class="modal-body" style="padding:16px;max-height:74vh;overflow-y:auto;">
+      <p id="disp-cur-desc" style="font-size:.82rem;color:var(--muted);margin:0 0 4px;font-weight:700;"></p>
+      <p id="disp-cur-anterior" style="font-size:.72rem;color:var(--muted);margin:0 0 12px;display:none;"></p>
+
+      <div style="display:flex;gap:10px;margin-bottom:9px;">
+        <div style="flex:1;">
+          <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">Tipo de curativo *</label>
+          <select id="disp-cur-tipo" style="width:100%;"></select>
+        </div>
+        <div style="width:150px;">
+          <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">Data da troca *</label>
+          <input type="date" id="disp-cur-data" style="width:100%;">
+        </div>
+      </div>
+
+      <div style="margin-bottom:9px;">
+        <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">Motivo da troca *</label>
+        <select id="disp-cur-motivo" style="width:100%;" onchange="_dispCurativoToggleMotivoOutro()"></select>
+      </div>
+      <div id="disp-cur-motivo-outro-wrap" style="display:none;margin-bottom:9px;">
+        <input type="text" id="disp-cur-motivo-outro" placeholder="Descreva o motivo" style="width:100%;">
+      </div>
+
+      <div style="border-top:1px solid var(--borda);margin:10px 0 9px;padding-top:9px;">
+        <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:700;margin-bottom:6px;">Avaliação do sítio de inserção</label>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <label class="ri"><input type="checkbox" id="disp-cur-hiperemia" onchange="_dispCurativoToggleObs()"> Hiperemia</label>
+          <label class="ri"><input type="checkbox" id="disp-cur-secrecao" onchange="_dispCurativoToggleObs()"> Secreção purulenta</label>
+          <label class="ri"><input type="checkbox" id="disp-cur-dor" onchange="_dispCurativoToggleObs()"> Dor à palpação</label>
+        </div>
+      </div>
+      <div id="disp-cur-obs-wrap" style="display:none;">
+        <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">Descreva o achado</label>
+        <input type="text" id="disp-cur-obs" placeholder="Ex: hiperemia leve ao redor do sítio, sem secreção" style="width:100%;">
+      </div>
+    </div>
+    <div class="modal-footer" style="background:#e3f0ff;border-top:1px solid #bbdefb;display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;">
+      <button class="btn btn-sec btn-sm" onclick="_dispCurativoFechar()">Cancelar</button>
+      <button class="btn btn-sm" style="background:#0d47a1;color:white;" onclick="_dispCurativoSalvar()">💾 Salvar Curativo</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CHECKLIST DE INSERÇÃO (CVC/SVD) -->
 <div class="overlay" id="modal-ckins">
   <div class="modal" style="max-width:820px;">
