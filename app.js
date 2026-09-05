@@ -9206,10 +9206,17 @@ function _coletarDadosRelatorio(periodo, secoes){
     const mortPorMes = {}, totPorMes = {};
     altasPer.forEach(a=>{ if(a.dataAlta){ const m=a.dataAlta.slice(0,7); totPorMes[m]=(totPorMes[m]||0)+1; if(a.tipoAlta==='Óbito') mortPorMes[m]=(mortPorMes[m]||0)+1; } });
     const meses = Object.keys(porMes).sort();
+    // Tendência mensal VMI e ATB para o PDF
+    const evPerSaz = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
+    const vmiPMes={}, atbPMes={}, totEMes={};
+    evPerSaz.forEach(e=>{ if(!e.data) return; const m=e.data.slice(0,7); totEMes[m]=(totEMes[m]||0)+1; if(_emVMI(e)) vmiPMes[m]=(vmiPMes[m]||0)+1; if(e.atbs&&e.atbs.length) atbPMes[m]=(atbPMes[m]||0)+1; });
+    const taxaVMIPorMes = Object.fromEntries(Object.keys(totEMes).map(k=>[k, totEMes[k]>0?Math.round((vmiPMes[k]||0)*100/totEMes[k]):0]));
+    const taxaATBPorMes = Object.fromEntries(Object.keys(totEMes).map(k=>[k, totEMes[k]>0?Math.round((atbPMes[k]||0)*100/totEMes[k]):0]));
     dados.secoes.sazonalidade = {
       meses, admPorMes: porMes,
       mediaAdmMes: meses.length ? +(admPer.length/meses.length).toFixed(1) : null,
-      taxaMortPorMes: Object.fromEntries(Object.keys(totPorMes).map(k=>[k, pct(mortPorMes[k]||0, totPorMes[k])]))
+      taxaMortPorMes: Object.fromEntries(Object.keys(totPorMes).map(k=>[k, pct(mortPorMes[k]||0, totPorMes[k])])),
+      taxaVMIPorMes, taxaATBPorMes
     };
   }
 
@@ -9403,9 +9410,25 @@ function _coletarDadosRelatorio(periodo, secoes){
       const temATB=(e.atbs||[]).some(a=>a.nome&&a.nome.trim());
       return temDVA&&temVMI&&temATB;
     }).length;
+    // Score proxy de gravidade para o PDF
+    const scoreEvolsPDF = evPer.map(e => {
+      let s = 0;
+      if(_emVMI(e)) s+=2;
+      const temDVA = (e.dva && Object.values(e.dva).some(v=>v.checked)) || (e.dvaOutros||[]).length>0;
+      if(temDVA) s+=2;
+      const temATB = (e.atbs && e.atbs.length>0) || (e.atb && e.atb.length>0);
+      if(temATB) s+=1;
+      const glas=parseInt(e.glas); if(!isNaN(glas)&&glas<=8) s+=2;
+      const rass=parseInt(e.rass); if(!isNaN(rass)&&rass<=-3) s+=1;
+      const brad=parseInt(e.bradScore); if(!isNaN(brad)&&brad>=1&&brad<=11) s+=1;
+      return s;
+    });
+    const scoreProxyMed = scoreEvolsPDF.length ? +(scoreEvolsPDF.reduce((a,b)=>a+b,0)/scoreEvolsPDF.length).toFixed(1) : null;
+    const scoreProxyIdx = scoreProxyMed !== null ? Math.round(scoreProxyMed/9*100) : null;
     dados.secoes.cruzamentos = {
       totalAltas: altasPer.length,
       gravMax, taxaGravMax: pct(gravMax, evPer.length),
+      scoreProxyMed, scoreProxyIdx,
       mortPorOrigem: Object.entries(porOrigem).map(([origem,v])=>({origem, total:v.total, obitos:v.obitos, taxa: pct(v.obitos,v.total)})).sort((a,b)=>b.taxa-a.taxa)
     };
   }
@@ -9905,9 +9928,17 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
       linha('Média de admissões/mês', s.mediaAdmMes);
       if(s.admPorMes && Object.keys(s.admPorMes).length){
         y += 2;
-        tabela(['Mês','Adm','Mortalidade (%)'],
-          s.meses.map(m=>[m, s.admPorMes[m]||0, s.taxaMortPorMes?.[m]??'–']),
-          [55,30,45]);
+        // Tabela expandida: Adm + Mortalidade + VMI% + ATB% por mês
+        const temTend = s.taxaVMIPorMes && Object.keys(s.taxaVMIPorMes).length > 0;
+        if(temTend){
+          tabela(['Mês','Adm','Mortalidade (%)','VMI (%)','ATB (%)'],
+            s.meses.map(m=>[m, s.admPorMes[m]||0, s.taxaMortPorMes?.[m]??'–', s.taxaVMIPorMes?.[m]??'–', s.taxaATBPorMes?.[m]??'–']),
+            [40,22,38,30,30]);
+        } else {
+          tabela(['Mês','Adm','Mortalidade (%)'],
+            s.meses.map(m=>[m, s.admPorMes[m]||0, s.taxaMortPorMes?.[m]??'–']),
+            [55,30,45]);
+        }
       }
     }
 
@@ -9928,6 +9959,9 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
       linha('Evoluções totais', s.totalEvolucoes);
       linha('Evoluções com VMI', s.diasVMI);
       linha('Taxa de VMI', s.taxaVMI, '%', true);
+      doc.setFontSize(7); doc.setTextColor(120,120,120);
+      doc.text(_trans('Taxa VMI = evoluções com VMI ÷ total de evoluções. Denominador corrigido (anterior: dias-paciente superestimava o valor).'), M, y, {maxWidth: W-2*M});
+      doc.setTextColor(0,0,0); y+=5;
       linha('FiO₂ médio', s.fio2Medio, '%');
       linha('PEEP médio', s.peepMedio, 'cmH₂O');
       linha('FR média', s.frMedia, 'ipm');
@@ -9994,6 +10028,9 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
         ['Oral',s.oral,pctN(s.oral)], ['NPT',s.npt,pctN(s.npt)],
         ['Jejum/Zero',s.jejum,pctN(s.jejum)]
       ],[70,25,25]);
+      doc.setFontSize(7); doc.setTextColor(120,120,120);
+      doc.text(_trans('Prevalências por evolução — não mutuamente exclusivas. A soma pode ultrapassar 100% (ex.: SNE + jejum na mesma evolução).'), M, y, {maxWidth: W-2*M});
+      doc.setTextColor(0,0,0); y+=5;
     }
 
     // ── NEUROLÓGICOS ─────────────────────────────────────────────────────────
@@ -10018,6 +10055,12 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
       secTitulo('Cruzamentos');
       linha('Total de altas analisadas', s.totalAltas);
       linha('Gravidade máxima (DVA+VMI+ATB)', s.gravMax); linha('Taxa gravidade máxima', s.taxaGravMax, '%', true);
+      if(s.scoreProxyMed !== null && s.scoreProxyMed !== undefined){
+        linha('Score proxy de gravidade (média)', `${s.scoreProxyMed}/9  (índice ${s.scoreProxyIdx}%)`);
+        doc.setFontSize(7); doc.setTextColor(120,120,120);
+        doc.text(_trans('Pontuação: VMI(+2) DVA(+2) ATB(+1) Glasgow≤8(+2) RASS≤-3(+1) Braden≤11(+1) — max 9 pts — sem APACHE/SAPS'), M, y, {maxWidth: W-2*M});
+        doc.setTextColor(0,0,0); y+=5;
+      }
       if(s.mortPorOrigem?.length){ y+=2; tabela(['Origem','Altas','Óbitos','Mortalidade (%)'],s.mortPorOrigem.map(o=>[o.origem,o.total,o.obitos,o.taxa??'–']),[65,20,20,30]); }
     }
 
