@@ -10076,7 +10076,14 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
     if(d.diagnosticos){ const s=d.diagnosticos;
       secTitulo('Diagnósticos / CID-10');
       linha('Total com CID registrado', s.totalComCID);
-      if(s.top10?.length){ y+=2; tabela(['CID','Frequência'],s.top10.map(({cid,n})=>[cid,n]),[60,30]); }
+      if(s.top10?.length){
+        y+=2;
+        tabela(
+          ['CID','Descrição','Freq.'],
+          s.top10.map(({cid,n})=>[cid, _cidNome(cid)||'–', n]),
+          [22, 120, 16]
+        );
+      }
     }
 
     // ── IRAS / BUNDLES ────────────────────────────────────────────────────────
