@@ -1222,15 +1222,15 @@
       <div style="display:flex;gap:10px;margin-bottom:9px;">
         <div style="flex:1;">
           <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">Tipo de curativo *</label>
-          <select id="disp-cur-tipo" style="width:100%;"></select>
+          <select id="disp-cur-tipo" style="width:100%;" onchange="_dispCurativoToggleTipo()"></select>
         </div>
         <div style="width:150px;">
-          <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">Data da troca *</label>
+          <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">Data de aplicação *</label>
           <input type="date" id="disp-cur-data" style="width:100%;">
         </div>
       </div>
 
-      <div style="margin-bottom:9px;">
+      <div id="disp-cur-motivo-wrap" style="margin-bottom:9px;">
         <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:600;margin-bottom:3px;">Motivo da troca *</label>
         <select id="disp-cur-motivo" style="width:100%;" onchange="_dispCurativoToggleMotivoOutro()"></select>
       </div>
@@ -1239,11 +1239,12 @@
       </div>
 
       <div style="border-top:1px solid var(--borda);margin:10px 0 9px;padding-top:9px;">
-        <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:700;margin-bottom:6px;">Avaliação do sítio de inserção</label>
+        <label style="display:block;font-size:.72rem;color:var(--muted);font-weight:700;margin-bottom:6px;">Avaliação do sítio de inserção *</label>
         <div style="display:flex;flex-direction:column;gap:5px;">
-          <label class="ri"><input type="checkbox" id="disp-cur-hiperemia" onchange="_dispCurativoToggleObs()"> Hiperemia</label>
-          <label class="ri"><input type="checkbox" id="disp-cur-secrecao" onchange="_dispCurativoToggleObs()"> Secreção purulenta</label>
-          <label class="ri"><input type="checkbox" id="disp-cur-dor" onchange="_dispCurativoToggleObs()"> Dor à palpação</label>
+          <label class="ri"><input type="checkbox" id="disp-cur-semalteracoes" onchange="_dispCurativoToggleSitio('sem')"> Sem alterações</label>
+          <label class="ri"><input type="checkbox" id="disp-cur-hiperemia" onchange="_dispCurativoToggleSitio()"> Hiperemia</label>
+          <label class="ri"><input type="checkbox" id="disp-cur-secrecao" onchange="_dispCurativoToggleSitio()"> Secreção purulenta</label>
+          <label class="ri"><input type="checkbox" id="disp-cur-dor" onchange="_dispCurativoToggleSitio()"> Dor à palpação</label>
         </div>
       </div>
       <div id="disp-cur-obs-wrap" style="display:none;">
