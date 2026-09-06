@@ -99,6 +99,9 @@ body{font-family:var(--fonte);background:var(--grad-bg);background-attachment:fi
 .leito-iras-btn:active{transform:scale(.97);}
 .leito-iras-btn--preenchido{background:#1a6b3a;color:#fff;border-color:#1a6b3a;}
 .leito-iras-btn--preenchido:hover{background:#145a30;color:#fff;}
+.btn-curativo{font-size:.68rem;padding:3px 9px;font-weight:700;font-family:var(--fonte);background:#e3f0ff;color:#0d47a1;border:1px solid #bbdefb;border-radius:7px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast),transform var(--t-fast);}
+.btn-curativo:hover{background:#0d47a1;color:white;border-color:#0d47a1;transform:translateY(-1px);}
+.btn-curativo:active{transform:scale(.97);}
 .leito-rx-hor-btn{display:block;width:calc(100% - 16px);margin:0 8px 8px;padding:5px 8px;font-size:.7rem;font-weight:600;background:#eaf5ee;color:#1a6b3a;border:1px solid rgba(26,107,58,.25);border-radius:7px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast),transform var(--t-fast);}
 .leito-rx-hor-btn:hover{background:#1a6b3a;color:white;transform:translateY(-1px);}
 .leito-rx-hor-btn:active{transform:scale(.97);}
