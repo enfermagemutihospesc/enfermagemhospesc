@@ -7193,6 +7193,11 @@ h+=`<div class="pr"><span class="pl">PULSEIRA</span><span class="pv">${d.pulseir
   const avpStr=d.avps&&d.avps.filter(a=>a.local).length?d.avps.filter(a=>a.local).map(a=>a.local+(a.data?' ('+fmtD(a.data)+')':'')).join(' | '):'–';
   h+=br('AVP',avpStr);
   h+=`<div class="pr"><span class="pl">AVC</span><span class="pv">${d.avc_l||'–'}${d.avc_d?' – '+fmtD(d.avc_d):''}</span><span class="pl" style="margin-left:1rem;">CAT. DIÁLISE</span><span class="pv">${d.dial_l||'–'}${d.dial_d?' – '+fmtD(d.dial_d):''}</span></div>`;
+  const curAVC = _curativoResumoParaImpressao(d.dispositivos, 'CVC');
+  const curCDL = _curativoResumoParaImpressao(d.dispositivos, 'DIALISE');
+  if(curAVC || curCDL){
+    h+=`<div class="pr"><span class="pl">CURATIVO AVC</span><span class="pv">${curAVC||'–'}</span><span class="pl" style="margin-left:1rem;">CURATIVO CDL</span><span class="pv">${curCDL||'–'}</span></div>`;
+  }
   h+=`<div class="pr"><span class="pl">SVD nº/Data</span><span class="pv">${d.svd_n||'–'} / ${fmtD(d.svd_d)}</span><span class="pl" style="margin-left:1rem;">SNE nº/Data</span><span class="pv">${d.sne_n||'–'} / ${fmtD(d.sne_d)}</span></div>`;
   h+=`<div class="pr"><span class="pl">TOT nº/Data</span><span class="pv">${d.tot_n||'–'} / ${fmtD(d.tot_d)}</span><span class="pl" style="margin-left:1rem;">TQT nº/Data</span><span class="pv">${d.tqt_n||'–'} / ${fmtD(d.tqt_d)}</span></div>`;
   h+=br('OUTROS DISP.',d.disp_o);
@@ -12373,14 +12378,13 @@ const DISP_LADOS = ['D','E','—'];
 const DISP_LUMENS = ['1 (mono)','2 (duplo)','3 (triplo)'];
 
 // ── CURATIVO DE CVC/CDL — tipos, limiares de troca e motivos ────────────────
-// Limiares em dias corridos desde a última troca registrada (curativoHistorico).
+// Limiares em dias corridos desde a APLICAÇÃO registrada (curativoHistorico).
 // Filme transparente: ANVISA/CCIH recomenda troca em até 7 dias, ou antes se
-// sujo/solto/úmido. Gaze+micropore: janela de 24h — com granularidade de dias,
-// isso vira "em dia" no dia da troca e "vencido" a partir do dia seguinte (sem
-// estágio intermediário de atenção, dado o intervalo curto).
+// sujo/solto/úmido — por isso pede motivo. Gaze+micropore: troca institucional
+// diária (protocolo interno), sempre "programada" — não pede motivo no modal.
 const CURATIVO_TIPOS = [
-  { v:'FILME',          l:'Filme transparente', limiteAmarelo:6, limiteVermelho:7 },
-  { v:'GAZE_MICROPORE', l:'Gaze + Micropore',   limiteAmarelo:1, limiteVermelho:1 },
+  { v:'FILME',          l:'Filme transparente', limiteAmarelo:6, limiteVermelho:7,  pedeMotivo:true  },
+  { v:'GAZE_MICROPORE', l:'Gaze + Micropore',   limiteAmarelo:1, limiteVermelho:1,  pedeMotivo:false },
 ];
 const CURATIVO_MOTIVOS = [
   { v:'PROGRAMADA',        l:'Troca programada' },
@@ -12402,22 +12406,23 @@ function _dispCurativoAtual(d){
 function _curativoStatusBadgeHTML(d){
   const atual = _dispCurativoAtual(d);
   if(!atual){
-    return `<span class="lb lb-warn" title="Nenhuma troca de curativo registrada neste dispositivo">🩹 sem registro de curativo</span>`;
+    return `<span class="lb lb-warn" title="Nenhuma aplicação de curativo registrada neste dispositivo">🩹 sem registro de curativo</span>`;
   }
   const def = _curativoDef(atual.tipo);
-  const dias = _diasDeInstalacao(atual.data);
+  const dias = _diasDeInstalacao(atual.dataAplicacao);
   if(!def || dias===null) return '';
   let cls = 'lb-ok', rotulo = 'em dia';
   if(dias>=def.limiteVermelho){ cls='lb-high'; rotulo='vencido'; }
   else if(dias>=def.limiteAmarelo){ cls='lb-warn'; rotulo='atenção'; }
   const diasStr = dias===0?'hoje':(dias===1?'1 dia':dias+' dias');
-  return `<span class="lb ${cls}" title="${_esc(def.l)} — última troca há ${diasStr}">🩹 ${_esc(def.l)} · ${diasStr} (${rotulo})</span>`;
+  return `<span class="lb ${cls}" title="${_esc(def.l)} — aplicado há ${diasStr}">🩹 ${_esc(def.l)} · aplicado há ${diasStr} (${rotulo})</span>`;
 }
 
 // Chip de alerta quando a última avaliação do sítio de inserção teve sinal positivo
+// ("Sem alterações" nunca gera chip — é justamente o resultado sem achado).
 function _curativoSitioAlertaHTML(d){
   const atual = _dispCurativoAtual(d);
-  if(!atual) return '';
+  if(!atual || atual.semAlteracoes) return '';
   const sinais = [
     atual.hiperemia && 'hiperemia',
     atual.secrecaoPurulenta && 'secreção purulenta',
@@ -12425,6 +12430,27 @@ function _curativoSitioAlertaHTML(d){
   ].filter(Boolean);
   if(!sinais.length) return '';
   return `<span class="lb lb-high" title="${_esc(atual.sitioObs||'Sinal registrado no sítio de inserção')}">⚠ sítio: ${sinais.join(', ')}</span>`;
+}
+
+// Resumo em texto do curativo mais recente de um dispositivo de tipo `tipoDispositivo`
+// ('CVC' ou 'DIALISE') dentre a lista de dispositivos — usado na impressão da evolução.
+function _curativoResumoParaImpressao(dispositivos, tipoDispositivo){
+  const dev = (dispositivos||[]).find(x=>x.tipo===tipoDispositivo && !x.dataRetirada);
+  if(!dev) return '';
+  const atual = _dispCurativoAtual(dev);
+  if(!atual) return 'sem registro de curativo';
+  const def = _curativoDef(atual.tipo);
+  const nomeTipo = def ? def.l : atual.tipo;
+  const motivoDef = CURATIVO_MOTIVOS.find(m=>m.v===atual.motivo);
+  const motivoTxt = atual.motivo==='OUTRO' ? (atual.motivoOutroTexto||'Outro') : (motivoDef ? motivoDef.l : '');
+  let sitioTxt;
+  if(atual.semAlteracoes){
+    sitioTxt = 'sítio sem alterações';
+  } else {
+    const sinais = [atual.hiperemia&&'hiperemia', atual.secrecaoPurulenta&&'secreção purulenta', atual.dorPalpacao&&'dor à palpação'].filter(Boolean);
+    sitioTxt = sinais.length ? ('sítio: '+sinais.join(', ')) : '';
+  }
+  return `${nomeTipo} – aplicado ${fmtD(atual.dataAplicacao)}${motivoTxt?' ('+motivoTxt+')':''}${sitioTxt?' – '+sitioTxt:''}`;
 }
 
 // Estado em memória dos dispositivos do formulário atual
@@ -12568,7 +12594,7 @@ function _dispRenderLista(){
     const curativoBadge = ehAcessoCentral ? _curativoStatusBadgeHTML(d) : '';
     const curativoAlerta = ehAcessoCentral ? _curativoSitioAlertaHTML(d) : '';
     const curativoBtn = ehAcessoCentral
-      ? `<button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;background:#e3f0ff;color:#0d47a1;border-color:#bbdefb;" onclick="_dispCurativoAbrir('${d.id}')">🩹 Curativo</button>`
+      ? `<button type="button" class="btn-curativo" onclick="_dispCurativoAbrir('${d.id}')">🩹 Curativo</button>`
       : '';
     return `
       <div class="disp-card" data-id="${d.id}" style="border:1.5px solid ${def.cor}55;border-left:4px solid ${def.cor};border-radius:9px;padding:8px 11px;margin-bottom:7px;background:#fff;">
@@ -12813,7 +12839,6 @@ let _dispCurativoId = null;
 function _dispCurativoAbrir(id){
   const d = _dispLista.find(x=>x.id===id); if(!d) return;
   _dispCurativoId = id;
-  const def = _dispDef(d.tipo);
   const anterior = _dispCurativoAtual(d);
   document.getElementById('disp-cur-desc').textContent =
     `${_dispRotulo(d)}${d.localizacao?(' — '+d.localizacao):''}`;
@@ -12826,18 +12851,21 @@ function _dispCurativoAbrir(id){
   selMotivo.value = '';
   document.getElementById('disp-cur-motivo-outro').value = '';
   document.getElementById('disp-cur-motivo-outro-wrap').style.display = 'none';
+  document.getElementById('disp-cur-semalteracoes').checked = false;
   document.getElementById('disp-cur-hiperemia').checked = false;
   document.getElementById('disp-cur-secrecao').checked = false;
   document.getElementById('disp-cur-dor').checked = false;
   document.getElementById('disp-cur-obs').value = '';
   document.getElementById('disp-cur-obs-wrap').style.display = 'none';
+  ['disp-cur-hiperemia','disp-cur-secrecao','disp-cur-dor'].forEach(id2=>document.getElementById(id2).disabled=false);
   if(anterior){
     document.getElementById('disp-cur-anterior').textContent =
-      `Última troca: ${fmtD(anterior.data)} (${_curativoDef(anterior.tipo)?.l||anterior.tipo})`;
+      `Última aplicação: ${fmtD(anterior.dataAplicacao)} (${_curativoDef(anterior.tipo)?.l||anterior.tipo})`;
     document.getElementById('disp-cur-anterior').style.display = 'block';
   } else {
     document.getElementById('disp-cur-anterior').style.display = 'none';
   }
+  _dispCurativoToggleTipo();
   document.getElementById('modal-disp-curativo').classList.add('show');
 }
 
@@ -12846,32 +12874,62 @@ function _dispCurativoFechar(){
   _dispCurativoId = null;
 }
 
+// Mostra/esconde o bloco de motivo conforme o tipo de curativo — gaze+micropore
+// é troca institucional diária (sempre "programada"), então não pede motivo.
+function _dispCurativoToggleTipo(){
+  const def = _curativoDef(gf('disp-cur-tipo'));
+  const mostra = !def || def.pedeMotivo;
+  document.getElementById('disp-cur-motivo-wrap').style.display = mostra ? 'block' : 'none';
+  if(!mostra){
+    document.getElementById('disp-cur-motivo').value = '';
+    document.getElementById('disp-cur-motivo-outro').value = '';
+    document.getElementById('disp-cur-motivo-outro-wrap').style.display = 'none';
+  }
+}
+
 // Mostra/esconde o campo de texto livre quando o motivo é "Outro"
 function _dispCurativoToggleMotivoOutro(){
   const sel = document.getElementById('disp-cur-motivo');
   document.getElementById('disp-cur-motivo-outro-wrap').style.display = (sel.value==='OUTRO') ? 'block' : 'none';
 }
 
-// Mostra/esconde a observação livre quando algum sinal do sítio é marcado
-function _dispCurativoToggleObs(){
-  const algum = ['disp-cur-hiperemia','disp-cur-secrecao','disp-cur-dor'].some(id=>document.getElementById(id).checked);
-  document.getElementById('disp-cur-obs-wrap').style.display = algum ? 'block' : 'none';
+// Avaliação do sítio: "Sem alterações" é mutuamente exclusivo com os achados —
+// marcar um desmarca (e no caso de "Sem alterações", desabilita) o outro grupo.
+function _dispCurativoToggleSitio(origem){
+  const semAlt = document.getElementById('disp-cur-semalteracoes');
+  const outrosIds = ['disp-cur-hiperemia','disp-cur-secrecao','disp-cur-dor'];
+  const outros = outrosIds.map(id=>document.getElementById(id));
+  if(origem==='sem'){
+    outros.forEach(el=>{ el.disabled = semAlt.checked; if(semAlt.checked) el.checked=false; });
+  } else {
+    if(outros.some(el=>el.checked)) semAlt.checked = false;
+  }
+  document.getElementById('disp-cur-obs-wrap').style.display = outros.some(el=>el.checked) ? 'block' : 'none';
 }
 
 function _dispCurativoSalvar(){
   const d = _dispLista.find(x=>x.id===_dispCurativoId); if(!d){ _dispCurativoFechar(); return; }
   const tipo = gf('disp-cur-tipo');
-  const data = gf('disp-cur-data');
-  const motivo = gf('disp-cur-motivo');
-  const motivoOutroTexto = gf('disp-cur-motivo-outro').trim();
-  if(!data){ toast('Informe a data da troca', true); return; }
-  if(!motivo){ toast('Selecione o motivo da troca', true); return; }
-  if(motivo==='OUTRO' && !motivoOutroTexto){ toast('Descreva o motivo da troca', true); return; }
+  const dataAplicacao = gf('disp-cur-data');
+  const def = _curativoDef(tipo);
+  if(!dataAplicacao){ toast('Informe a data de aplicação', true); return; }
+  let motivo = 'PROGRAMADA', motivoOutroTexto = '';
+  if(def && def.pedeMotivo){
+    motivo = gf('disp-cur-motivo');
+    motivoOutroTexto = gf('disp-cur-motivo-outro').trim();
+    if(!motivo){ toast('Selecione o motivo da troca', true); return; }
+    if(motivo==='OUTRO' && !motivoOutroTexto){ toast('Descreva o motivo da troca', true); return; }
+  }
+  const semAlteracoes = document.getElementById('disp-cur-semalteracoes').checked;
+  const hiperemia = document.getElementById('disp-cur-hiperemia').checked;
+  const secrecaoPurulenta = document.getElementById('disp-cur-secrecao').checked;
+  const dorPalpacao = document.getElementById('disp-cur-dor').checked;
+  if(!semAlteracoes && !hiperemia && !secrecaoPurulenta && !dorPalpacao){
+    toast('Avalie o sítio de inserção — marque "Sem alterações" ou o(s) achado(s)', true); return;
+  }
   const entrada = {
-    id: _dispNovoId(), data, tipo, motivo, motivoOutroTexto,
-    hiperemia: document.getElementById('disp-cur-hiperemia').checked,
-    secrecaoPurulenta: document.getElementById('disp-cur-secrecao').checked,
-    dorPalpacao: document.getElementById('disp-cur-dor').checked,
+    id: _dispNovoId(), dataAplicacao, tipo, motivo, motivoOutroTexto,
+    semAlteracoes, hiperemia, secrecaoPurulenta, dorPalpacao,
     sitioObs: gf('disp-cur-obs').trim(),
     autor: usuarioEmail, registradoEm: new Date().toISOString(),
   };
@@ -12894,7 +12952,7 @@ function _dispTemAlertaManutencaoCVC(){
       const atual = _dispCurativoAtual(d);
       if(!atual) return true;
       const def = _curativoDef(atual.tipo);
-      const dias = _diasDeInstalacao(atual.data);
+      const dias = _diasDeInstalacao(atual.dataAplicacao);
       return !!(def && dias!==null && dias>=def.limiteVermelho);
     });
 }
