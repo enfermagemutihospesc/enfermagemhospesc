@@ -12609,7 +12609,7 @@ function _dispRenderLista(){
           <span style="margin-left:auto;display:flex;gap:5px;">
             <button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;" onclick="_dispAbrirModal('${d.id}')">✎ Editar</button>
             ${curativoBtn}
-            <button type="button" class="btn-sec" style="font-size:.68rem;padding:3px 9px;background:#fff3cd;color:#856404;border-color:#ffeeba;" onclick="_dispRetirar('${d.id}')">↑ Retirar</button>
+            <button type="button" class="btn-retirar" onclick="_dispRetirar('${d.id}')">↑ Retirar</button>
             <button type="button" class="btn-rem" onclick="_dispRemover('${d.id}')">×</button>
           </span>
         </div>
