@@ -10744,8 +10744,22 @@ async function salvarIRAS(){
   };
 
   try {
-    await dbSet(chave, payload);
-    toast('✓ Checklist IRAS salvo');
+    const ok = await dbSet(chave, payload);
+    // dbSet grava no localStorage e SÓ DEPOIS tenta o Firestore, engolindo
+    // qualquer erro de rede internamente (retorna false, não lança). Se
+    // confiarmos apenas no re-fetch que renderLeitos() faz via dbGetMany, uma
+    // falha pontual do Firestore.set() faz o dbGetMany ler o valor ANTIGO do
+    // servidor e sobrescrever até o memCache local com dados desatualizados —
+    // o botão volta a aparecer "não preenchido" mesmo com o toast de sucesso
+    // e o localStorage corretos. Por isso atualizamos o memCache aqui, na
+    // hora, com o payload que acabamos de salvar (mesmo padrão já usado em
+    // dbSetLeito para o mesmo tipo de corrida).
+    if (typeof memCache === 'object') memCache[chave] = payload;
+    if (!ok) {
+      toast('⚠ Checklist salvo localmente, mas houve falha ao sincronizar com o servidor', true);
+    } else {
+      toast('✓ Checklist IRAS salvo');
+    }
     fecharIRAS();   // ← fecha automaticamente após salvar
     // Sem isto, o chip "BUNDLES IRAS" do card continuava com a cor antiga
     // (não preenchido) até a tela de leitos ser recarregada do zero — o
