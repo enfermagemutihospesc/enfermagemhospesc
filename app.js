@@ -482,11 +482,9 @@ async function dbSet(key, value) {
 
   if (!modoOffline && db) {
     try {
-      // Usa JSON.parse(json) em vez de `value` diretamente: garante que
-      // undefined, funções e protótipos não-plain sejam descartados antes
-      // de chegar ao Firestore (que rejeita com "invalid nested entity").
-      // O `json` já foi serializado acima para o localStorage, então não
-      // há custo extra — só um JSON.parse adicional.
+      // JSON.parse(json) garante que undefined, funções e protótipos não-plain
+      // sejam descartados antes de chegar ao Firestore (que rejeita com
+      // "Property value contains an invalid nested entity").
       const safeValue = JSON.parse(json);
       await db.collection('uti').doc(key).set({ value: safeValue, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
       return true;
@@ -10403,15 +10401,20 @@ async function abrirIRAS(leitoArg){
     const evChave = `uti_ev_${leitoArg}_${turno}_${dataAtual}`;
     let ev = await dbGet(evChave);
     let dataUsada = dataAtual;
+    // turnoUsado: turno da evolução encontrada (só para contexto dos bundles IRAS).
+    // IMPORTANTE: a chave do checklist IRAS sempre usa o turno ATUAL da sessão
+    // (`turno`), independente de qual turno tinha evolução — caso contrário o
+    // card da tela de leitos não encontra o registro ao buscar com o turno atual.
     let turnoUsado = turno;
 
     // Fallback: se não tem evolução do turno atual, busca a do outro turno do dia
+    // (apenas para ter o contexto clínico do paciente — dispositivos, VMI etc.)
     if(!ev){
       const outro = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
       ev = await dbGet(`uti_ev_${leitoArg}_${outro}_${dataAtual}`);
-      if(ev) turnoUsado = outro;
+      // turnoUsado permanece = turno (sessão atual) para a chave do checklist
     }
-    // Fallback adicional: ontem
+    // Fallback adicional: ontem (contexto clínico apenas)
     if(!ev){
       const ontemKey = ontem();
       ev = await dbGet(`uti_ev_${leitoArg}_${turno}_${ontemKey}`);
@@ -10422,7 +10425,8 @@ async function abrirIRAS(leitoArg){
     const leitos = await leitosData();
     const lInfo = leitos[leitoArg] || {};
 
-    // Monta o objeto d com os campos que abrirIRAS/IRAS_BUNDLES precisam
+    // Monta o objeto d com os campos que abrirIRAS/IRAS_BUNDLES precisam.
+    // Turno fixado no turno atual da sessão para garantir chave correta.
     if(ev){
       d = { ...ev, leito: leitoArg, turno: turnoUsado, data: dataUsada,
             pac: ev.pac || lInfo.pac || '' };
