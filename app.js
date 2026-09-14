@@ -451,7 +451,7 @@ async function dbSetLeito(leito, dadosLeito) {
           const ld = await leitosData();
           ld[leito] = dadosLeito;
           await db.collection('uti').doc('uti_leitos').set(
-            { value: ld, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+            { value: JSON.parse(JSON.stringify(ld)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
           );
           return true;
         } catch(e2) { console.warn('dbSetLeito: Firestore set fallback:', e2); return false; }
@@ -482,7 +482,13 @@ async function dbSet(key, value) {
 
   if (!modoOffline && db) {
     try {
-      await db.collection('uti').doc(key).set({ value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      // Usa JSON.parse(json) em vez de `value` diretamente: garante que
+      // undefined, funções e protótipos não-plain sejam descartados antes
+      // de chegar ao Firestore (que rejeita com "invalid nested entity").
+      // O `json` já foi serializado acima para o localStorage, então não
+      // há custo extra — só um JSON.parse adicional.
+      const safeValue = JSON.parse(json);
+      await db.collection('uti').doc(key).set({ value: safeValue, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
       return true;
     } catch(e) { console.warn('Firestore set error:', e); return false; }
   }
@@ -11551,7 +11557,7 @@ async function salvarChecklistSetorial() {
   // Tentar salvar no Firestore
   if (db && !modoOffline) {
     try {
-      await db.collection('checklist_setorial').doc(chave).set(registro);
+      await db.collection('checklist_setorial').doc(chave).set(JSON.parse(JSON.stringify(registro)));
       status.textContent = '✅ Salvo na nuvem' + sufixo;
       status.style.color = '#1a6b3a';
     } catch (e) {
