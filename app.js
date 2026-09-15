@@ -1926,55 +1926,6 @@ async function salvarNAS(leito){
   toast('✓ NAS Leito '+L+' salvo');
 }
 
-// Busca o NAS mais recente para um leito (usado pra herdar quando paciente
-// ainda não tem NAS do dia). Varre localStorage e Firestore, ordena por data
-// desc, e retorna o primeiro que bater com o mesmo paciente do leito.
-// Mantida para compatibilidade com chamadas externas (ex: salvarNAS).
-// A renderNAS já não a chama — usa dados em memória diretamente.
-async function _ultimoNASDoLeito(leito, pacienteAtual){
-  const chaves = new Set();
-  const prefixo = 'uti_nas_' + leito + '_';
-  const hj = dataDoTurno();
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith(prefixo)) chaves.add(k);
-  }
-  if (!modoOffline && db) {
-    try {
-      const snap = await db.collection('uti').where(firebase.firestore.FieldPath.documentId(), '>=', prefixo)
-                                             .where(firebase.firestore.FieldPath.documentId(), '<',  prefixo + '\uf8ff').get();
-      snap.forEach(doc => chaves.add(doc.id));
-    } catch(e) {
-      // fallback: varredura completa (comportamento original)
-      try {
-        const snap2 = await db.collection('uti').get();
-        snap2.forEach(doc => { if (doc.id.startsWith(prefixo)) chaves.add(doc.id); });
-      } catch(e2) { console.warn('Busca NAS anterior:', e2); }
-    }
-  }
-  const candidatos = [];
-  for (const chave of chaves) {
-    const partes = chave.split('_');
-    if (partes.length < 5) continue;
-    const dataChave = partes.slice(4).join('_');
-    if (dataChave >= hj) continue;
-    const turnoChave = partes[3];
-    candidatos.push({ chave, data: dataChave, turno: turnoChave });
-  }
-  candidatos.sort((a, b) => {
-    if (a.data !== b.data) return b.data.localeCompare(a.data);
-    return b.turno.localeCompare(a.turno);
-  });
-  const dataMap = candidatos.length ? await dbGetMany(candidatos.map(c=>c.chave)) : {};
-  for (const c of candidatos) {
-    const r = dataMap[c.chave];
-    if (r && r.respostas && (!pacienteAtual || !r.paciente || r.paciente === pacienteAtual)) {
-      return { ...r, data: c.data, turno: c.turno };
-    }
-  }
-  return null;
-}
-
 function _atualizarResumoNAS(){
   const resumo=document.getElementById('nas-resumo');
   if(!resumo) return;
@@ -2483,23 +2434,6 @@ async function _carregarDadosInd(){
   return _indCache;
 }
 
-// Lista todas as chaves com um prefixo (Firestore + localStorage fallback).
-// Ainda usada em outros contextos; internamente evita dupla varredura se possível.
-async function _listarChaves(prefixo){
-  const chaves = new Set();
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith(prefixo)) chaves.add(k);
-  }
-  if (!modoOffline && db) {
-    try {
-      const snap = await db.collection('uti').get();
-      snap.forEach(doc => { if (doc.id.startsWith(prefixo)) chaves.add(doc.id); });
-    } catch(e) { console.warn('Lista chaves:', e); }
-  }
-  return Array.from(chaves);
-}
-
 // Helper: transforma "YYYY-MM-DD" em Date local
 function _dataLocal(s){
   if (!s) return null;
@@ -2525,11 +2459,6 @@ function _pct(num, den, casas=1){
   if (!den || den===0) return '0%';
   return (num*100/den).toFixed(casas) + '%';
 }
-function _num(v, casas=0){
-  if (v==null || isNaN(v)) return '–';
-  return Number(v).toFixed(casas);
-}
-
 // Renderiza um card compacto com valor + legenda e botão de ficha
 function _cardInd(label, valor, sub='', cls='', fichaId=''){
   const btn = fichaId ? `<button class="ind-info-btn" onclick="abrirFichaIndicador('${fichaId}')" title="Sobre este indicador">ℹ️</button>` : '';
@@ -3611,16 +3540,6 @@ function _indSaida(periodo){
 
 // ── RELATÓRIO: ALTAS PARA ENFERMARIA (lista paciente a paciente) ────────────
 let _relEnfTextoAtual = '';
-
-function _diasEntre(dataIni, dataFim){
-  if(!dataIni || !dataFim) return null;
-  try{
-    const a = new Date(dataIni+'T00:00:00');
-    const b = new Date(dataFim+'T00:00:00');
-    const dias = Math.round((b-a)/86400000);
-    return dias >= 0 ? dias : null;
-  }catch(e){ return null; }
-}
 
 function abrirRelatorioAltaEnfermaria(){
   const periodo = _indPeriodo();
@@ -6207,13 +6126,6 @@ function dvaStr(data){ if(!data) return '–'; const res=Object.entries(data).fi
 // ── RETIRADA DE DISPOSITIVO ────────────────────────────────────────────────────
 // Registra a data de retirada no banco (uti_disp_retirados) e limpa os campos.
 // Esse log servirá depois para calcular taxas de utilização diária.
-async function retirarDispositivo_REMOVIDA_DUPLICADA__nao_usar(tipo, idLocal, idData){
-  // Esta era uma versão antiga, sobrescrita pela versão nova com 5 parâmetros
-  // Mantida apenas para histórico, não é mais chamada de lugar nenhum.
-  return null;
-}
-// ──────────────────────────────────────────────────────────────────────────────
-
 function addOutraInfusao(cid,nome='',val=''){
   const lista=document.getElementById(cid);
   const row=document.createElement('div');
@@ -6253,55 +6165,6 @@ function _diasDeInstalacao(dataStr){
   if(!dataStr) return null;
   const [y,m,d] = dataStr.split('-').map(Number);
   return Math.floor((new Date() - new Date(y, m-1, d)) / 86400000);
-}
-
-// ── AVP – adicionar linha com dias + alerta se >3 dias ───────────────────────
-function addAVP(local='', data=''){
-  const lista = document.getElementById('avp-lista');
-  const row = document.createElement('div');
-  row.className = 'dyn-row';
-  row.style.cssText = 'flex-wrap:wrap;gap:4px;align-items:center;';
-  const diasStr = data ? (() => {
-    const d = _diasDeInstalacao(data);
-    return d !== null ? d+(d===1?' dia':' dias') : '';
-  })() : '';
-  const aviso = data && _diasDeInstalacao(data) > 3
-    ? `<span style="font-size:.7rem;background:#ffeeba;color:#856404;padding:2px 7px;border-radius:10px;font-weight:700;">⚠ Trocar hoje!</span>`
-    : '';
-  row.innerHTML = `
-    <input type="text" placeholder="Local (ex: ant. cubital D)" value="${(local||'').toUpperCase()}" style="flex:1;min-width:120px;">
-    <input type="date" value="${data}" style="max-width:140px;flex:none;" onchange="_atualizarDiasAVP(this)">
-    <input type="text" readonly style="max-width:72px;flex:none;background:#f0f4fa;color:var(--azul);font-weight:600;font-size:.76rem;text-align:center;" value="${diasStr}" placeholder="dias">
-    ${aviso}
-    <button class="btn btn-sec btn-sm" style="font-size:.7rem;padding:3px 9px;background:#fff3cd;color:#856404;border:1px solid #ffeeba;" onclick="trocarAVP(this)">↻ Trocar</button>
-    <button class="btn-rem" onclick="this.closest('.dyn-row').remove()">×</button>`;
-  lista.appendChild(row);
-  _ativarCaixaAlta();
-}
-function _atualizarDiasAVP(inputDate){
-  const row = inputDate.closest('.dyn-row');
-  const diasEl = row.querySelectorAll('input')[2];
-  const data = inputDate.value;
-  if(!data){ diasEl.value=''; return; }
-  const dias = _diasDeInstalacao(data);
-  diasEl.value = dias + (dias===1?' dia':' dias');
-  // Aviso de troca
-  let aviso = row.querySelector('.avp-aviso');
-  if(dias > 3){
-    if(!aviso){
-      aviso = document.createElement('span');
-      aviso.className = 'avp-aviso';
-      aviso.style.cssText = 'font-size:.7rem;background:#ffeeba;color:#856404;padding:2px 7px;border-radius:10px;font-weight:700;';
-      row.insertBefore(aviso, row.lastElementChild);
-    }
-    aviso.textContent = '⚠ Trocar hoje!';
-  } else if(aviso) { aviso.remove(); }
-}
-function getAVPs(){
-  return Array.from(document.getElementById('avp-lista').querySelectorAll('.dyn-row')).map(r=>{
-    const ins = r.querySelectorAll('input');
-    return { local: ins[0].value, data: ins[1].value };
-  });
 }
 
 // ── ATB – dias de uso calculado ───────────────────────────────────────────────
@@ -6380,19 +6243,6 @@ function trocarDispositivo(tipo, idLocal, idData){
     _atualizarDiasDisp(idData, 'dias-' + idLocal.replace('f-','').replace('-l','').replace('-n','').replace('-n2',''));
     toast('✓ '+tipo+' trocado – instalação registrada em '+novaData.split('-').reverse().join('/'));
   }, gf(idLocal));
-}
-
-// Troca de AVP: edita o row específico do AVP que foi clicado
-function trocarAVP(btn){
-  const row = btn.closest('.dyn-row');
-  const ins = row.querySelectorAll('input');
-  const localAtual = ins[0].value;
-  _abrirModalTroca('AVP', (novoLocal, novaData) => {
-    if(novoLocal && novoLocal.trim()) ins[0].value = novoLocal.trim().toUpperCase();
-    ins[1].value = novaData;
-    _atualizarDiasAVP(ins[1]);
-    toast('✓ AVP trocado – nova punção em '+novaData.split('-').reverse().join('/'));
-  }, localAtual);
 }
 
 // Modal genérico de troca (local + data)
@@ -10396,12 +10246,6 @@ function _gerarPDFRelatorio(titulo, dados, narrativa, periodoRotulo){
   }
 }
 
-function _kpisParaPDF(sec, d){
-  // Mantido por compatibilidade com chamadas legadas – retorna array vazio pois
-  // _gerarPDFRelatorio agora renderiza cada seção diretamente.
-  return [];
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // CHECKLIST IRAS – CCIH UTI
 // ════════════════════════════════════════════════════════════════════════════
@@ -13234,7 +13078,7 @@ function _dispCurativoSalvar(){
     : '✓ Curativo registrado');
 }
 
-// Consulta pública (ex.: gatilho do módulo SAE) — verdadeiro se há CVC/CDL ativo
+// Verdadeiro se há CVC/CDL ativo
 // sem curativo registrado ou com curativo vencido pelo limiar do tipo em uso.
 function _dispTemAlertaManutencaoCVC(){
   return _dispLista
