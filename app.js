@@ -483,11 +483,9 @@ async function dbSet(key, value) {
 
   if (!modoOffline && db) {
     try {
-      // JSON.parse(json) sanitiza o value (remove undefined, funções e objetos
-      // não-plain que o Firestore rejeita com "invalid nested entity").
-      // O serverTimestamp é adicionado FORA do parse — ele é um sentinel nativo
-      // do SDK e não pode passar por JSON.stringify/parse (viraria {} e seria
-      // rejeitado como "objeto não-plain" pelo próprio Firestore).
+      // JSON.parse(json) sanitiza o value removendo undefined, funções e objetos
+      // não-plain. O serverTimestamp fica FORA do parse — é um sentinel nativo
+      // do SDK que não pode passar por JSON.stringify/parse.
       const safeValue = JSON.parse(json);
       await db.collection('uti').doc(key).set({
         value:     safeValue,
@@ -10410,10 +10408,12 @@ async function abrirIRAS(leitoArg){
     let turnoUsado = turno;
 
     // Fallback: se não tem evolução do turno atual, busca a do outro turno do dia
+    // apenas para contexto clínico (dispositivos, VMI etc.).
+    // turnoUsado permanece = turno da sessão — garante chave IRAS correta.
     if(!ev){
       const outro = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
       ev = await dbGet(`uti_ev_${leitoArg}_${outro}_${dataAtual}`);
-      // NÃO altera turnoUsado — chave IRAS usa sempre o turno da sessão atual
+      // NÃO altera turnoUsado aqui
     }
     // Fallback adicional: ontem
     if(!ev){
@@ -10492,7 +10492,10 @@ async function abrirIRAS(leitoArg){
       }
     }
 
-    _irasRespostas = salvo ? { ...salvo } : {};
+    // USA salvo.respostas (só as respostas dos itens), não { ...salvo }.
+    // { ...salvo } espalharia o payload inteiro (scores, leito, turno etc.)
+    // dentro de _irasRespostas — criando aninhamento que o Firestore rejeita.
+    _irasRespostas = (salvo && salvo.respostas) ? { ...salvo.respostas } : {};
 
     // Auto-marca N/A nos bundles cujo dispositivo NÃO está presente na evolução,
     // mas só nos itens que ainda não tenham resposta (não sobrescreve registros existentes).
