@@ -7411,6 +7411,13 @@ async function _apsFetch(payload, fireAndForget = false) {
   catch(e) { throw new Error('Resposta inválida do servidor: ' + text.substring(0, 300)); }
 }
 
+// Wrapper para ações admin: anexa o ID Token do usuário logado em vez de
+// um secret fixo no código. O backend (Apps Script) valida esse token.
+async function _apsFetchAdmin(payload, fireAndForget = false) {
+  const idToken = await auth.currentUser.getIdToken();
+  return _apsFetch({ ...payload, idToken }, fireAndForget);
+}
+
 // ── GERAR PDF COM jsPDF E ENVIAR BASE64 AO APPS SCRIPT ───────────────────────
 async function gerarPDF(){
   const btn=document.getElementById('btn-pdf'), status=document.getElementById('pdf-status');
@@ -8371,10 +8378,9 @@ async function removerUsuarioPerfil(email) {
   if (!confirm(`Excluir definitivamente o usuário ${email}?\n\nA conta de login e o perfil serão removidos. Esta ação não pode ser desfeita.`)) return;
   try {
     // 1. Exclui a conta de autenticação no Firebase (backend com Service Account)
-    const r = await _apsFetch({
+    const r = await _apsFetchAdmin({
       action: 'excluir_usuario',
-      email,
-      appSecret: '097d5d127259d1dce16d65d6686a897639d735ec0caa55a2451f12499fd218c4'
+      email
     });
     if (r.status !== 'ok' && !r.naoExiste) {
       throw new Error(r.msg || 'Falha ao excluir conta de login.');
@@ -8406,11 +8412,10 @@ async function adicionarUsuario() {
   btn.disabled = true; btn.textContent = 'Criando...';
   try {
     // 1. Cria a conta de autenticação via Apps Script (não desloga o admin)
-    const r = await _apsFetch({
+    const r = await _apsFetchAdmin({
       action: 'criar_usuario',
       email,
-      senha,
-      appSecret: '097d5d127259d1dce16d65d6686a897639d735ec0caa55a2451f12499fd218c4'
+      senha
     });
     if (r.status !== 'ok' && !r.jaExiste) {
       throw new Error(r.msg || 'Falha ao criar conta de login.');
