@@ -3601,11 +3601,86 @@ function _indSaida(periodo){
   h += _cardInd('Alta para enfermaria', _pct(enf, total), `${enf} pacientes`, 'verde', 'saida_enfermaria');
   h += _cardInd('Transferências externas', _pct(transf, total), `${transf} pacientes`, '', 'saida_transf');
   h += '</div>';
+  h += `<div style="margin-top:2px;"><button class="btn btn-sec btn-sm" onclick="abrirRelatorioAltaEnfermaria()">📋 Relatório – Altas para enfermaria</button></div>`;
 
-  const tiposList = Object.entries(tipos).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
   h += _rankingBarras('Distribuição por tipo de alta', tiposList, null, 'saida_tipos');
   h += _rankingBarras('Destinos mais frequentes (transferências)', destList, 10, 'saida_destinos');
   return h;
+}
+
+// ── RELATÓRIO: ALTAS PARA ENFERMARIA (lista paciente a paciente) ────────────
+let _relEnfTextoAtual = '';
+
+function _diasEntre(dataIni, dataFim){
+  if(!dataIni || !dataFim) return null;
+  try{
+    const a = new Date(dataIni+'T00:00:00');
+    const b = new Date(dataFim+'T00:00:00');
+    const dias = Math.round((b-a)/86400000);
+    return dias >= 0 ? dias : null;
+  }catch(e){ return null; }
+}
+
+function abrirRelatorioAltaEnfermaria(){
+  const periodo = _indPeriodo();
+  if(!periodo){ toast('Informe o período personalizado', true); return; }
+  if(!_indCache){ toast('Atualize os indicadores primeiro.', true); return; }
+
+  const lista = _indCache.altas
+    .filter(a => a.tipoAlta === 'Alta para enfermaria' && _dentroPeriodo(a.dataAlta, periodo))
+    .sort((a,b) => (b.dataAlta+(b.horaAlta||'')).localeCompare(a.dataAlta+(a.horaAlta||'')));
+
+  document.getElementById('rel-enf-resumo').textContent =
+    lista.length + ' alta(s) para enfermaria · ' + periodo.rotulo;
+
+  const corpo = document.getElementById('rel-enf-corpo');
+  corpo.innerHTML = !lista.length
+    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);font-style:italic;">Nenhuma alta para enfermaria no período.</td></tr>'
+    : lista.map(a => {
+        const dias = _diasEntre(a.admUTI, a.dataAlta);
+        return `<tr>
+          <td>${pad(a.leito)}</td>
+          <td style="text-align:left;">${a.paciente || '–'}</td>
+          <td style="text-align:left;">${a.diagnostico || '–'}</td>
+          <td>${fmtD(a.admUTI)}</td>
+          <td>${fmtD(a.dataAlta)} ${a.horaAlta||''}</td>
+          <td>${dias!==null ? dias : '–'}</td>
+        </tr>`;
+      }).join('');
+
+  _relEnfTextoAtual = _relEnfTextoRelatorio(lista, periodo);
+  document.getElementById('modal-rel-enfermaria').classList.add('show');
+}
+
+function fecharRelatorioAltaEnfermaria(){
+  document.getElementById('modal-rel-enfermaria').classList.remove('show');
+}
+
+function _relEnfTextoRelatorio(lista, periodo){
+  const linhas = [];
+  linhas.push('RELATÓRIO – ALTAS PARA ENFERMARIA');
+  linhas.push('Período: ' + periodo.rotulo);
+  linhas.push('Total: ' + lista.length);
+  linhas.push('');
+  lista.forEach(a => {
+    const dias = _diasEntre(a.admUTI, a.dataAlta);
+    linhas.push('Leito ' + pad(a.leito) + ' – ' + (a.paciente || '–'));
+    linhas.push('  Diagnóstico: ' + (a.diagnostico || '–'));
+    linhas.push('  Adm. UTI: ' + fmtD(a.admUTI) + '   Alta: ' + fmtD(a.dataAlta) + ' ' + (a.horaAlta||'') +
+      (dias!==null ? '   (' + dias + ' dias de UTI)' : ''));
+    if(a.observacao) linhas.push('  Obs: ' + a.observacao);
+    linhas.push('');
+  });
+  return linhas.join('\n');
+}
+
+async function _relEnfCopiar(){
+  try{
+    await navigator.clipboard.writeText(_relEnfTextoAtual);
+    toast('✓ Relatório copiado!');
+  }catch(e){
+    toast('Não foi possível copiar automaticamente. Selecione e copie manualmente.', true);
+  }
 }
 
 // ── 3. DEMOGRÁFICOS ──────────────────────────────────────────────────────────
