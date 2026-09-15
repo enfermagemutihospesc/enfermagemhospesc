@@ -8,7 +8,6 @@
 <meta http-equiv="Expires" content="0">
 <title>UTI – Hospital dos Pescadores</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="alternate icon" href="favicon.ico">
 <link rel="apple-touch-icon" href="favicon-180.png">
 
 <!-- Firebase -->
@@ -170,6 +169,7 @@
       <button class="btn btn-sm" style="background:#00695c;color:white;" onclick="atualizarPassagemPlantao()">📋 Atualizar Passagem</button>
       <button class="btn btn-sm" style="background:#c62828;color:white;" onclick="abrirNotificacaoNSP()">🛡 Notificação NSP</button>
       <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirTurnoCompleto()">🖨 Imprimir turno</button>
+      <button class="btn btn-sm" style="background:#795548;color:white;" onclick="abrirParecerCurativo()">🩹 Parecer Curativos</button>
       <button class="btn btn-sm" style="background:#6c3483;color:white;" onclick="enviarTodasEvolucoesTurno()">☁ Enviar tudo ao Drive</button>
     </div>
   </div>
@@ -1017,6 +1017,217 @@
       <div style="display:flex;justify-content:flex-end;gap:6px;padding-top:4px;">
         <button class="btn btn-sec btn-sm" onclick="fecharRelatorioAltaEnfermaria()">Fechar</button>
         <button class="btn btn-pri btn-sm" onclick="_relEnfCopiar()">📋 Copiar texto</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- MODAL: PARECER DA COMISSÃO DE CURATIVOS -->
+<div class="overlay" id="modal-parecer-curativo">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-header">
+      <h3>🩹 Parecer – Comissão de Curativos</h3>
+      <button class="modal-close" onclick="fecharParecerCurativo()">×</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
+
+      <div class="secao">
+        <div class="secao-t">Identificação</div>
+        <div class="secao-c">
+          <div class="fl"><label>Nome</label><input type="text" id="pc-nome"></div>
+          <div class="dc">
+            <div class="fl"><label>Setor</label><input type="text" id="pc-setor" value="UTI"></div>
+            <div class="fl"><label>Leito</label><input type="text" id="pc-leito" readonly style="background:var(--cinza);"></div>
+          </div>
+          <div class="dc">
+            <div class="fl"><label>Admissão</label><input type="date" id="pc-admissao"></div>
+            <div class="fl"><label>DN</label><input type="date" id="pc-dn" onchange="_pcAtualizarIdade()"></div>
+          </div>
+          <div class="dc">
+            <div class="fl"><label>Idade</label><input type="text" id="pc-idade" readonly style="background:var(--cinza);"></div>
+            <div class="fl"><label>Sexo</label>
+              <select id="pc-sexo">
+                <option value="">–</option>
+                <option value="F">Feminino</option>
+                <option value="M">Masculino</option>
+              </select>
+            </div>
+          </div>
+          <div class="fl" style="align-items:flex-start;"><label style="margin-top:6px;">HD</label><textarea id="pc-hd" style="min-height:44px;"></textarea></div>
+          <div class="fl" style="align-items:flex-start;"><label style="margin-top:6px;">Comorbidades</label><textarea id="pc-comorbidades" style="min-height:44px;"></textarea></div>
+        </div>
+      </div>
+
+      <div class="secao">
+        <div class="secao-t">Avaliação inicial</div>
+        <div class="secao-c">
+          <div class="fl"><label>Admitido com lesão de pele?</label>
+            <div class="rg">
+              <label class="ri"><input type="radio" name="pc-lesaoAdmissao" value="SIM"> Sim</label>
+              <label class="ri"><input type="radio" name="pc-lesaoAdmissao" value="NÃO" checked> Não</label>
+            </div>
+          </div>
+          <div class="fl"><label>Quantas lesões?</label><input type="number" id="pc-qtdLesoes" min="0" style="max-width:100px;"></div>
+
+          <div class="fl"><label>Tem estomia?</label>
+            <div class="rg">
+              <label class="ri"><input type="radio" name="pc-temEstomia" value="SIM"> Sim</label>
+              <label class="ri"><input type="radio" name="pc-temEstomia" value="NÃO" checked> Não</label>
+            </div>
+          </div>
+          <div class="cg">
+            <label class="ci"><input type="checkbox" value="Traqueostomia (TOT)"> Traqueostomia (TOT)</label>
+            <label class="ci"><input type="checkbox" value="Gastrostomia"> Gastrostomia</label>
+            <label class="ci"><input type="checkbox" value="Colostomia ou Ileostomia/Jejunostomia"> Colostomia/Ileostomia/Jejunostomia</label>
+            <label class="ci"><input type="checkbox" value="Cistostomia/Urostomia"> Cistostomia/Urostomia</label>
+            <label class="ci"><input type="checkbox" value="Fístula"> Fístula</label>
+          </div>
+
+          <div class="fl"><label>Dispositivo médico?</label>
+            <div class="rg">
+              <label class="ri"><input type="radio" name="pc-temDispositivo" value="SIM"> Sim</label>
+              <label class="ri"><input type="radio" name="pc-temDispositivo" value="NÃO" checked> Não</label>
+            </div>
+          </div>
+          <div class="cg" id="pc-grupo-dispositivo">
+            <label class="ci"><input type="checkbox" value="Cateter venoso periférico"> Cateter venoso periférico</label>
+            <label class="ci"><input type="checkbox" value="Cateter venoso central"> Cateter venoso central</label>
+            <label class="ci"><input type="checkbox" value="Cateter vesical de demora"> Cateter vesical de demora</label>
+            <label class="ci"><input type="checkbox" value="Sonda nasoenteral"> Sonda nasoenteral</label>
+            <label class="ci"><input type="checkbox" value="Sonda nasogástrica"> Sonda nasogástrica</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="secao">
+        <div class="secao-t">Assinale o local da lesão / estomia / dispositivo (toque na imagem)</div>
+        <div class="secao-c">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:.76rem;color:var(--muted);font-weight:600;">Corpo (frente / costas)</label>
+            <div id="pc-wrap-corpo" style="position:relative;display:inline-block;max-width:100%;border:1px solid var(--borda);border-radius:8px;overflow:hidden;background:#fff;" onclick="_pcClickDiagrama(event,'corpo')">
+              <img src="parecer-corpo.jpg" style="display:block;width:100%;max-width:520px;pointer-events:none;user-select:none;">
+              <div id="pc-marcas-corpo" style="position:absolute;inset:0;"></div>
+            </div>
+            <button type="button" class="btn btn-sec btn-sm" style="align-self:flex-start;" onclick="_pcLimparMarcas('corpo')">🗑 Limpar marcações do corpo</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
+            <label style="font-size:.76rem;color:var(--muted);font-weight:600;">Pés (dorsal / plantar)</label>
+            <div id="pc-wrap-pes" style="position:relative;display:inline-block;max-width:100%;border:1px solid var(--borda);border-radius:8px;overflow:hidden;background:#fff;" onclick="_pcClickDiagrama(event,'pes')">
+              <img src="parecer-pes.jpg" style="display:block;width:100%;max-width:520px;pointer-events:none;user-select:none;">
+              <div id="pc-marcas-pes" style="position:absolute;inset:0;"></div>
+            </div>
+            <button type="button" class="btn btn-sec btn-sm" style="align-self:flex-start;" onclick="_pcLimparMarcas('pes')">🗑 Limpar marcações dos pés</button>
+          </div>
+          <p style="font-size:.7rem;color:var(--muted);margin:2px 0 0;">Toque na imagem pra marcar um X. Toque num X já marcado pra apagá-lo.</p>
+        </div>
+      </div>
+
+      <div class="secao">
+        <div class="secao-t">Avaliação da lesão</div>
+        <div class="secao-c">
+          <label style="font-size:.76rem;color:var(--muted);font-weight:600;">Etiologia</label>
+          <div class="cg">
+            <label class="ci"><input type="checkbox" value="Lesão por pressão"> Lesão por pressão</label>
+            <label class="ci"><input type="checkbox" value="Ferida por diabetes"> Ferida por diabetes</label>
+            <label class="ci"><input type="checkbox" value="Traumática"> Traumática</label>
+            <label class="ci"><input type="checkbox" value="Arterial"> Arterial</label>
+            <label class="ci"><input type="checkbox" value="Lesão por adesivo"> Lesão por adesivo</label>
+            <label class="ci"><input type="checkbox" value="Erisipela"> Erisipela</label>
+            <label class="ci"><input type="checkbox" value="Celulite"> Celulite</label>
+            <label class="ci"><input type="checkbox" value="Venosa"> Venosa</label>
+            <label class="ci"><input type="checkbox" value="Lesão por umidade"> Lesão por umidade</label>
+            <label class="ci"><input type="checkbox" value="Queimadura"> Queimadura</label>
+            <label class="ci"><input type="checkbox" value="Cirúrgica"> Cirúrgica</label>
+            <label class="ci"><input type="checkbox" value="Lesão por fricção"> Lesão por fricção</label>
+          </div>
+          <div class="fl"><label>Outras</label><input type="text" id="pc-etiologiaOutras"></div>
+          <div class="fl"><label>Tempo de existência</label><input type="text" id="pc-tempoLesao" placeholder="ex: 3 dias"></div>
+
+          <label style="font-size:.76rem;color:var(--muted);font-weight:600;margin-top:4px;">Área perilesional</label>
+          <div class="cg">
+            <label class="ci"><input type="checkbox" value="Descamativa"> Descamativa</label>
+            <label class="ci"><input type="checkbox" value="Edema"> Edema</label>
+            <label class="ci"><input type="checkbox" value="Calor"> Calor</label>
+            <label class="ci"><input type="checkbox" value="Hiperemia"> Hiperemia</label>
+            <label class="ci"><input type="checkbox" value="Flutuação"> Flutuação</label>
+            <label class="ci"><input type="checkbox" value="Crepitação"> Crepitação</label>
+            <label class="ci"><input type="checkbox" value="Escoriações"> Escoriações</label>
+            <label class="ci"><input type="checkbox" value="Macerada"> Macerada</label>
+          </div>
+
+          <div class="dc">
+            <div>
+              <label style="font-size:.76rem;color:var(--muted);font-weight:600;">Exsudato</label>
+              <div class="rg">
+                <label class="ri"><input type="radio" name="pc-exsudato" value="Seroso"> Seroso</label>
+                <label class="ri"><input type="radio" name="pc-exsudato" value="Sanguinolento"> Sanguinolento</label>
+                <label class="ri"><input type="radio" name="pc-exsudato" value="Serosanguinolento"> Serosanguinolento</label>
+                <label class="ri"><input type="radio" name="pc-exsudato" value="Piosanguinolento"> Piosanguinolento</label>
+                <label class="ri"><input type="radio" name="pc-exsudato" value="Ausente" checked> Ausente</label>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:.76rem;color:var(--muted);font-weight:600;">Volume do exsudato</label>
+              <div class="rg">
+                <label class="ri"><input type="radio" name="pc-volume" value="Abundante"> Abundante</label>
+                <label class="ri"><input type="radio" name="pc-volume" value="Médio"> Médio</label>
+                <label class="ri"><input type="radio" name="pc-volume" value="Pouco"> Pouco</label>
+                <label class="ri"><input type="radio" name="pc-volume" value="Ausente" checked> Ausente</label>
+              </div>
+            </div>
+          </div>
+
+          <label style="font-size:.76rem;color:var(--muted);font-weight:600;">Odor</label>
+          <div class="rg">
+            <label class="ri"><input type="radio" name="pc-odor" value="Característico"> Característico</label>
+            <label class="ri"><input type="radio" name="pc-odor" value="Desagradável"> Desagradável</label>
+            <label class="ri"><input type="radio" name="pc-odor" value="Fétido"> Fétido</label>
+            <label class="ri"><input type="radio" name="pc-odor" value="Pútrido"> Pútrido</label>
+            <label class="ri"><input type="radio" name="pc-odor" value="Ausente" checked> Ausente</label>
+          </div>
+
+          <label style="font-size:.76rem;color:var(--muted);font-weight:600;margin-top:4px;">Leito da lesão</label>
+          <div class="cg">
+            <label class="ci"><input type="checkbox" value="Derme"> Derme</label>
+            <label class="ci"><input type="checkbox" value="Granulação"> Granulação</label>
+            <label class="ci"><input type="checkbox" value="Hipergranulação"> Hipergranulação</label>
+            <label class="ci"><input type="checkbox" value="Tecidos profundos (músculo, tendão, osso)"> Tecidos profundos (músculo/tendão/osso)</label>
+            <label class="ci"><input type="checkbox" value="Necrose de liquefação ou esfacelo"> Necrose de liquefação/esfacelo</label>
+            <label class="ci"><input type="checkbox" value="Necrose de coagulação ou escara"> Necrose de coagulação/escara</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="secao">
+        <div class="secao-t">Conclusão</div>
+        <div class="secao-c">
+          <div class="fl"><label>Realizado curativo?</label>
+            <div class="rg">
+              <label class="ri"><input type="radio" name="pc-curativoRealizado" value="SIM" checked> Sim</label>
+              <label class="ri"><input type="radio" name="pc-curativoRealizado" value="NÃO"> Não</label>
+            </div>
+          </div>
+          <div class="fl" style="align-items:flex-start;"><label style="margin-top:6px;">Observações</label><textarea id="pc-obs" style="min-height:70px;"></textarea></div>
+          <div class="dc">
+            <div class="fl"><label>Data</label><input type="date" id="pc-data"></div>
+            <div class="fl"><label>Enfermeiro(a)</label><input type="text" id="pc-enfermeiro"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="secao">
+        <div class="secao-t">Fotos</div>
+        <div class="secao-c">
+          <input type="file" id="pc-fotos-input" accept="image/*" capture="environment" multiple style="display:none;" onchange="_pcAdicionarFotos(this.files)">
+          <button type="button" class="btn btn-sec btn-sm" style="align-self:flex-start;" onclick="document.getElementById('pc-fotos-input').click()">📷 Adicionar foto</button>
+          <div id="pc-fotos-preview" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>
+      </div>
+
+      <div id="pc-status" style="font-size:.78rem;color:var(--muted);min-height:1em;"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-sec btn-sm" onclick="fecharParecerCurativo()">Cancelar</button>
+        <button class="btn btn-pri btn-sm" id="pc-btn-gerar" onclick="_pcGerarPDF()">📄 Gerar PDF</button>
       </div>
     </div>
   </div>
