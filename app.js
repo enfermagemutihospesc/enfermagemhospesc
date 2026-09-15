@@ -3603,6 +3603,7 @@ function _indSaida(periodo){
   h += '</div>';
   h += `<div style="margin-top:2px;"><button class="btn btn-sec btn-sm" onclick="abrirRelatorioAltaEnfermaria()">📋 Relatório – Altas para enfermaria</button></div>`;
 
+  const tiposList = Object.entries(tipos).map(([label,valor])=>({label,valor})).sort((a,b)=>b.valor-a.valor);
   h += _rankingBarras('Distribuição por tipo de alta', tiposList, null, 'saida_tipos');
   h += _rankingBarras('Destinos mais frequentes (transferências)', destList, 10, 'saida_destinos');
   return h;
