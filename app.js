@@ -450,9 +450,10 @@ async function dbSetLeito(leito, dadosLeito) {
         try {
           const ld = await leitosData();
           ld[leito] = dadosLeito;
-          await db.collection('uti').doc('uti_leitos').set(
-            { value: JSON.parse(JSON.stringify(ld)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
-          );
+          await db.collection('uti').doc('uti_leitos').set({
+            value:     JSON.parse(JSON.stringify(ld)),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
           return true;
         } catch(e2) { console.warn('dbSetLeito: Firestore set fallback:', e2); return false; }
       }
@@ -482,11 +483,16 @@ async function dbSet(key, value) {
 
   if (!modoOffline && db) {
     try {
-      // JSON.parse(json) garante que undefined, funções e protótipos não-plain
-      // sejam descartados antes de chegar ao Firestore (que rejeita com
-      // "Property value contains an invalid nested entity").
+      // JSON.parse(json) sanitiza o value (remove undefined, funções e objetos
+      // não-plain que o Firestore rejeita com "invalid nested entity").
+      // O serverTimestamp é adicionado FORA do parse — ele é um sentinel nativo
+      // do SDK e não pode passar por JSON.stringify/parse (viraria {} e seria
+      // rejeitado como "objeto não-plain" pelo próprio Firestore).
       const safeValue = JSON.parse(json);
-      await db.collection('uti').doc(key).set({ value: safeValue, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      await db.collection('uti').doc(key).set({
+        value:     safeValue,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
       return true;
     } catch(e) { console.warn('Firestore set error:', e); return false; }
   }
@@ -10401,20 +10407,15 @@ async function abrirIRAS(leitoArg){
     const evChave = `uti_ev_${leitoArg}_${turno}_${dataAtual}`;
     let ev = await dbGet(evChave);
     let dataUsada = dataAtual;
-    // turnoUsado: turno da evolução encontrada (só para contexto dos bundles IRAS).
-    // IMPORTANTE: a chave do checklist IRAS sempre usa o turno ATUAL da sessão
-    // (`turno`), independente de qual turno tinha evolução — caso contrário o
-    // card da tela de leitos não encontra o registro ao buscar com o turno atual.
     let turnoUsado = turno;
 
     // Fallback: se não tem evolução do turno atual, busca a do outro turno do dia
-    // (apenas para ter o contexto clínico do paciente — dispositivos, VMI etc.)
     if(!ev){
       const outro = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
       ev = await dbGet(`uti_ev_${leitoArg}_${outro}_${dataAtual}`);
-      // turnoUsado permanece = turno (sessão atual) para a chave do checklist
+      // NÃO altera turnoUsado — chave IRAS usa sempre o turno da sessão atual
     }
-    // Fallback adicional: ontem (contexto clínico apenas)
+    // Fallback adicional: ontem
     if(!ev){
       const ontemKey = ontem();
       ev = await dbGet(`uti_ev_${leitoArg}_${turno}_${ontemKey}`);
@@ -10425,8 +10426,7 @@ async function abrirIRAS(leitoArg){
     const leitos = await leitosData();
     const lInfo = leitos[leitoArg] || {};
 
-    // Monta o objeto d com os campos que abrirIRAS/IRAS_BUNDLES precisam.
-    // Turno fixado no turno atual da sessão para garantir chave correta.
+    // Monta o objeto d com os campos que abrirIRAS/IRAS_BUNDLES precisam
     if(ev){
       d = { ...ev, leito: leitoArg, turno: turnoUsado, data: dataUsada,
             pac: ev.pac || lInfo.pac || '' };
