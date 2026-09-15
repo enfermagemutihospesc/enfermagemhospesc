@@ -1573,6 +1573,407 @@ async function _selecionarLeitosEChamar(titulo, corTema, callback){
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// PARECER – COMISSÃO DE CURATIVOS
+// ────────────────────────────────────────────────────────────────────────────
+// Botão na tela de leitos → escolhe 1 leito → preenche formulário → marca
+// lesões nos diagramas (corpo/pés) tocando na imagem → gera PDF (jsPDF puro,
+// sem html2canvas) → baixar / compartilhar (WhatsApp etc via Web Share) /
+// abrir para imprimir.
+// ════════════════════════════════════════════════════════════════════════════
+let _pcMarcas = { corpo: [], pes: [] };
+let _pcFotos = [];   // [{dataUrl,w,h}]
+let _pcLeitoAtual = null;
+
+async function abrirParecerCurativo(){
+  await _selecionarLeitosEChamar('🩹 Parecer de Curativos — escolha o leito', '#795548', async (leitosSelecionados) => {
+    let leito = leitosSelecionados[0];
+    if (leitosSelecionados.length > 1) {
+      toast('Considerando apenas o leito ' + pad(leito) + ' — gere um novo parecer para outro leito.');
+    }
+    await _pcAbrirParaLeito(leito);
+  });
+}
+
+async function _pcAbrirParaLeito(leito){
+  _pcLeitoAtual = leito;
+  _pcMarcas = { corpo: [], pes: [] };
+  _pcFotos = [];
+  _pcRenderMarcas('corpo');
+  _pcRenderMarcas('pes');
+  _pcRenderFotos();
+  document.getElementById('pc-status').textContent = '';
+
+  let leitos = {};
+  try { leitos = await leitosData(); } catch(e) {}
+  const l = leitos[leito] || {};
+
+  document.getElementById('pc-nome').value = l.pac || '';
+  document.getElementById('pc-setor').value = 'UTI';
+  document.getElementById('pc-leito').value = pad(leito);
+  document.getElementById('pc-admissao').value = l.admHosp || '';
+  document.getElementById('pc-dn').value = l.dn || '';
+  document.getElementById('pc-sexo').value = l.sexo || '';
+  document.getElementById('pc-hd').value = l.diag || '';
+  document.getElementById('pc-comorbidades').value = l.comor || '';
+  document.getElementById('pc-data').value = dataDoTurno();
+  document.getElementById('pc-enfermeiro').value = _assinaturaTexto(usuarioEmail);
+  document.getElementById('pc-qtdLesoes').value = '';
+  document.getElementById('pc-etiologiaOutras').value = '';
+  document.getElementById('pc-tempoLesao').value = '';
+  document.getElementById('pc-obs').value = '';
+  _pcAtualizarIdade();
+
+  // Reseta checkboxes/radios pra estado padrão
+  document.querySelectorAll('#modal-parecer-curativo input[type=checkbox]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#modal-parecer-curativo input[name=pc-lesaoAdmissao][value="NÃO"]').forEach(r=>r.checked=true);
+  document.querySelectorAll('#modal-parecer-curativo input[name=pc-temEstomia][value="NÃO"]').forEach(r=>r.checked=true);
+  document.querySelectorAll('#modal-parecer-curativo input[name=pc-temDispositivo][value="NÃO"]').forEach(r=>r.checked=true);
+  document.querySelectorAll('#modal-parecer-curativo input[name=pc-exsudato][value="Ausente"]').forEach(r=>r.checked=true);
+  document.querySelectorAll('#modal-parecer-curativo input[name=pc-volume][value="Ausente"]').forEach(r=>r.checked=true);
+  document.querySelectorAll('#modal-parecer-curativo input[name=pc-odor][value="Ausente"]').forEach(r=>r.checked=true);
+  document.querySelectorAll('#modal-parecer-curativo input[name=pc-curativoRealizado][value="SIM"]').forEach(r=>r.checked=true);
+
+  document.getElementById('modal-parecer-curativo').classList.add('show');
+}
+
+function fecharParecerCurativo(){
+  document.getElementById('modal-parecer-curativo').classList.remove('show');
+}
+
+function _pcAtualizarIdade(){
+  const dn = document.getElementById('pc-dn').value;
+  const idade = _calcIdade(dn);
+  document.getElementById('pc-idade').value = idade !== null ? idade + ' anos' : '';
+}
+
+// ── Marcação nos diagramas ───────────────────────────────────────────────────
+function _pcClickDiagrama(ev, tipo){
+  const wrap = document.getElementById('pc-wrap-' + tipo);
+  const rect = wrap.getBoundingClientRect();
+  const xPct = (ev.clientX - rect.left) / rect.width * 100;
+  const yPct = (ev.clientY - rect.top) / rect.height * 100;
+  _pcMarcas[tipo].push({ x: xPct, y: yPct });
+  _pcRenderMarcas(tipo);
+}
+
+function _pcRenderMarcas(tipo){
+  const camada = document.getElementById('pc-marcas-' + tipo);
+  if (!camada) return;
+  camada.innerHTML = _pcMarcas[tipo].map((m, i) => `
+    <span onclick="event.stopPropagation();_pcRemoverMarca('${tipo}',${i})" title="Toque para apagar"
+      style="position:absolute;left:${m.x}%;top:${m.y}%;transform:translate(-50%,-50%);
+      color:#e53935;font-weight:900;font-size:1.4rem;line-height:1;cursor:pointer;
+      text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;user-select:none;">✕</span>
+  `).join('');
+}
+
+function _pcRemoverMarca(tipo, i){
+  _pcMarcas[tipo].splice(i, 1);
+  _pcRenderMarcas(tipo);
+}
+
+function _pcLimparMarcas(tipo){
+  _pcMarcas[tipo] = [];
+  _pcRenderMarcas(tipo);
+}
+
+// Compõe o diagrama base + marcações num único canvas → dataURL pro PDF
+function _pcComporDiagrama(imgSrc, marcas){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      ctx.font = 'bold ' + Math.round(canvas.width * 0.045) + 'px sans-serif';
+      ctx.fillStyle = '#e53935';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      marcas.forEach(m => {
+        ctx.fillText('✕', m.x / 100 * canvas.width, m.y / 100 * canvas.height);
+      });
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.92), w: canvas.width, h: canvas.height });
+    };
+    img.onerror = () => reject(new Error('Falha ao carregar ' + imgSrc));
+    img.src = imgSrc;
+  });
+}
+
+// ── Fotos ────────────────────────────────────────────────────────────────────
+function _pcResizeImagem(file, maxW = 1000){
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const escala = Math.min(1, maxW / img.naturalWidth);
+        const w = Math.round(img.naturalWidth * escala), h = Math.round(img.naturalHeight * escala);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.82), w, h });
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    leitor.onerror = reject;
+    leitor.readAsDataURL(file);
+  });
+}
+
+async function _pcAdicionarFotos(fileList){
+  for (const file of Array.from(fileList)) {
+    try { _pcFotos.push(await _pcResizeImagem(file)); }
+    catch(e){ console.warn('Foto do parecer:', e); }
+  }
+  _pcRenderFotos();
+  document.getElementById('pc-fotos-input').value = '';
+}
+
+function _pcRenderFotos(){
+  document.getElementById('pc-fotos-preview').innerHTML = _pcFotos.map((f, i) => `
+    <div style="position:relative;width:80px;height:80px;">
+      <img src="${f.dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;border:1px solid var(--borda);">
+      <button type="button" onclick="_pcRemoverFoto(${i})"
+        style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#c0392b;color:#fff;border:none;font-size:.7rem;cursor:pointer;line-height:1;">×</button>
+    </div>
+  `).join('');
+}
+
+function _pcRemoverFoto(i){
+  _pcFotos.splice(i, 1);
+  _pcRenderFotos();
+}
+
+// ── Coleta de dados do formulário ────────────────────────────────────────────
+function _pcRadio(name){
+  const el = document.querySelector(`#modal-parecer-curativo input[name="${name}"]:checked`);
+  return el ? el.value : '';
+}
+
+// Lê os checkboxes marcados do N-ésimo grupo (.cg) dentro da seção cujo
+// título (.secao-t) bate com tituloSecao. Uma seção pode ter mais de um
+// grupo de checkboxes (ex.: "Avaliação inicial" tem estomia E dispositivo).
+function _pcListaCheckboxGrupo(tituloSecao, indiceGrid){
+  const secoes = Array.from(document.querySelectorAll('#modal-parecer-curativo .secao'));
+  const alvo = secoes.find(s => {
+    const t = s.querySelector('.secao-t');
+    return t && t.textContent.trim() === tituloSecao;
+  });
+  if (!alvo) return [];
+  const grid = alvo.querySelectorAll('.cg')[indiceGrid];
+  if (!grid) return [];
+  return Array.from(grid.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value);
+}
+
+function _pcColetarDados(){
+  return {
+    nome: document.getElementById('pc-nome').value.trim(),
+    setor: document.getElementById('pc-setor').value.trim(),
+    leito: document.getElementById('pc-leito').value.trim(),
+    admissao: document.getElementById('pc-admissao').value,
+    dn: document.getElementById('pc-dn').value,
+    idade: document.getElementById('pc-idade').value,
+    sexo: document.getElementById('pc-sexo').value,
+    hd: document.getElementById('pc-hd').value.trim(),
+    comorbidades: document.getElementById('pc-comorbidades').value.trim(),
+
+    lesaoAdmissao: _pcRadio('pc-lesaoAdmissao'),
+    qtdLesoes: document.getElementById('pc-qtdLesoes').value,
+    temEstomia: _pcRadio('pc-temEstomia'),
+    tiposEstomia: _pcListaCheckboxGrupo('Avaliação inicial', 0),
+    temDispositivo: _pcRadio('pc-temDispositivo'),
+    tiposDispositivo: _pcListaCheckboxGrupo('Avaliação inicial', 1),
+
+    etiologia: _pcListaCheckboxGrupo('Avaliação da lesão', 0),
+    etiologiaOutras: document.getElementById('pc-etiologiaOutras').value.trim(),
+    tempoLesao: document.getElementById('pc-tempoLesao').value.trim(),
+    areaPerilesional: _pcListaCheckboxGrupo('Avaliação da lesão', 1),
+    exsudato: _pcRadio('pc-exsudato'),
+    volume: _pcRadio('pc-volume'),
+    odor: _pcRadio('pc-odor'),
+    leitoLesao: _pcListaCheckboxGrupo('Avaliação da lesão', 2),
+
+    curativoRealizado: _pcRadio('pc-curativoRealizado'),
+    obs: document.getElementById('pc-obs').value.trim(),
+    data: document.getElementById('pc-data').value,
+    enfermeiro: document.getElementById('pc-enfermeiro').value.trim()
+  };
+}
+
+// ── Geração do PDF (jsPDF puro — texto vetorial + imagens compostas) ────────
+async function _pcGerarPDF(){
+  const btn = document.getElementById('pc-btn-gerar');
+  const status = document.getElementById('pc-status');
+  btn.disabled = true; btn.textContent = '⏳ Gerando...';
+  status.style.color = 'var(--muted)'; status.textContent = 'Montando diagramas e fotos...';
+
+  try {
+    const d = _pcColetarDados();
+
+    const [corpoImg, pesImg] = await Promise.all([
+      _pcComporDiagrama('parecer-corpo.jpg', _pcMarcas.corpo),
+      _pcComporDiagrama('parecer-pes.jpg', _pcMarcas.pes)
+    ]);
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const W = 210, H = 297, M = 14, L = W - 2*M;
+    const TOPO = 24, RODAPE = 12;
+    let y = TOPO;
+
+    const _trans = (s) => String(s ?? '–')
+      .replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"')
+      .replace(/\u2013/g,'-').replace(/\u2014/g,'-').replace(/\u2026/g,'...');
+
+    const desenharCabecalho = () => {
+      doc.setFillColor(121,85,72); doc.rect(0,0,W,18,'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12);
+      doc.text('PARECER – COMISSÃO DE CURATIVOS', M, 8);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+      doc.text(_trans(`Hospital dos Pescadores — Setor: ${d.setor} — Leito ${d.leito}`), M, 14);
+      doc.setTextColor(0,0,0);
+    };
+    const novaPagina = () => { doc.addPage(); desenharCabecalho(); y = TOPO; };
+    const garantirEspaco = (alt) => { if (y + alt > H - RODAPE) novaPagina(); };
+
+    const tituloSecao = (txt) => {
+      garantirEspaco(9);
+      doc.setFillColor(13,71,161); doc.rect(M, y, L, 6.5, 'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+      doc.text(_trans(txt), M+2, y+4.6);
+      doc.setTextColor(0,0,0); doc.setFont('helvetica','normal');
+      y += 9;
+    };
+    const campo = (label, valor) => {
+      const txt = label + ': ' + (valor && String(valor).trim() ? valor : '–');
+      const linhas = doc.splitTextToSize(_trans(txt), L);
+      garantirEspaco(linhas.length*4.4 + 1.5);
+      doc.setFontSize(9);
+      linhas.forEach(ln => { doc.text(ln, M, y); y += 4.4; });
+      y += 1.2;
+    };
+    const listaOuNenhum = (arr) => arr && arr.length ? arr.join(', ') : 'Nenhum';
+
+    desenharCabecalho();
+
+    tituloSecao('IDENTIFICAÇÃO');
+    campo('Nome', d.nome);
+    campo('Admissão / DN / Idade / Sexo',
+      `${fmtD(d.admissao)}   |   ${fmtD(d.dn)}   |   ${d.idade||'–'}   |   ${d.sexo==='M'?'Masculino':d.sexo==='F'?'Feminino':'–'}`);
+    campo('HD', d.hd);
+    campo('Comorbidades', d.comorbidades);
+
+    tituloSecao('AVALIAÇÃO INICIAL');
+    campo('Admitido com lesão de pele?', d.lesaoAdmissao + (d.qtdLesoes ? '  (Nº de lesões: ' + d.qtdLesoes + ')' : ''));
+    campo('Estomia', d.temEstomia + '  —  ' + listaOuNenhum(d.tiposEstomia));
+    campo('Dispositivo médico', d.temDispositivo + '  —  ' + listaOuNenhum(d.tiposDispositivo));
+
+    tituloSecao('LOCALIZAÇÃO DA LESÃO / ESTOMIA / DISPOSITIVO');
+    const wCorpo = 100, hCorpo = wCorpo * corpoImg.h / corpoImg.w;
+    garantirEspaco(hCorpo + 4);
+    doc.addImage(corpoImg.dataUrl, 'JPEG', M, y, wCorpo, hCorpo);
+    y += hCorpo + 4;
+    const wPes = 120, hPes = wPes * pesImg.h / pesImg.w;
+    garantirEspaco(hPes + 4);
+    doc.addImage(pesImg.dataUrl, 'JPEG', M, y, wPes, hPes);
+    y += hPes + 4;
+
+    tituloSecao('AVALIAÇÃO DA LESÃO');
+    campo('Etiologia', listaOuNenhum(d.etiologia) + (d.etiologiaOutras ? '  |  Outras: ' + d.etiologiaOutras : ''));
+    campo('Tempo de existência da lesão', d.tempoLesao);
+    campo('Área perilesional', listaOuNenhum(d.areaPerilesional));
+    campo('Exsudato / Volume / Odor', `${d.exsudato||'–'}   /   ${d.volume||'–'}   /   ${d.odor||'–'}`);
+    campo('Leito da lesão', listaOuNenhum(d.leitoLesao));
+
+    tituloSecao('CONCLUSÃO');
+    campo('Realizado curativo?', d.curativoRealizado);
+    campo('Observações', d.obs);
+    campo('Data', fmtD(d.data));
+    campo('Enfermeiro(a)', d.enfermeiro);
+
+    if (_pcFotos.length) {
+      tituloSecao('FOTOS');
+      const wFoto = 85;
+      let colX = M;
+      let maiorAlturaLinha = 0;
+      _pcFotos.forEach((f, i) => {
+        const hFoto = wFoto * f.h / f.w;
+        if (i % 2 === 0) {
+          garantirEspaco(hFoto + 4);
+          colX = M;
+          maiorAlturaLinha = hFoto;
+        } else {
+          colX = M + wFoto + 6;
+          maiorAlturaLinha = Math.max(maiorAlturaLinha, hFoto);
+        }
+        doc.addImage(f.dataUrl, 'JPEG', colX, y, wFoto, hFoto);
+        if (i % 2 === 1 || i === _pcFotos.length - 1) y += maiorAlturaLinha + 4;
+      });
+    }
+
+    const nomeArquivo = `Parecer_Curativo_Leito${d.leito}_${d.data||dataDoTurno()}.pdf`;
+    const blob = doc.output('blob');
+
+    status.style.color = 'var(--verde,#1a6b3a)';
+    status.innerHTML = '✓ PDF gerado.';
+    _pcMostrarAcoesResultado(blob, nomeArquivo);
+
+  } catch(e) {
+    console.error('Parecer curativo:', e);
+    status.style.color = 'var(--vermelho,#c0392b)';
+    status.textContent = 'Erro ao gerar PDF: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '📄 Gerar PDF';
+  }
+}
+
+// ── Ações pós-geração: baixar / compartilhar / abrir para imprimir ─────────
+function _pcMostrarAcoesResultado(blob, nomeArquivo){
+  const status = document.getElementById('pc-status');
+  const url = URL.createObjectURL(blob);
+  window._pcUltimoBlob = blob;
+  window._pcUltimoNome = nomeArquivo;
+
+  status.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+      <button type="button" class="btn btn-sec btn-sm" onclick="_pcBaixar()">📥 Baixar PDF</button>
+      <button type="button" class="btn btn-sec btn-sm" onclick="_pcCompartilhar()">📤 Compartilhar (WhatsApp)</button>
+      <button type="button" class="btn btn-sec btn-sm" onclick="_pcAbrirParaImprimir()">🖨 Abrir para imprimir</button>
+    </div>`;
+}
+
+function _pcBaixar(){
+  if (!window._pcUltimoBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(window._pcUltimoBlob);
+  a.download = window._pcUltimoNome || 'parecer_curativo.pdf';
+  a.click();
+}
+
+async function _pcCompartilhar(){
+  if (!window._pcUltimoBlob) return;
+  try {
+    const file = new File([window._pcUltimoBlob], window._pcUltimoNome, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Parecer – Comissão de Curativos' });
+    } else {
+      toast('Seu navegador não permite compartilhar arquivo direto — baixe o PDF e anexe manualmente no WhatsApp.', true);
+      _pcBaixar();
+    }
+  } catch(e) {
+    if (e.name !== 'AbortError') toast('Não foi possível compartilhar: ' + e.message, true);
+  }
+}
+
+function _pcAbrirParaImprimir(){
+  if (!window._pcUltimoBlob) return;
+  window.open(URL.createObjectURL(window._pcUltimoBlob), '_blank');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // EMISSÃO CONJUNTA: Anotações do Técnico + Mudança de Decúbito + Balanço Hídrico
 // ────────────────────────────────────────────────────────────────────────────
 // Um único botão abre um modal para escolher a DATA de referência dos três
