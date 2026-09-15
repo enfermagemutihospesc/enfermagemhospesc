@@ -152,10 +152,6 @@ body{font-family:var(--fonte);background:var(--grad-bg);background-attachment:fi
 .ind-card.laranja .ind-card-v{color:var(--laranja);}
 .ind-grupo{margin-top:10px;position:relative;}
 .ind-grupo-t{font-size:.8rem;font-weight:700;color:var(--azul);margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid var(--azul-cl);}
-.ind-lista{display:flex;flex-direction:column;gap:3px;}
-.ind-lista-row{display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:var(--cinza);border-radius:6px;font-size:.78rem;transition:background var(--t-fast);}
-.ind-lista-row:hover{background:var(--azul-xl);}
-.ind-lista-row .n{font-weight:700;color:var(--azul);}
 .ind-bar-wrap{display:flex;flex-direction:column;gap:5px;}
 .ind-bar{display:grid;grid-template-columns:120px 1fr 40px;gap:8px;align-items:center;font-size:.74rem;}
 .ind-bar-l{color:var(--texto);}
@@ -386,7 +382,6 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:8px 
 .iras-score-bar-fill.bar-nao-aderente{background:#dc3545;}
 .iras-score-bar-fill.bar-incompleto{background:#856404;}
 .iras-score-bar-fill.bar-na{background:#bbb;}
-.iras-bundle-score{font-size:.7rem;color:rgba(255,255,255,.85);font-weight:400;}
 @media(max-width:600px){#modal-iras{padding:0 !important;}#modal-iras .modal{border-radius:0 !important;max-width:100% !important;max-height:100vh !important;max-height:100dvh !important;height:100vh !important;height:100dvh !important;width:100% !important;}#modal-iras .modal-footer{flex-direction:column;align-items:stretch !important;gap:6px !important;padding-bottom:calc(8px + env(safe-area-inset-bottom, 10px)) !important;}#modal-iras .modal-footer>div:last-child{display:flex;gap:6px;justify-content:space-between;}#modal-iras .modal-footer button{flex:1;}.iras-bundle-header{font-size:.82rem;padding:10px 12px;}}
 @media print{body.printing-iras>*:not(#modal-iras){display:none !important;}body.printing-iras #modal-iras{display:flex !important;position:static;background:none;padding:0;}body.printing-iras .modal{box-shadow:none !important;max-width:100% !important;max-height:none !important;}body.printing-iras .modal-footer,body.printing-iras .modal-close{display:none !important;}body.printing-iras .iras-radio-btn{border-color:#999 !important;}}
  
@@ -407,18 +402,6 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:8px 
  
 /* ── CHECK-LIST SETORIAL ─────────────────────────────────────────────────── */
 #modal-checklist-setorial .modal{display:flex;flex-direction:column;overflow:hidden;}
-
-/* ── Tabela (desktop) ── */
-.cl-table{width:100%;border-collapse:collapse;font-size:.72rem;}
-.cl-table th{background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;padding:6px 8px;text-align:center;font-weight:700;border:1px solid #1565c0;white-space:nowrap;position:sticky;top:0;z-index:2;}
-.cl-table th:first-child{text-align:left;min-width:130px;background:linear-gradient(135deg,#0a3d6b,#0d47a1);}
-.cl-table th.armario-col{background:linear-gradient(135deg,#1a6b3a,#2d9e5f);border-color:#1a6b3a;}
-.cl-table td{border:1px solid #c8d6e5;padding:4px 6px;vertical-align:middle;text-align:center;background:white;}
-.cl-table td:first-child{text-align:left;font-weight:600;color:#0a3d6b;font-size:.69rem;background:#f0f4fa;padding:6px 10px;}
-.cl-table tr:nth-child(even) td{background:#f7faff;}
-.cl-table tr:nth-child(even) td:first-child{background:#e8eef8;}
-.cl-table tr:hover td{background:#e8f4fd!important;}
-.cl-table tr:hover td:first-child{background:#d4e8f5!important;}
 
 /* ── Input de quantidade (compartilhado tabela + card) ── */
 .cl-qty-wrap{display:flex;flex-direction:column;align-items:center;gap:1px;}
@@ -504,15 +487,6 @@ textarea{width:100%;resize:vertical;min-height:80px;line-height:1.6;padding:8px 
     height:100vh!important;
     height:100dvh!important;
     width:100%!important;
-  }
-}
-/* Print do checklist agora usa janela dedicada — fallback se pop-up bloqueado */
-@media print{
-  body.printing-checklist>*{display:none!important;}
-  body.printing-checklist::after{
-    display:block!important;
-    content:"Para imprimir o checklist, permita pop-ups neste site e clique em Imprimir novamente.";
-    font-size:14px;padding:40px;color:#333;text-align:center;
   }
 }
 
