@@ -2129,6 +2129,7 @@ async function executarLimpezaSeNecessario(){
 
   // Executa em background (não bloqueia o login)
   setTimeout(() => _executarLimpezaCore().catch(e => console.warn('Limpeza:', e)), 5000);
+  setTimeout(() => _arquivarLogsSeNecessario().catch(e => console.warn('Arquivamento:', e)), 8000);
 }
 
 async function _executarLimpezaCore(){
@@ -2223,6 +2224,116 @@ async function _backupJsonNoDrive(dados){
   }
 }
 
+// ── ARQUIVAMENTO ANUAL DOS LOGS FIXOS ────────────────────────────────────────
+// uti_admissao_log, uti_alta_log, uti_disp_log e uti_leito_audit_<leito> nunca
+// passavam pela limpeza acima — cada evento (admissão, alta, retirada de
+// dispositivo, sobrescrita de leito) só ACRESCENTAVA uma entrada, para sempre,
+// num único documento por chave. Diferente de uti_ev_/uti_nas_, esses logs
+// alimentam indicadores que olham para períodos longos (mês, ano, histórico),
+// então aqui NÃO resumimos nem apagamos nada — só MOVEMOS entradas com mais
+// de RETENCAO_DIAS para um documento de arquivo por ano
+// (ex.: uti_admissao_log_arquivo_2025), mantendo o documento "ao vivo"
+// pequeno e rápido de gravar a cada novo evento (via dbArrayPush), bem longe
+// do limite de 1 MiB por documento do Firestore. Como _carregarDadosInd() já
+// varre a coleção 'uti' inteira de uma vez, os arquivos entram automaticamente
+// nos indicadores assim que ensinamos essa função a reconhecer o padrão
+// "_arquivo_<ano>" e somar com o log vivo (ver mais abaixo).
+const LOGS_ARQUIVAVEIS = [
+  { chave: 'uti_admissao_log', campoData: 'registradoEm' },
+  { chave: 'uti_alta_log',     campoData: 'registradoEm' },
+  { chave: 'uti_disp_log',     campoData: 'registradoEm' },
+];
+
+// Extrai o ano (YYYY) de uma string ISO ou YYYY-MM-DD. Entradas sem data
+// reconhecível caem no balde "sem-data" — arquivadas, nunca descartadas.
+function _anoDe(str){
+  const m = String(str||'').match(/^(\d{4})-/);
+  return m ? m[1] : 'sem-data';
+}
+
+// Move as entradas antigas de UMA chave de log para arquivo(s) por ano.
+// Lê o array inteiro, separa o que fica (recente) do que vai pro arquivo
+// (antigo), funde com o que já existia no arquivo daquele ano (caso a rotina
+// já tenha rodado antes) e grava os dois documentos. Não há corrida real
+// aqui: essa função só roda dentro da janela diária já protegida pelo flag
+// 'uti_limpeza_ultima' em executarLimpezaSeNecessario.
+async function _arquivarLogFixo(chave, campoData, limite){
+  const atual = (await dbGet(chave)) || [];
+  if(!atual.length) return { movidos: 0 };
+
+  const manter = [];
+  const porAno = {};
+  for(const entry of atual){
+    const dataRef = entry && entry[campoData] ? String(entry[campoData]) : '';
+    if(dataRef && dataRef.slice(0,10) < limite){
+      const ano = _anoDe(dataRef);
+      (porAno[ano] || (porAno[ano] = [])).push(entry);
+    } else {
+      manter.push(entry); // sem data reconhecível ou dentro da retenção → fica no log vivo
+    }
+  }
+
+  const anos = Object.keys(porAno);
+  if(!anos.length) return { movidos: 0 };
+
+  let movidos = 0;
+  for(const ano of anos){
+    const chaveArquivo = `${chave}_arquivo_${ano}`;
+    const existente = (await dbGet(chaveArquivo)) || [];
+    await dbSet(chaveArquivo, existente.concat(porAno[ano]));
+    movidos += porAno[ano].length;
+  }
+
+  await dbSet(chave, manter);
+  return { movidos, restantes: manter.length };
+}
+
+async function _arquivarLogsSeNecessario(){
+  if(modoOffline || !db) return;
+  const limite = _dataLimiteRetencao();
+
+  // Descobre as chaves uti_leito_audit_<leito> existentes (o nº de leitos
+  // pode mudar com o tempo, então não dá pra ter uma lista fixa).
+  const auditKeys = [];
+  try {
+    const snap = await db.collection('uti').get();
+    snap.forEach(doc => { if(/^uti_leito_audit_\d+$/.test(doc.id)) auditKeys.push(doc.id); });
+  } catch(e){ console.warn('[Arquivamento] varredura de auditoria falhou:', e); return; }
+
+  const alvos = [...LOGS_ARQUIVAVEIS, ...auditKeys.map(k => ({ chave: k, campoData: 'em' }))];
+
+  // Backup de segurança do estado ATUAL de cada log antes de qualquer alteração
+  // (mesmo mecanismo já usado para uti_ev_/uti_nas_, via Apps Script → Drive).
+  const snapshotAntes = {};
+  for(const { chave } of alvos) snapshotAntes[chave] = (await dbGet(chave)) || [];
+  const temAlgo = Object.values(snapshotAntes).some(arr => arr.length > 0);
+  if(!temAlgo){ console.log('[Arquivamento] Nada a arquivar.'); return; }
+
+  const backupOk = await _backupJsonNoDrive({
+    geradoEm: new Date().toISOString(),
+    tipo: 'logs-fixos-pre-arquivamento',
+    limite,
+    dados: snapshotAntes
+  });
+  if(!backupOk){
+    console.warn('[Arquivamento] Backup falhou — adiando arquivamento dos logs para amanhã.');
+    return;
+  }
+
+  let totalMovidos = 0, falhas = 0;
+  for(const { chave, campoData } of alvos){
+    try {
+      const r = await _arquivarLogFixo(chave, campoData, limite);
+      totalMovidos += r.movidos || 0;
+    } catch(e){ falhas++; console.warn(`[Arquivamento] ${chave}:`, e); }
+  }
+
+  console.log(`[Arquivamento] ${totalMovidos} registro(s) movido(s) para arquivos anuais. Falhas: ${falhas}`);
+  if(totalMovidos > 0){
+    toast(`✓ Arquivamento automático: ${totalMovidos} registros antigos de logs movidos para arquivo anual (backup no Drive).`);
+  }
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 
 // depois busca todos os valores em paralelo via dbGetMany.
@@ -2275,6 +2386,8 @@ async function _carregarDadosInd(){
     const resumosEv = new Set();   // uti_ev_resumo_<dia>
     const resumosNas = new Set();  // uti_nas_resumo_<dia>
     const irasChaves = new Set();  // uti_iras_<leito>_<turno>_<data>
+    const arquivosLog = new Set(); // uti_admissao_log_arquivo_<ano>, uti_alta_log_arquivo_<ano>, uti_disp_log_arquivo_<ano>
+    const reArquivoLog = /^(uti_(?:admissao|alta|disp)_log)_arquivo_\d{4}$/;
 
     // localStorage — percorre uma vez
     for (let i = 0; i < localStorage.length; i++) {
@@ -2283,6 +2396,7 @@ async function _carregarDadosInd(){
       if (k.startsWith('uti_ev_resumo_'))  resumosEv.add(k);
       else if (k.startsWith('uti_nas_resumo_')) resumosNas.add(k);
       else if (k.startsWith('uti_iras_')) irasChaves.add(k);
+      else if (reArquivoLog.test(k)) arquivosLog.add(k);
       else if (k.startsWith('uti_ev_') || k.startsWith('uti_nas_')) dinamicas.add(k);
     }
 
@@ -2307,22 +2421,35 @@ async function _carregarDadosInd(){
           if (id.startsWith('uti_ev_resumo_'))  resumosEv.add(id);
           else if (id.startsWith('uti_nas_resumo_')) resumosNas.add(id);
           else if (id.startsWith('uti_iras_')) irasChaves.add(id);
+          else if (reArquivoLog.test(id)) arquivosLog.add(id);
           else if (id.startsWith('uti_ev_') || id.startsWith('uti_nas_')) dinamicas.add(id);
         });
       } catch(e) { console.warn('_carregarDadosInd: varredura:', e); }
     }
 
     // Só busca individualmente o que faltou (offline, ou snapshot indisponível)
-    const todasChaves = [...fixas, ...Array.from(dinamicas), ...Array.from(resumosEv), ...Array.from(resumosNas), ...Array.from(irasChaves)];
+    const todasChaves = [...fixas, ...Array.from(dinamicas), ...Array.from(resumosEv), ...Array.from(resumosNas), ...Array.from(irasChaves), ...Array.from(arquivosLog)];
     const faltantes = snapOk ? todasChaves.filter(k => !(k in dataMap)) : todasChaves;
     if (faltantes.length) {
       const extra = await dbGetMany(faltantes);
       Object.assign(dataMap, extra);
     }
 
-    const admissoes = dataMap['uti_admissao_log'] || [];
-    const altas     = dataMap['uti_alta_log']     || [];
-    const dispLog   = dataMap['uti_disp_log']     || [];
+    const admissoes = (dataMap['uti_admissao_log'] || []).slice();
+    const altas     = (dataMap['uti_alta_log']     || []).slice();
+    const dispLog   = (dataMap['uti_disp_log']     || []).slice();
+    // Soma as entradas arquivadas (anos anteriores) aos logs vivos — ver
+    // _arquivarLogsSeNecessario(): nada é perdido, só fica em documentos
+    // separados por ano para o log "ao vivo" nunca crescer sem limite.
+    for (const k of arquivosLog) {
+      const m = k.match(reArquivoLog);
+      const base = m && m[1];
+      const v = dataMap[k];
+      if (!base || !Array.isArray(v)) continue;
+      if (base === 'uti_admissao_log') admissoes.push(...v);
+      else if (base === 'uti_alta_log') altas.push(...v);
+      else if (base === 'uti_disp_log') dispLog.push(...v);
+    }
     const evolucoes = [], nasList = [], irasChecklists = [];
 
     // Evoluções/NAS recentes (completas)
