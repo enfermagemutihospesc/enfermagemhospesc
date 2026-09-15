@@ -450,10 +450,9 @@ async function dbSetLeito(leito, dadosLeito) {
         try {
           const ld = await leitosData();
           ld[leito] = dadosLeito;
-          await db.collection('uti').doc('uti_leitos').set({
-            value:     JSON.parse(JSON.stringify(ld)),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
+          await db.collection('uti').doc('uti_leitos').set(
+            { value: JSON.parse(JSON.stringify(ld)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+          );
           return true;
         } catch(e2) { console.warn('dbSetLeito: Firestore set fallback:', e2); return false; }
       }
@@ -483,9 +482,6 @@ async function dbSet(key, value) {
 
   if (!modoOffline && db) {
     try {
-      // JSON.parse(json) sanitiza o value removendo undefined, funções e objetos
-      // não-plain. O serverTimestamp fica FORA do parse — é um sentinel nativo
-      // do SDK que não pode passar por JSON.stringify/parse.
       const safeValue = JSON.parse(json);
       await db.collection('uti').doc(key).set({
         value:     safeValue,
@@ -10408,12 +10404,10 @@ async function abrirIRAS(leitoArg){
     let turnoUsado = turno;
 
     // Fallback: se não tem evolução do turno atual, busca a do outro turno do dia
-    // apenas para contexto clínico (dispositivos, VMI etc.).
-    // turnoUsado permanece = turno da sessão — garante chave IRAS correta.
     if(!ev){
       const outro = turno === 'DIURNO' ? 'NOTURNO' : 'DIURNO';
       ev = await dbGet(`uti_ev_${leitoArg}_${outro}_${dataAtual}`);
-      // NÃO altera turnoUsado aqui
+      // NÃO altera turnoUsado — chave IRAS usa sempre o turno da sessão atual
     }
     // Fallback adicional: ontem
     if(!ev){
@@ -10493,8 +10487,11 @@ async function abrirIRAS(leitoArg){
     }
 
     // USA salvo.respostas (só as respostas dos itens), não { ...salvo }.
-    // { ...salvo } espalharia o payload inteiro (scores, leito, turno etc.)
-    // dentro de _irasRespostas — criando aninhamento que o Firestore rejeita.
+    // { ...salvo } espalhava o payload INTEIRO (scores, leito, turno, pac,
+    // dispositivosPresentes, e o campo respostas aninhado) dentro de
+    // _irasRespostas. A cada salvamento o nível de aninhamento crescia,
+    // causando "Message too deep" (leito 09: 33 níveis) ou
+    // "invalid nested entity" (leito 02: 22 níveis) no Firestore.
     _irasRespostas = (salvo && salvo.respostas) ? { ...salvo.respostas } : {};
 
     // Auto-marca N/A nos bundles cujo dispositivo NÃO está presente na evolução,
