@@ -10492,7 +10492,28 @@ async function abrirIRAS(leitoArg){
     // _irasRespostas. A cada salvamento o nível de aninhamento crescia,
     // causando "Message too deep" (leito 09: 33 níveis) ou
     // "invalid nested entity" (leito 02: 22 níveis) no Firestore.
-    _irasRespostas = (salvo && salvo.respostas) ? { ...salvo.respostas } : {};
+    //
+    // CORREÇÃO ADICIONAL: { ...salvo.respostas } sozinho não bastava para
+    // checklists JÁ corrompidos por saves antigos — a chave residual
+    // "respostas" (apontando pra toda a cadeia aninhada anterior) continuava
+    // sendo copiada junto e nunca era removida, então o erro persistia em
+    // todo save seguinte desses leitos. Agora filtramos por allowlist: só
+    // entram chaves que são IDs de item reais (definidos em IRAS_BUNDLES) e
+    // cujo valor é string. Isso descarta qualquer lixo estrutural — não
+    // importa a profundidade em que ele esteja — e "cura" o documento no
+    // primeiro save seguinte, sem precisar editar nada manualmente no Firestore.
+    const _irasItemIdsValidos = new Set(
+      IRAS_BUNDLES.flatMap(b => b.itens.map(it => it.id))
+    );
+    _irasRespostas = {};
+    if (salvo && salvo.respostas && typeof salvo.respostas === 'object') {
+      Object.keys(salvo.respostas).forEach(k => {
+        const v = salvo.respostas[k];
+        if (_irasItemIdsValidos.has(k) && typeof v === 'string') {
+          _irasRespostas[k] = v;
+        }
+      });
+    }
 
     // Auto-marca N/A nos bundles cujo dispositivo NÃO está presente na evolução,
     // mas só nos itens que ainda não tenham resposta (não sobrescreve registros existentes).
@@ -10717,6 +10738,17 @@ async function salvarIRAS(){
   if(!_irasEvolucaoAtual){ toast('Erro: contexto de evolução não inicializado', true); return; }
   const d = _irasEvolucaoAtual;
   const chave = `uti_iras_${d.leito}_${d.turno}_${d.data}`;
+
+  // Rede de segurança contra o bug de aninhamento (ver comentário em abrirIRAS):
+  // garante que só chegam ao Firestore respostas cujo ID é um item real dos
+  // bundles, descartando qualquer chave estrutural que tenha vazado por
+  // algum outro caminho (ex.: herança de outro turno/dia).
+  const _irasItemIdsOk = new Set(IRAS_BUNDLES.flatMap(b => b.itens.map(it => it.id)));
+  Object.keys(_irasRespostas).forEach(k => {
+    if(!_irasItemIdsOk.has(k) || typeof _irasRespostas[k] !== 'string'){
+      delete _irasRespostas[k];
+    }
+  });
 
   // Calcula scores por bundle para os indicadores ─ formato all-or-nothing.
   // Mantém também os campos antigos (sim/respondidos) para retrocompatibilidade
