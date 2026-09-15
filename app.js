@@ -493,6 +493,45 @@ async function dbSet(key, value) {
   return false;
 }
 
+// ── Acréscimo atômico a um array salvo (logs: uti_admissao_log, uti_alta_log,
+// uti_disp_log, uti_leito_audit_<leito>) ────────────────────────────────────
+// O padrão antigo nesses logs era: dbGet (lê o array inteiro) → push em
+// memória → dbSet (regrava o array inteiro). Se duas sessões fazem isso quase
+// ao mesmo tempo (ex.: duas admissões em leitos diferentes), a que grava por
+// último sobrescreve o documento com uma cópia que não inclui o registro que
+// a outra sessão acabou de adicionar — o registro perdido some sem erro nem
+// aviso, contaminando silenciosamente os indicadores que dependem desses logs.
+// arrayUnion() faz esse acréscimo diretamente no servidor, sem precisar ler
+// nada antes, então não há corrida possível mesmo com sessões simultâneas.
+async function dbArrayPush(key, item) {
+  cacheInvalidate(key);
+
+  if (!modoOffline && db) {
+    try {
+      await db.collection('uti').doc(key).set({
+        value:     firebase.firestore.FieldValue.arrayUnion(item),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      // Mantém o localStorage coerente, best-effort (não bloqueia o retorno).
+      try {
+        const atual = JSON.parse(localStorage.getItem(key) || '[]');
+        atual.push(item);
+        localStorage.setItem(key, JSON.stringify(atual));
+      } catch(e) { console.warn('dbArrayPush: cache local:', e); }
+      return true;
+    } catch(e) { console.warn('dbArrayPush: Firestore:', e); }
+  }
+
+  // Offline ou falha do Firestore: cai pro padrão ler-modifica-grava local —
+  // sem risco de corrida real aqui, pois só há uma sessão sem rede por vez.
+  try {
+    const atual = JSON.parse(localStorage.getItem(key) || '[]');
+    atual.push(item);
+    localStorage.setItem(key, JSON.stringify(atual));
+  } catch(e) { console.warn('dbArrayPush: localStorage indisponível:', e); }
+  return false;
+}
+
 // ── Limpeza automática do localStorage, POR MÁQUINA ──────────────────────────
 // Diferente de executarLimpezaSeNecessario() (que compacta o Firestore uma vez
 // por dia, globalmente), esta roda no navegador local de CADA computador ao
@@ -5811,9 +5850,7 @@ async function salvarAdmissao() {
   if (leitoExistente.ocupado) {
     try {
       const auditKey = 'uti_leito_audit_' + modalLeito;
-      const audit = (await dbGet(auditKey)) || [];
-      audit.push({ estadoAnterior: leitoExistente, substituidoPor: gf('m-pac'), autor: usuarioEmail, em: new Date().toISOString() });
-      await dbSet(auditKey, audit);
+      await dbArrayPush(auditKey, { estadoAnterior: leitoExistente, substituidoPor: gf('m-pac'), autor: usuarioEmail, em: new Date().toISOString() });
     } catch(e){ console.warn('Auditoria leito:', e); }
   }
   d[modalLeito] = {
@@ -5912,8 +5949,7 @@ async function salvarAdmissao() {
   if (novaAdmissao) {
     try {
       const key = 'uti_admissao_log';
-      const log = (await dbGet(key)) || [];
-      log.push({
+      await dbArrayPush(key, {
         leito: modalLeito,
         paciente: gf('m-pac'),
         diagnostico: _mDiagsAdm().diag,
@@ -5927,7 +5963,6 @@ async function salvarAdmissao() {
         autor: usuarioEmail,
         registradoEm: new Date().toISOString()
       });
-      await dbSet(key, log);
     } catch(e){ console.warn('Log admissão:', e); }
   }
 
@@ -6121,13 +6156,11 @@ async function retirarDispositivo(tipo, idLocal, idData, idRet, idWrap){
   const pac = gf('f-pac') || '';
   try {
     const key = 'uti_disp_log';
-    const log = (await dbGet(key)) || [];
-    log.push({
+    await dbArrayPush(key, {
       leito: leitoAtual, paciente: pac, tipo, local_ou_numero: locOuNum,
       data_instalacao: dataInst, data_retirada: hojeStr,
       turno, autor: usuarioEmail, registradoEm: new Date().toISOString()
     });
-    await dbSet(key, log);
   } catch(e){ console.warn('Log retirada:', e); }
 
   setF(idLocal, ''); setF(idData, '');
@@ -7042,9 +7075,7 @@ async function gerarPreview() {
         // registra em auditoria mesmo quando confirmado, para rastreio
         try {
           const auditKey = 'uti_leito_audit_' + d.leito;
-          const audit = (await dbGet(auditKey)) || [];
-          audit.push({ estadoAnterior: ld[d.leito], substituidoPor: d.pac + ' (via evolução)', autor: usuarioEmail, em: new Date().toISOString() });
-          await dbSet(auditKey, audit);
+          await dbArrayPush(auditKey, { estadoAnterior: ld[d.leito], substituidoPor: d.pac + ' (via evolução)', autor: usuarioEmail, em: new Date().toISOString() });
         } catch(e2){ console.warn('Auditoria leito:', e2); }
       }
       ld[d.leito] = {
@@ -7745,8 +7776,7 @@ async function confirmarAltaFinal(){
     // Log de alta (para relatório de indicadores)
     try {
       const key = 'uti_alta_log';
-      const log = (await dbGet(key)) || [];
-      log.push({
+      await dbArrayPush(key, {
         leito: leitoParaAlta,
         paciente: pacAntes.pac || '',
         diagnostico: pacAntes.diag || '',
@@ -7764,7 +7794,6 @@ async function confirmarAltaFinal(){
         autor: usuarioEmail,
         registradoEm: new Date().toISOString()
       });
-      await dbSet(key, log);
     } catch(e){ console.warn('Log alta:', e); }
 
     // Libera o leito (zera TODOS os campos de admissão, incluindo cid/sexo/idade)
@@ -12872,14 +12901,12 @@ async function _dispRetirarConfirmar(){
   // Log de retirada (mesma chave usada pelo histórico existente)
   try {
     const key = 'uti_disp_log';
-    const log = (await dbGet(key)) || [];
-    log.push({
+    await dbArrayPush(key, {
       leito: leitoAtual, paciente: gf('f-pac')||'', tipo: _dispRotulo(d),
       local_ou_numero: d.localizacao || d.numero || d.descricao || '',
       data_instalacao: d.dataInsercao||'', data_retirada: d.dataRetirada,
       turno, autor: usuarioEmail, registradoEm:new Date().toISOString()
     });
-    await dbSet(key, log);
   } catch(e){ console.warn('Log retirada disp:', e); }
   _dispRenderLista();
   toast('✓ '+_dispRotulo(d)+' retirado em '+d.dataRetirada.split('-').reverse().join('/'));
