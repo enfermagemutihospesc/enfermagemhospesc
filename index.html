@@ -994,7 +994,30 @@
   </div>
 </div>
 
-<!-- MODAL DE FICHA DO INDICADOR -->
+<!-- MODAL RELATÓRIO: ALTAS PARA ENFERMARIA -->
+<div class="overlay" id="modal-rel-enfermaria">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header">
+      <h3>📋 Altas para Enfermaria</h3>
+      <button class="modal-close" onclick="fecharRelatorioAltaEnfermaria()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="rel-enf-resumo" style="font-size:.78rem;color:var(--muted);"></div>
+      <div style="overflow-x:auto;">
+        <table class="bt" style="min-width:640px;">
+          <thead>
+            <tr><th>Leito</th><th style="text-align:left;">Paciente</th><th style="text-align:left;">Diagnóstico</th><th>Adm. UTI</th><th>Alta</th><th>Dias UTI</th></tr>
+          </thead>
+          <tbody id="rel-enf-corpo"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:6px;padding-top:4px;">
+        <button class="btn btn-sec btn-sm" onclick="fecharRelatorioAltaEnfermaria()">Fechar</button>
+        <button class="btn btn-pri btn-sm" onclick="_relEnfCopiar()">📋 Copiar texto</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="modal-ficha">
   <div class="modal ficha-modal">
     <div class="modal-header">
