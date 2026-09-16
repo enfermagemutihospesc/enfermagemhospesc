@@ -1542,7 +1542,10 @@ function _slConfirmar(){
 // titulo: texto do cabeçalho do modal.
 // corTema: cor do cabeçalho e do botão confirmar (diferencia cada fluxo).
 // callback(leitosSelecionados): chamado ao confirmar, com array de números de leito.
-function abrirSeletorLeitos(ocupadosInfo, titulo, corTema, callback){
+// desmarcarPorPadrao: quando true, os checkboxes começam TODOS desmarcados
+// em vez de todos marcados (usado pelo Parecer de Curativos, que normalmente
+// emite para 1 leito por vez e não quer risco de gerar para o leito errado).
+function abrirSeletorLeitos(ocupadosInfo, titulo, corTema, callback, desmarcarPorPadrao){
   _garantirModalSeletorLeitos();
   const modal = document.getElementById('modal-seletor-leitos');
   const cor = corTema || '#00695c';
@@ -1550,9 +1553,10 @@ function abrirSeletorLeitos(ocupadosInfo, titulo, corTema, callback){
   document.getElementById('sl-header').style.background = cor;
   document.getElementById('sl-btn-confirmar').style.background = cor;
 
+  const marcadoAttr = desmarcarPorPadrao ? '' : 'checked';
   document.getElementById('sl-lista').innerHTML = ocupadosInfo.map(({leito, nome}) => `
     <label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
-      <input type="checkbox" value="${leito}" checked style="width:18px;height:18px;flex-shrink:0;">
+      <input type="checkbox" value="${leito}" ${marcadoAttr} style="width:18px;height:18px;flex-shrink:0;">
       <span><strong>Leito ${pad(leito)}</strong>${nome ? ' — '+nome : ''}</span>
     </label>
   `).join('');
@@ -1563,13 +1567,13 @@ function abrirSeletorLeitos(ocupadosInfo, titulo, corTema, callback){
 
 // Busca os leitos ocupados, e se houver algum, abre o seletor e chama callback
 // com os leitos escolhidos. Usado como atalho pelos fluxos de emissão.
-async function _selecionarLeitosEChamar(titulo, corTema, callback){
+async function _selecionarLeitosEChamar(titulo, corTema, callback, desmarcarPorPadrao){
   let leitos;
   try { leitos = await leitosData(); } catch(e){ toast('Erro ao ler leitos: '+e.message, true); return; }
   const ocupadosInfo = [];
   for(let n=1;n<=10;n++){ if(leitos[n] && leitos[n].ocupado) ocupadosInfo.push({leito:n, nome:leitos[n].pac||''}); }
   if(!ocupadosInfo.length){ toast('Nenhum leito ocupado.', true); return; }
-  abrirSeletorLeitos(ocupadosInfo, titulo, corTema, callback);
+  abrirSeletorLeitos(ocupadosInfo, titulo, corTema, callback, desmarcarPorPadrao);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1591,7 +1595,7 @@ async function abrirParecerCurativo(){
       toast('Considerando apenas o leito ' + pad(leito) + ' — gere um novo parecer para outro leito.');
     }
     await _pcAbrirParaLeito(leito);
-  });
+  }, true); // desmarcarPorPadrao: nesta tela os leitos vêm todos desmarcados
 }
 
 async function _pcAbrirParaLeito(leito){
@@ -1747,6 +1751,26 @@ function _pcRemoverFoto(i){
   _pcRenderFotos();
 }
 
+// Carrega uma imagem (logo) como dataURL JPEG para uso em doc.addImage().
+// Nunca rejeita: se o arquivo não existir/falhar, resolve null e o cabeçalho
+// do PDF simplesmente não desenha aquele logo (mesma filosofia do
+// onerror="this.style.display='none'" usado nos <img> de logo em outras telas).
+function _pcCarregarLogo(src){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); // fundo branco (logo pode ter transparência)
+      ctx.drawImage(img, 0, 0);
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.95), w: canvas.width, h: canvas.height });
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
 // ── Coleta de dados do formulário ────────────────────────────────────────────
 function _pcRadio(name){
   const el = document.querySelector(`#modal-parecer-curativo input[name="${name}"]:checked`);
@@ -1813,15 +1837,18 @@ async function _pcGerarPDF(){
   try {
     const d = _pcColetarDados();
 
-    const [corpoImg, pesImg] = await Promise.all([
+    const [corpoImg, pesImg, logoHospesc, logoPrefeitura] = await Promise.all([
       _pcComporDiagrama('parecer-corpo.jpg', _pcMarcas.corpo),
-      _pcComporDiagrama('parecer-pes.jpg', _pcMarcas.pes)
+      _pcComporDiagrama('parecer-pes.jpg', _pcMarcas.pes),
+      _pcCarregarLogo('logo.png?v=20260522g'),
+      _pcCarregarLogo('logo_prefeitura.jpg')
     ]);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
     const W = 210, H = 297, M = 14, L = W - 2*M;
-    const TOPO = 24, RODAPE = 12;
+    const FAIXA_LOGOS = (logoHospesc || logoPrefeitura) ? 16 : 0;
+    const TOPO = 24 + FAIXA_LOGOS, RODAPE = 12;
     let y = TOPO;
 
     const _trans = (s) => String(s ?? '–')
@@ -1829,11 +1856,28 @@ async function _pcGerarPDF(){
       .replace(/\u2013/g,'-').replace(/\u2014/g,'-').replace(/\u2026/g,'...');
 
     const desenharCabecalho = () => {
-      doc.setFillColor(121,85,72); doc.rect(0,0,W,18,'F');
+      // Faixa branca superior com os dois logos (Hospesc à esquerda, Prefeitura
+      // do Natal à direita) — só existe se pelo menos um logo carregou.
+      if (FAIXA_LOGOS) {
+        const hLogo = FAIXA_LOGOS - 4;
+        if (logoHospesc) {
+          const wLogo = hLogo * logoHospesc.w / logoHospesc.h;
+          doc.addImage(logoHospesc.dataUrl, 'JPEG', M, 2, wLogo, hLogo);
+        }
+        if (logoPrefeitura) {
+          const wLogo = hLogo * logoPrefeitura.w / logoPrefeitura.h;
+          doc.addImage(logoPrefeitura.dataUrl, 'JPEG', W - M - wLogo, 2, wLogo, hLogo);
+        }
+        doc.setTextColor(0,0,0); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+        doc.text('PREFEITURA MUNICIPAL DO NATAL', W/2, 8, { align: 'center' });
+        doc.setFont('helvetica','normal'); doc.setFontSize(8);
+        doc.text('HOSPITAL DOS PESCADORES', W/2, 12.5, { align: 'center' });
+      }
+      doc.setFillColor(121,85,72); doc.rect(0,FAIXA_LOGOS,W,18,'F');
       doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12);
-      doc.text('PARECER – COMISSÃO DE CURATIVOS', M, 8);
+      doc.text('PARECER – COMISSÃO DE CURATIVOS', M, FAIXA_LOGOS+8);
       doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-      doc.text(_trans(`Hospital dos Pescadores — Setor: ${d.setor} — Leito ${d.leito}`), M, 14);
+      doc.text(_trans(`Hospital dos Pescadores — Setor: ${d.setor} — Leito ${d.leito}`), M, FAIXA_LOGOS+14);
       doc.setTextColor(0,0,0);
     };
     const novaPagina = () => { doc.addPage(); desenharCabecalho(); y = TOPO; };
@@ -1942,7 +1986,45 @@ function _pcMostrarAcoesResultado(blob, nomeArquivo){
       <button type="button" class="btn btn-sec btn-sm" onclick="_pcBaixar()">📥 Baixar PDF</button>
       <button type="button" class="btn btn-sec btn-sm" onclick="_pcCompartilhar()">📤 Compartilhar (WhatsApp)</button>
       <button type="button" class="btn btn-sec btn-sm" onclick="_pcAbrirParaImprimir()">🖨 Abrir para imprimir</button>
-    </div>`;
+      <button type="button" class="btn btn-sec btn-sm" id="pc-btn-drive" onclick="_pcSalvarDrive()">☁ Enviar ao Drive</button>
+    </div>
+    <div id="pc-drive-status" style="margin-top:6px;font-size:.85rem;"></div>`;
+}
+
+// Envia o PDF já gerado ao Google Drive (mesma rota/convenção usada pelo envio
+// de evoluções em gerarPDF() — payload {titulo, arquivoBase64, pasta} no
+// Apps Script). Fica numa subpasta própria por leito/paciente para não
+// misturar com as evoluções; permite imprimir depois no PC sem depender do
+// celular que tirou as fotos.
+async function _pcSalvarDrive(){
+  if (!window._pcUltimoBlob) return;
+  const btn = document.getElementById('pc-btn-drive');
+  const st = document.getElementById('pc-drive-status');
+  btn.disabled = true; btn.textContent = '⏳ Enviando...';
+  if (st) { st.style.color = 'var(--muted)'; st.textContent = 'Enviando para o Drive...'; }
+  try {
+    const dataUri = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(window._pcUltimoBlob);
+    });
+    const base64 = dataUri.split(',')[1];
+    const d = _pcColetarDados();
+    const nomePaciente = (d.nome || '').trim();
+    const pastaNome = nomePaciente
+      ? `Parecer Curativo - Leito ${d.leito} - ${nomePaciente}`
+      : `Parecer Curativo - Leito ${d.leito} - Sem identificacao`;
+    const titulo = (window._pcUltimoNome || 'parecer_curativo.pdf').replace(/\.pdf$/i, '');
+    await _apsFetch({ titulo, arquivoBase64: base64, pasta: pastaNome }, true);
+    if (st) { st.style.color = 'var(--verde,#1a6b3a)'; st.textContent = `✓ Enviado ao Drive (pasta "${pastaNome}").`; }
+    toast('✓ PDF do parecer enviado ao Drive');
+  } catch(e) {
+    if (st) { st.style.color = 'var(--vermelho,#c0392b)'; st.textContent = 'Erro ao enviar ao Drive: ' + e.message; }
+    toast('Não foi possível enviar ao Drive: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = '☁ Enviar ao Drive';
+  }
 }
 
 function _pcBaixar(){
