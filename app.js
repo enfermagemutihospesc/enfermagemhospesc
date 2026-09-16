@@ -1847,115 +1847,266 @@ async function _pcGerarPDF(){
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
     const W = 210, H = 297, M = 14, L = W - 2*M;
-    const FAIXA_LOGOS = (logoHospesc || logoPrefeitura) ? 16 : 0;
-    const TOPO = 24 + FAIXA_LOGOS, RODAPE = 12;
+    // Cores do módulo (marrom = identidade visual do Parecer de Curativos no app)
+    const COR_MARCA = [121,85,72], COR_TXT_LABEL = [110,110,110], COR_TXT_VALOR = [25,25,25];
+    const COR_ZEBRA = [246,247,249], COR_BORDA = [225,225,228];
+    const HDR_TOPO = 15, HDR_BARRA = 17;
+    const TOPO = HDR_TOPO + HDR_BARRA + 7, RODAPE = 14;
     let y = TOPO;
+    let zebra = false; // listra alternada das linhas de campo — reiniciada a cada seção
 
     const _trans = (s) => String(s ?? '–')
       .replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"')
       .replace(/\u2013/g,'-').replace(/\u2014/g,'-').replace(/\u2026/g,'...');
 
+    // ── Cabeçalho institucional + barra do módulo (repetido em toda página) ──
     const desenharCabecalho = () => {
-      // Faixa branca superior com os dois logos (Hospesc à esquerda, Prefeitura
-      // do Natal à direita) — só existe se pelo menos um logo carregou.
-      if (FAIXA_LOGOS) {
-        const hLogo = FAIXA_LOGOS - 4;
-        if (logoHospesc) {
-          const wLogo = hLogo * logoHospesc.w / logoHospesc.h;
-          doc.addImage(logoHospesc.dataUrl, 'JPEG', M, 2, wLogo, hLogo);
-        }
-        if (logoPrefeitura) {
-          const wLogo = hLogo * logoPrefeitura.w / logoPrefeitura.h;
-          doc.addImage(logoPrefeitura.dataUrl, 'JPEG', W - M - wLogo, 2, wLogo, hLogo);
-        }
-        doc.setTextColor(0,0,0); doc.setFont('helvetica','bold'); doc.setFontSize(9);
-        doc.text('PREFEITURA MUNICIPAL DO NATAL', W/2, 8, { align: 'center' });
-        doc.setFont('helvetica','normal'); doc.setFontSize(8);
-        doc.text('HOSPITAL DOS PESCADORES', W/2, 12.5, { align: 'center' });
+      doc.setFillColor(255,255,255); doc.rect(0,0,W,HDR_TOPO,'F');
+      const hLogo = 10, yLogo = (HDR_TOPO - hLogo)/2;
+      if (logoHospesc) {
+        const wLogo = hLogo * logoHospesc.w / logoHospesc.h;
+        doc.addImage(logoHospesc.dataUrl, 'JPEG', M, yLogo, wLogo, hLogo);
       }
-      doc.setFillColor(121,85,72); doc.rect(0,FAIXA_LOGOS,W,18,'F');
-      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12);
-      doc.text('PARECER – COMISSÃO DE CURATIVOS', M, FAIXA_LOGOS+8);
-      doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
-      doc.text(_trans(`Hospital dos Pescadores — Setor: ${d.setor} — Leito ${d.leito}`), M, FAIXA_LOGOS+14);
+      if (logoPrefeitura) {
+        const wLogo = hLogo * logoPrefeitura.w / logoPrefeitura.h;
+        doc.addImage(logoPrefeitura.dataUrl, 'JPEG', W - M - wLogo, yLogo, wLogo, hLogo);
+      }
+      doc.setTextColor(70,70,70); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+      doc.text('PREFEITURA MUNICIPAL DO NATAL', W/2, HDR_TOPO/2 - 0.8, { align: 'center' });
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.3); doc.setTextColor(120,120,120);
+      doc.text('Hospital dos Pescadores — Unidade de Terapia Intensiva', W/2, HDR_TOPO/2 + 3.6, { align: 'center' });
+
+      doc.setFillColor(...COR_MARCA); doc.rect(0, HDR_TOPO, W, HDR_BARRA, 'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12.5);
+      doc.text('PARECER DA COMISSÃO DE CURATIVOS', M, HDR_TOPO + 7.5);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.text(_trans(`Setor: ${d.setor}   |   Data: ${fmtD(d.data)}`), M, HDR_TOPO + 13);
+
+      // Selo "LEITO N" em destaque no canto direito da barra
+      const bw = 32, bh = 11.5, bx = W - M - bw, by = HDR_TOPO + (HDR_BARRA - bh)/2;
+      doc.setFillColor(255,255,255); doc.roundedRect(bx, by, bw, bh, 1.6, 1.6, 'F');
+      doc.setTextColor(...COR_MARCA); doc.setFont('helvetica','bold'); doc.setFontSize(11.5);
+      doc.text('LEITO ' + (d.leito||'–'), bx + bw/2, by + bh/2 + 1.6, { align: 'center' });
+
       doc.setTextColor(0,0,0);
     };
-    const novaPagina = () => { doc.addPage(); desenharCabecalho(); y = TOPO; };
+    const novaPagina = () => { doc.addPage(); desenharCabecalho(); y = TOPO; zebra = false; };
     const garantirEspaco = (alt) => { if (y + alt > H - RODAPE) novaPagina(); };
 
+    // ── Título de seção: barra azul com cantos arredondados ─────────────────
     const tituloSecao = (txt) => {
-      garantirEspaco(9);
-      doc.setFillColor(13,71,161); doc.rect(M, y, L, 6.5, 'F');
-      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
-      doc.text(_trans(txt), M+2, y+4.6);
+      garantirEspaco(9 + 9); // título + espaço mínimo p/ 1ª linha de conteúdo, evita título "órfão"
+      doc.setFillColor(13,71,161); doc.roundedRect(M, y, L, 7, 1, 1, 'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
+      doc.text(_trans(txt), M+3, y+4.9);
       doc.setTextColor(0,0,0); doc.setFont('helvetica','normal');
-      y += 9;
+      y += 9.5;
+      zebra = false;
     };
-    const campo = (label, valor) => {
-      const txt = label + ': ' + (valor && String(valor).trim() ? valor : '–');
-      const linhas = doc.splitTextToSize(_trans(txt), L);
-      garantirEspaco(linhas.length*4.4 + 1.5);
-      doc.setFontSize(9);
-      linhas.forEach(ln => { doc.text(ln, M, y); y += 4.4; });
-      y += 1.2;
+
+    // Linha "tabela": rótulo cinza à esquerda (largura fixa) + valor à direita,
+    // com fundo listrado alternado — dá aparência de formulário/planilha.
+    const LARG_LABEL = 54;
+    const linhaCampo = (label, valor) => {
+      const valorTxt = (valor !== null && valor !== undefined && String(valor).trim()) ? String(valor) : '–';
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      const linhas = doc.splitTextToSize(_trans(valorTxt), L - LARG_LABEL - 4);
+      const altura = Math.max(linhas.length * 4.3, 6.2) + 1.6;
+      garantirEspaco(altura);
+      if (zebra) { doc.setFillColor(...COR_ZEBRA); doc.rect(M, y, L, altura, 'F'); }
+      zebra = !zebra;
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...COR_TXT_LABEL);
+      doc.text(_trans(label).toUpperCase(), M+2.5, y+4.6);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...COR_TXT_VALOR);
+      linhas.forEach((ln,i) => doc.text(ln, M+LARG_LABEL, y+4.6+i*4.3));
+      doc.setTextColor(0,0,0);
+      y += altura;
     };
+
+    // Linha com "pílula" colorida SIM/NÃO — chama mais atenção que texto puro
+    const linhaSimNao = (label, valor) => {
+      const alt = 7.6;
+      garantirEspaco(alt);
+      if (zebra) { doc.setFillColor(...COR_ZEBRA); doc.rect(M, y, L, alt, 'F'); }
+      zebra = !zebra;
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...COR_TXT_LABEL);
+      doc.text(_trans(label).toUpperCase(), M+2.5, y+4.9);
+      const ehSim = valor === 'SIM';
+      const cor = ehSim ? [46,125,50] : [130,130,130];
+      const bw = 15, bh = 5.4, bx = M+LARG_LABEL, by = y + (alt-bh)/2;
+      doc.setFillColor(...cor); doc.roundedRect(bx, by, bw, bh, 1.3, 1.3, 'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(7.6);
+      doc.text(valor || '–', bx + bw/2, by + bh/2 + 1.5, { align: 'center' });
+      doc.setTextColor(0,0,0);
+      y += alt;
+    };
+
+    // Linha com N campos curtos lado a lado (ex.: DN | Idade | Sexo)
+    const linhaColunas = (colunas) => {
+      const alt = 8.6;
+      garantirEspaco(alt);
+      if (zebra) { doc.setFillColor(...COR_ZEBRA); doc.rect(M, y, L, alt, 'F'); }
+      zebra = !zebra;
+      const larguraTotal = colunas.reduce((s,c)=>s+(c.largura||1),0);
+      let cx = M+2.5;
+      colunas.forEach(c => {
+        const w = (L-5) * (c.largura||1) / larguraTotal;
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...COR_TXT_LABEL);
+        doc.text(_trans(c.label).toUpperCase(), cx, y+3.4);
+        doc.setFont('helvetica','normal'); doc.setFontSize(9.2); doc.setTextColor(...COR_TXT_VALOR);
+        doc.text(_trans(c.valor || '–'), cx, y+7.4);
+        cx += w;
+      });
+      doc.setTextColor(0,0,0);
+      y += alt;
+    };
+
+    // Linha com "chips" neutros lado a lado (ex.: Exsudato / Volume / Odor)
+    const linhaChips = (label, itens) => {
+      const alt = 8.6;
+      garantirEspaco(alt);
+      if (zebra) { doc.setFillColor(...COR_ZEBRA); doc.rect(M, y, L, alt, 'F'); }
+      zebra = !zebra;
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...COR_TXT_LABEL);
+      doc.text(_trans(label).toUpperCase(), M+2.5, y+alt/2+1.3);
+      let cx = M+LARG_LABEL;
+      itens.forEach(it => {
+        const txt = `${it.titulo}: ${it.valor || '–'}`;
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.8);
+        const tw = doc.getTextWidth(txt) + 5.5;
+        doc.setFillColor(224,232,245); doc.roundedRect(cx, y+1.5, tw, 5.6, 1.1, 1.1, 'F');
+        doc.setTextColor(35,60,95);
+        doc.text(txt, cx+2.7, y+alt/2+1.3);
+        cx += tw + 3;
+      });
+      doc.setTextColor(0,0,0);
+      y += alt;
+    };
+
+    // Bloco de texto livre em caixa (HD, Comorbidades, Observações) — melhor
+    // para textos longos do que a linha "tabela" comum.
+    const blocoTexto = (label, valor) => {
+      const txt = (valor && String(valor).trim()) ? valor : '–';
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      const linhas = doc.splitTextToSize(_trans(txt), L - 6);
+      const altCaixa = Math.max(linhas.length * 4.3, 4.3) + 4;
+      garantirEspaco(altCaixa + 6);
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.6); doc.setTextColor(...COR_TXT_LABEL);
+      doc.text(_trans(label).toUpperCase(), M, y+3.2);
+      y += 5;
+      doc.setDrawColor(...COR_BORDA); doc.setFillColor(250,250,251); doc.setLineWidth(.25);
+      doc.roundedRect(M, y, L, altCaixa, 1.3, 1.3, 'FD');
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...COR_TXT_VALOR);
+      linhas.forEach((ln,i) => doc.text(ln, M+3, y+5+i*4.3));
+      doc.setTextColor(0,0,0);
+      y += altCaixa + 3.5;
+    };
+
     const listaOuNenhum = (arr) => arr && arr.length ? arr.join(', ') : 'Nenhum';
 
     desenharCabecalho();
 
-    tituloSecao('IDENTIFICAÇÃO');
-    campo('Nome', d.nome);
-    campo('Admissão / DN / Idade / Sexo',
-      `${fmtD(d.admissao)}   |   ${fmtD(d.dn)}   |   ${d.idade||'–'}   |   ${d.sexo==='M'?'Masculino':d.sexo==='F'?'Feminino':'–'}`);
-    campo('HD', d.hd);
-    campo('Comorbidades', d.comorbidades);
+    tituloSecao('IDENTIFICAÇÃO DO PACIENTE');
+    linhaCampo('Nome', d.nome);
+    linhaColunas([
+      { label:'Admissão',  valor: fmtD(d.admissao), largura:1.2 },
+      { label:'Nascimento', valor: fmtD(d.dn), largura:1.2 },
+      { label:'Idade',     valor: d.idade, largura:0.8 },
+      { label:'Sexo',      valor: d.sexo==='M'?'Masculino':d.sexo==='F'?'Feminino':'–', largura:1 }
+    ]);
+    blocoTexto('Hipótese diagnóstica', d.hd);
+    blocoTexto('Comorbidades', d.comorbidades);
 
     tituloSecao('AVALIAÇÃO INICIAL');
-    campo('Admitido com lesão de pele?', d.lesaoAdmissao + (d.qtdLesoes ? '  (Nº de lesões: ' + d.qtdLesoes + ')' : ''));
-    campo('Estomia', d.temEstomia + '  —  ' + listaOuNenhum(d.tiposEstomia));
-    campo('Dispositivo médico', d.temDispositivo + '  —  ' + listaOuNenhum(d.tiposDispositivo));
+    linhaSimNao('Admitido com lesão de pele?', d.lesaoAdmissao);
+    if (d.qtdLesoes) linhaCampo('Nº de lesões', d.qtdLesoes);
+    linhaSimNao('Tem estomia?', d.temEstomia);
+    if (d.temEstomia === 'SIM') linhaCampo('Tipo(s) de estomia', listaOuNenhum(d.tiposEstomia));
+    linhaSimNao('Dispositivo médico?', d.temDispositivo);
+    if (d.temDispositivo === 'SIM') linhaCampo('Tipo(s) de dispositivo', listaOuNenhum(d.tiposDispositivo));
 
     tituloSecao('LOCALIZAÇÃO DA LESÃO / ESTOMIA / DISPOSITIVO');
-    const wCorpo = 100, hCorpo = wCorpo * corpoImg.h / corpoImg.w;
-    garantirEspaco(hCorpo + 4);
-    doc.addImage(corpoImg.dataUrl, 'JPEG', M, y, wCorpo, hCorpo);
-    y += hCorpo + 4;
-    const wPes = 120, hPes = wPes * pesImg.h / pesImg.w;
-    garantirEspaco(hPes + 4);
-    doc.addImage(pesImg.dataUrl, 'JPEG', M, y, wPes, hPes);
-    y += hPes + 4;
+    const gapDiag = 8;
+    const wCorpo = (L - gapDiag) * 0.42, hCorpo = wCorpo * corpoImg.h / corpoImg.w;
+    const wPes   = (L - gapDiag) * 0.58, hPes   = wPes * pesImg.h / pesImg.w;
+    const hMaiorDiag = Math.max(hCorpo, hPes);
+    garantirEspaco(hMaiorDiag + 10);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.6); doc.setTextColor(...COR_TXT_LABEL);
+    doc.text('MAPA CORPORAL', M, y+3);
+    doc.text('PÉS', M+wCorpo+gapDiag, y+3);
+    doc.setTextColor(0,0,0);
+    const yImgs = y + 5;
+    doc.setDrawColor(...COR_BORDA); doc.setLineWidth(.25);
+    doc.rect(M, yImgs, wCorpo, hCorpo);
+    doc.addImage(corpoImg.dataUrl, 'JPEG', M, yImgs, wCorpo, hCorpo);
+    doc.rect(M+wCorpo+gapDiag, yImgs, wPes, hPes);
+    doc.addImage(pesImg.dataUrl, 'JPEG', M+wCorpo+gapDiag, yImgs, wPes, hPes);
+    y = yImgs + hMaiorDiag + 5;
 
     tituloSecao('AVALIAÇÃO DA LESÃO');
-    campo('Etiologia', listaOuNenhum(d.etiologia) + (d.etiologiaOutras ? '  |  Outras: ' + d.etiologiaOutras : ''));
-    campo('Tempo de existência da lesão', d.tempoLesao);
-    campo('Área perilesional', listaOuNenhum(d.areaPerilesional));
-    campo('Exsudato / Volume / Odor', `${d.exsudato||'–'}   /   ${d.volume||'–'}   /   ${d.odor||'–'}`);
-    campo('Leito da lesão', listaOuNenhum(d.leitoLesao));
+    linhaCampo('Etiologia', listaOuNenhum(d.etiologia) + (d.etiologiaOutras ? '  |  Outras: ' + d.etiologiaOutras : ''));
+    linhaCampo('Tempo de existência da lesão', d.tempoLesao);
+    linhaCampo('Área perilesional', listaOuNenhum(d.areaPerilesional));
+    linhaChips('Exsudato / Volume / Odor', [
+      { titulo:'Exsudato', valor: d.exsudato },
+      { titulo:'Volume', valor: d.volume },
+      { titulo:'Odor', valor: d.odor }
+    ]);
+    linhaCampo('Leito da lesão', listaOuNenhum(d.leitoLesao));
 
     tituloSecao('CONCLUSÃO');
-    campo('Realizado curativo?', d.curativoRealizado);
-    campo('Observações', d.obs);
-    campo('Data', fmtD(d.data));
-    campo('Enfermeiro(a)', d.enfermeiro);
+    linhaSimNao('Realizado curativo?', d.curativoRealizado);
+    blocoTexto('Observações', d.obs);
 
     if (_pcFotos.length) {
-      tituloSecao('FOTOS');
-      const wFoto = 85;
-      let colX = M;
+      tituloSecao('REGISTRO FOTOGRÁFICO');
+      const cols = 3, gapFoto = 5;
+      const wFoto = (L - gapFoto*(cols-1)) / cols;
       let maiorAlturaLinha = 0;
       _pcFotos.forEach((f, i) => {
         const hFoto = wFoto * f.h / f.w;
-        if (i % 2 === 0) {
-          garantirEspaco(hFoto + 4);
-          colX = M;
+        const col = i % cols;
+        if (col === 0) {
+          garantirEspaco(hFoto + 10);
           maiorAlturaLinha = hFoto;
         } else {
-          colX = M + wFoto + 6;
           maiorAlturaLinha = Math.max(maiorAlturaLinha, hFoto);
         }
-        doc.addImage(f.dataUrl, 'JPEG', colX, y, wFoto, hFoto);
-        if (i % 2 === 1 || i === _pcFotos.length - 1) y += maiorAlturaLinha + 4;
+        const colX = M + col * (wFoto + gapFoto);
+        doc.setFont('helvetica','normal'); doc.setFontSize(6.8); doc.setTextColor(...COR_TXT_LABEL);
+        doc.text('Foto ' + (i+1), colX, y+2.6);
+        doc.setTextColor(0,0,0);
+        const yFoto = y + 3.6;
+        doc.setDrawColor(...COR_BORDA); doc.setLineWidth(.25);
+        doc.rect(colX, yFoto, wFoto, hFoto);
+        doc.addImage(f.dataUrl, 'JPEG', colX, yFoto, wFoto, hFoto);
+        if (col === cols-1 || i === _pcFotos.length - 1) y += maiorAlturaLinha + 3.6 + 4;
       });
+    }
+
+    // ── Assinatura ────────────────────────────────────────────────────────
+    garantirEspaco(20);
+    y += 6;
+    const wAssin = 95, xAssin = M + (L - wAssin)/2;
+    doc.setDrawColor(60,60,60); doc.setLineWidth(.3);
+    doc.line(xAssin, y, xAssin+wAssin, y);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...COR_TXT_VALOR);
+    doc.text(_trans(d.enfermeiro || 'Enfermeiro(a)'), xAssin+wAssin/2, y+4.6, { align:'center' });
+    doc.setFontSize(7); doc.setTextColor(...COR_TXT_LABEL);
+    doc.text('Assinatura / Carimbo — Comissão de Curativos', xAssin+wAssin/2, y+8.6, { align:'center' });
+    doc.setTextColor(0,0,0);
+
+    // ── Rodapé (numeração de página, feito ao final quando o total já é conhecido) ──
+    const nPaginas = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= nPaginas; p++) {
+      doc.setPage(p);
+      doc.setDrawColor(...COR_BORDA); doc.setLineWidth(.2);
+      doc.line(M, H-RODAPE+3, W-M, H-RODAPE+3);
+      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...COR_TXT_LABEL);
+      doc.text('Hospital dos Pescadores — Comissão de Curativos', M, H-RODAPE+7.5);
+      doc.text('Gerado em ' + new Date().toLocaleString('pt-BR'), W/2, H-RODAPE+7.5, { align:'center' });
+      doc.text(`Página ${p} de ${nPaginas}`, W-M, H-RODAPE+7.5, { align:'right' });
+      doc.setTextColor(0,0,0);
     }
 
     const nomeArquivo = `Parecer_Curativo_Leito${d.leito}_${d.data||dataDoTurno()}.pdf`;
