@@ -2966,7 +2966,7 @@ async function _carregarDadosInd(){
   showLoading('Carregando indicadores...');
   try {
     // Chaves fixas (logs) + varredura única para chaves dinâmicas
-    const fixas = ['uti_admissao_log','uti_alta_log','uti_disp_log'];
+    const fixas = ['uti_admissao_log','uti_alta_log','uti_disp_log','uti_leito_bloqueio_log'];
     const dinamicas = new Set();
     const resumosEv = new Set();   // uti_ev_resumo_<dia>
     const resumosNas = new Set();  // uti_nas_resumo_<dia>
@@ -3023,6 +3023,7 @@ async function _carregarDadosInd(){
     const admissoes = (dataMap['uti_admissao_log'] || []).slice();
     const altas     = (dataMap['uti_alta_log']     || []).slice();
     const dispLog   = (dataMap['uti_disp_log']     || []).slice();
+    const bloqueioLog = (dataMap['uti_leito_bloqueio_log'] || []).slice();
     // Soma as entradas arquivadas (anos anteriores) aos logs vivos — ver
     // _arquivarLogsSeNecessario(): nada é perdido, só fica em documentos
     // separados por ano para o log "ao vivo" nunca crescer sem limite.
@@ -3061,7 +3062,7 @@ async function _carregarDadosInd(){
       if (v) irasChecklists.push(v);
     }
 
-    _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList, irasChecklists, _carregadoEm: Date.now() };
+    _indCache = { admissoes, altas, dispLog, evolucoes, nas: nasList, irasChecklists, bloqueioLog, _carregadoEm: Date.now() };
   } finally {
     hideLoading();
   }
@@ -4046,6 +4047,54 @@ function _pacientesDia(evPer){
   ).size;
 }
 
+// ── LEITOS BLOQUEADOS — histórico para cálculo correto de indicadores ──────
+// O log uti_leito_bloqueio_log é um array de eventos {leito, acao:'bloquear'|
+// 'liberar', data:'AAAA-MM-DD', motivo, por, timestamp}, gravado via
+// dbArrayPush (sem risco de corrida). A partir dele reconstruímos, para
+// QUALQUER dia do período, quantos leitos estavam operacionais naquele dia —
+// e não apenas o estado atual — para que indicadores de meses passados não
+// sejam distorcidos por um bloqueio que só existe desde hoje.
+function _construirEstadoBloqueios(log){
+  const porLeito = {};
+  (log||[]).forEach(ev => {
+    if (!ev || !ev.leito || !ev.data) return;
+    (porLeito[ev.leito] = porLeito[ev.leito] || []).push(ev);
+  });
+  Object.values(porLeito).forEach(arr => arr.sort((a,b) =>
+    a.data === b.data ? (a.timestamp||0)-(b.timestamp||0) : (a.data < b.data ? -1 : 1)
+  ));
+  return porLeito;
+}
+
+function _leitosBloqueadosNoDia(dataISO, estadoPorLeito){
+  let n = 0;
+  Object.values(estadoPorLeito).forEach(eventos => {
+    let atual = null;
+    for (const ev of eventos) {
+      if (ev.data > dataISO) break;
+      atual = ev.acao;
+    }
+    if (atual === 'bloquear') n++;
+  });
+  return n;
+}
+
+function _leitosOperacionaisNoDia(dataISO, estadoPorLeito){
+  return Math.max(0, TOTAL - _leitosBloqueadosNoDia(dataISO, estadoPorLeito));
+}
+
+// Soma, dia a dia, os leitos operacionais dentro do período — denominador
+// correto de "leitos-dia possíveis" quando há bloqueios que começam/terminam
+// no meio do período.
+function _leitosDiaOperacionaisPeriodo(periodo, estadoPorLeito){
+  let soma = 0;
+  const fim = new Date(periodo.fim);
+  for (let d = new Date(periodo.inicio); d <= fim; d.setDate(d.getDate()+1)) {
+    soma += _leitosOperacionaisNoDia(d.toISOString().slice(0,10), estadoPorLeito);
+  }
+  return soma;
+}
+
 // Detecção robusta de VMI: cobre evoluções completas ("TOT – VMI"/"TQT – VMI"),
 // resumos compactados (campo isVMI ou tot_n/tqt_n) e eventual legado só "VMI".
 function _emVMI(e){
@@ -4064,7 +4113,7 @@ function _temDieta(e, val){
 }
 
 function _indOcupacao(periodo){
-  const { admissoes, altas, evolucoes } = _indCache;
+  const { admissoes, altas, evolucoes, bloqueioLog } = _indCache;
   const diasPeriodo = Math.round((periodo.fim - periodo.inicio)/86400000) + 1;
 
   // Filtra admissões/altas do período
@@ -4078,10 +4127,17 @@ function _indOcupacao(periodo){
   const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
   const pacientesDia = _pacientesDia(evPer);
 
-  const taxaOcup = TOTAL * diasPeriodo > 0 ? Math.min(100, (pacientesDia*100/(TOTAL*diasPeriodo))).toFixed(1) + '%' : '–';
+  // ── Leitos operacionais: exclui leitos bloqueados pelo admin (ver
+  // _construirEstadoBloqueios) — o denominador considera só leitos-dia
+  // realmente disponíveis em cada dia do período, não o total físico da UTI.
+  const estadoBloqueios = _construirEstadoBloqueios(bloqueioLog);
+  const leitosOperacionaisAtual = _leitosOperacionaisNoDia(hoje(), estadoBloqueios);
+  const leitosDiaPossiveis = _leitosDiaOperacionaisPeriodo(periodo, estadoBloqueios);
 
-  // Giro de leito
-  const giro = TOTAL > 0 ? (admPer.length/TOTAL).toFixed(1) : '–';
+  const taxaOcup = leitosDiaPossiveis > 0 ? Math.min(100, (pacientesDia*100/leitosDiaPossiveis)).toFixed(1) + '%' : '–';
+
+  // Giro de leito (usa a quantidade de leitos operacionais hoje)
+  const giro = leitosOperacionaisAtual > 0 ? (admPer.length/leitosOperacionaisAtual).toFixed(1) : '–';
 
   // Permanência média (admissões com alta no período)
   const permanencias = altasPer
@@ -4122,9 +4178,9 @@ function _indOcupacao(periodo){
   const procList = _contarTermos(procedencias);
 
   let h = '<div class="ind-grid">';
-  h += _cardInd('Admissões no período', admPer.length, `${TOTAL} leitos`, '', 'ocup_admissoes');
+  h += _cardInd('Admissões no período', admPer.length, `${leitosOperacionaisAtual} leitos operacionais (de ${TOTAL})`, '', 'ocup_admissoes');
   h += _cardInd('Altas no período', altasPer.length, '', '', 'ocup_altas');
-  h += _cardInd('Taxa de ocupação', taxaOcup, `${pacientesDia} pacientes-dia / ${TOTAL*diasPeriodo} possíveis`, '', 'ocup_taxa');
+  h += _cardInd('Taxa de ocupação', taxaOcup, `${pacientesDia} pacientes-dia / ${leitosDiaPossiveis} possíveis`, '', 'ocup_taxa');
   h += _cardInd('Pacientes-dia', pacientesDia, `em ${diasPeriodo} dias (leito × dia)`, '', 'ocup_pacientesdia');
   h += _cardInd('Giro de leito', giro, 'admissões por leito', '', 'ocup_giro');
   h += _cardInd('Permanência média', permMedia !== '–' ? permMedia + ' dias' : '–', `${permanencias.length} altas computadas`, '', 'ocup_permanencia');
@@ -4604,7 +4660,8 @@ function _indATBs(periodo){
 }
 
 function _indNASIndicadores(periodo){
-  const { nas } = _indCache;
+  const { nas, bloqueioLog } = _indCache;
+  const estadoBloqueios = _construirEstadoBloqueios(bloqueioLog);
   const nasPer = nas.filter(n => _dentroPeriodo(n.data, periodo));
   const total = nasPer.length;
 
@@ -4620,7 +4677,12 @@ function _indNASIndicadores(periodo){
     if (!porTurno[k]) porTurno[k] = 0;
     porTurno[k] += parseFloat(n.total) || 0;
   });
-  const sobrecarga = Object.values(porTurno).filter(t => t >= 100*TOTAL).length;
+  // Limiar por turno considera os leitos operacionais NAQUELE dia (chave
+  // "AAAA-MM-DD|TURNO"), não o total físico — um turno com leitos bloqueados
+  // não deve ser marcado como sobrecarga por um denominador inflado.
+  const sobrecarga = Object.entries(porTurno).filter(([k,t]) =>
+    t >= 100 * _leitosOperacionaisNoDia(k.split('|')[0], estadoBloqueios)
+  ).length;
   const turnosTot = Object.keys(porTurno).length;
 
   // Diurno vs noturno
@@ -6403,10 +6465,57 @@ async function leitosData() {
   let d = await dbGet('uti_leitos');
   if (!d) {
     d = {};
-    for (let i=1;i<=TOTAL;i++) d[i] = {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:''};
+    for (let i=1;i<=TOTAL;i++) d[i] = {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:'', bloqueado:false, bloqueadoMotivo:'', bloqueadoDesde:'', bloqueadoPor:''};
     await dbSet('uti_leitos', d);
   }
   return d;
+}
+
+// ── BLOQUEIO/LIBERAÇÃO DE LEITOS (somente admin) ────────────────────────────
+// Leito bloqueado fica fora do pool de admissão/transferência e, a partir da
+// data informada, também é excluído do denominador dos indicadores (ver
+// _leitosOperacionaisNoDia). O histórico fica em uti_leito_bloqueio_log
+// (dbArrayPush, sem risco de corrida entre sessões).
+async function bloquearLeito(leito){
+  if (!_isAdmin()) { toast('Acesso restrito ao administrador.', true); return; }
+  const ld = await leitosData();
+  const l = ld[leito];
+  if (!l) return;
+  if (l.ocupado) { toast('Leito ' + pad(leito) + ' está ocupado — não é possível bloquear.', true); return; }
+  if (l.bloqueado) { toast('Leito ' + pad(leito) + ' já está bloqueado.', true); return; }
+  const motivo = prompt('Motivo do bloqueio do Leito ' + pad(leito) + ' (opcional):', '');
+  if (motivo === null) return;
+  const dataInicio = prompt('Bloquear a partir de qual data? (AAAA-MM-DD)', hoje());
+  if (!dataInicio) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataInicio)) { toast('Data inválida. Use o formato AAAA-MM-DD.', true); return; }
+  showLoading('Bloqueando leito...');
+  try {
+    const dadosLeito = { ...l, bloqueado: true, bloqueadoMotivo: motivo || '', bloqueadoDesde: dataInicio, bloqueadoPor: usuarioEmail || '' };
+    await dbSetLeito(leito, dadosLeito);
+    await dbArrayPush('uti_leito_bloqueio_log', { leito, acao: 'bloquear', data: dataInicio, motivo: motivo || '', por: usuarioEmail || '', timestamp: Date.now() });
+    hideLoading();
+    toast('✓ Leito ' + pad(leito) + ' bloqueado a partir de ' + dataInicio);
+    await renderLeitos();
+  } catch(e) { hideLoading(); toast('Erro ao bloquear: ' + e.message, true); }
+}
+
+async function liberarLeito(leito){
+  if (!_isAdmin()) { toast('Acesso restrito ao administrador.', true); return; }
+  const ld = await leitosData();
+  const l = ld[leito];
+  if (!l || !l.bloqueado) return;
+  const dataFim = prompt('Liberar o Leito ' + pad(leito) + ' a partir de qual data? (AAAA-MM-DD)', hoje());
+  if (!dataFim) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataFim)) { toast('Data inválida. Use o formato AAAA-MM-DD.', true); return; }
+  showLoading('Liberando leito...');
+  try {
+    const dadosLeito = { ...l, bloqueado: false, bloqueadoMotivo: '', bloqueadoDesde: '', bloqueadoPor: '' };
+    await dbSetLeito(leito, dadosLeito);
+    await dbArrayPush('uti_leito_bloqueio_log', { leito, acao: 'liberar', data: dataFim, motivo: '', por: usuarioEmail || '', timestamp: Date.now() });
+    hideLoading();
+    toast('✓ Leito ' + pad(leito) + ' liberado a partir de ' + dataFim);
+    await renderLeitos();
+  } catch(e) { hideLoading(); toast('Erro ao liberar: ' + e.message, true); }
 }
 
 async function renderLeitos() {
@@ -6432,8 +6541,9 @@ async function renderLeitos() {
     keys.push('uti_iras_' + i + '_' + turno      + '_' + hj);
   }
   const data = await dbGetMany(keys);
+  const souAdmin = _isAdmin();
   for (let i=1;i<=TOTAL;i++) {
-    const l = d[i] || {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:''};
+    const l = d[i] || {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:'', bloqueado:false, bloqueadoMotivo:'', bloqueadoDesde:'', bloqueadoPor:''};
     const evHoje  = data['uti_ev_'  + i + '_' + turno      + '_' + hj];
     let   nasHoje = l.ocupado ? data['uti_nas_' + i + '_' + turno + '_' + hj] : null;
     // Sem NAS no turno atual → tenta o outro turno do mesmo dia (NAS é 24h)
@@ -6444,6 +6554,26 @@ async function renderLeitos() {
     const card = document.getElementById('leito-card-'+i);
     card.classList.remove('loading');
     if (l.ocupado) card.classList.add('ocupado');
+    card.classList.toggle('bloqueado', !!l.bloqueado);
+
+    if (l.bloqueado) {
+      // Leito fora de operação: não abre admissão, mostra motivo/data e,
+      // para admins, o botão de liberar.
+      card.innerHTML = `
+        <div class="leito-num">LEITO ${pad(i)}</div>
+        <div class="leito-info">
+          <div class="leito-vazio leito-vazio--bloqueado">🔒 Bloqueado${l.bloqueadoDesde ? ' desde ' + l.bloqueadoDesde : ''}</div>
+          ${l.bloqueadoMotivo ? `<div class="leito-diag">${_esc(l.bloqueadoMotivo)}</div>` : ''}
+        </div>
+        ${souAdmin ? `<button class="leito-bloqueio-btn leito-bloqueio-btn--liberar" data-leito="${i}" title="Liberar este leito para admissão">🔓 LIBERAR LEITO</button>` : ''}`;
+      card.onclick = null;
+      if (souAdmin) {
+        const liberarBtn = card.querySelector('.leito-bloqueio-btn--liberar');
+        if (liberarBtn) liberarBtn.addEventListener('click', (ev) => { ev.stopPropagation(); liberarLeito(i); });
+      }
+      continue;
+    }
+
     card.innerHTML = `
       <div class="leito-num">LEITO ${pad(i)}</div>
       <div class="leito-info">${l.ocupado
@@ -6459,8 +6589,13 @@ async function renderLeitos() {
         ${l.ocupado ? _nasBadge(nasHoje) : ''}
       </div>
       ${l.ocupado ? `<button class="leito-iras-btn${irasPreenchido ? ' leito-iras-btn--preenchido' : ''}" data-leito="${i}" title="${irasPreenchido ? '✓ Bundles IRAS preenchido neste turno — clique para editar' : 'Abrir Checklist de Bundles IRAS deste leito'}">📋 BUNDLES IRAS${irasPreenchido ? ' ✓' : ''}</button>` : ''}
-      ${l.ocupado ? `<div class="leito-acoes-row"><button class="leito-alta-btn" data-leito="${i}" title="Dar alta ou registrar saída deste paciente">🏥 ALTA</button><button class="leito-transf-btn" data-leito="${i}" title="Transferir paciente para outro leito da UTI">↔ TRANSFERIR</button></div>` : ''}`;
+      ${l.ocupado ? `<div class="leito-acoes-row"><button class="leito-alta-btn" data-leito="${i}" title="Dar alta ou registrar saída deste paciente">🏥 ALTA</button><button class="leito-transf-btn" data-leito="${i}" title="Transferir paciente para outro leito da UTI">↔ TRANSFERIR</button></div>` : ''}
+      ${!l.ocupado && souAdmin ? `<button class="leito-bloqueio-btn leito-bloqueio-btn--bloquear" data-leito="${i}" title="Bloquear este leito (fora de operação)">🔒 BLOQUEAR LEITO</button>` : ''}`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
+    if (!l.ocupado && souAdmin) {
+      const bloquearBtn = card.querySelector('.leito-bloqueio-btn--bloquear');
+      if (bloquearBtn) bloquearBtn.addEventListener('click', (ev) => { ev.stopPropagation(); bloquearLeito(i); });
+    }
     // Listeners separados para os botões do card — stopPropagation evita abrir o formulário
     if(l.ocupado){
       const irasBtn = card.querySelector('.leito-iras-btn');
@@ -6548,6 +6683,7 @@ async function abrirModal(n) {
   modalLeito = n;
   const d = await leitosData();
   const l = d[n];
+  if (l.bloqueado) { toast('Leito ' + pad(n) + ' está bloqueado. Libere-o antes de admitir.', true); return; }
   document.getElementById('modal-titulo').textContent = `Leito ${pad(n)} – ${l.ocupado?'Editar dados':'Admissão'}`;
   document.getElementById('m-pac').value   = (l.pac||'').toUpperCase();
   _loadDiagsToForm('m', l);
@@ -8596,6 +8732,7 @@ async function _transferirDoCard(leito){
   try{
     const ld2 = await leitosData();
     if(ld2[dest]&&ld2[dest].ocupado){ hideLoading(); toast('Leito '+pad(dest)+' ocupado',true); return; }
+    if(ld2[dest]&&ld2[dest].bloqueado){ hideLoading(); toast('Leito '+pad(dest)+' está bloqueado',true); return; }
     ld2[dest] = {...ld2[leito]};
     ld2[leito] = {ocupado:false,pac:'',diag:'',cid:'',dn:'',sexo:'',adm:'',admHosp:'',comor:'',alergia:'',origem:'',origemOutro:'',evolAdmissao:''};
     await Promise.all([
@@ -8623,6 +8760,7 @@ async function prepararTransferencia(){
   try{
     const ld=await leitosData();
     if(ld[dest]&&ld[dest].ocupado){hideLoading();toast('Leito '+pad(dest)+' ocupado',true);return;}
+    if(ld[dest]&&ld[dest].bloqueado){hideLoading();toast('Leito '+pad(dest)+' está bloqueado',true);return;}
     // move admissão
     ld[dest]={...ld[leitoAtual]};
     ld[leitoAtual]={ocupado:false,pac:'',diag:'',dn:'',adm:'',admHosp:'',comor:'',alergia:''};
@@ -9869,10 +10007,11 @@ function _sanitizarDadosRelatorio(obj){
 }
 
 function _coletarDadosRelatorio(periodo, secoes){
-  const { admissoes, altas, dispLog, evolucoes, nas, irasChecklists } = _indCache;
+  const { admissoes, altas, dispLog, evolucoes, nas, irasChecklists, bloqueioLog } = _indCache;
   const dados = { periodo: periodo.rotulo, secoes: {} };
   const pct = (n, t) => t > 0 ? +(n*100/t).toFixed(1) : null;
   const med = arr => arr.length ? +(arr.reduce((s,x)=>s+x,0)/arr.length).toFixed(1) : null;
+  const estadoBloqueios = _construirEstadoBloqueios(bloqueioLog);
 
   // ── OCUPAÇÃO ──────────────────────────────────────────────────────────────
   if(secoes.includes('ocupacao')){
@@ -9882,11 +10021,14 @@ function _coletarDadosRelatorio(periodo, secoes){
     const evPer = evolucoes.filter(e => _dentroPeriodo(e.data, periodo));
     const pacientesDia = _pacientesDia(evPer);
     const perms = altasPer.map(a => _diasEntre(a.admUTI, a.dataAlta)).filter(d => d !== null);
+    const leitosOperacionaisAtual = _leitosOperacionaisNoDia(hoje(), estadoBloqueios);
+    const leitosDiaPossiveis = _leitosDiaOperacionaisPeriodo(periodo, estadoBloqueios);
     dados.secoes.ocupacao = {
       admissoes: admPer.length, altas: altasPer.length,
-      taxaOcupacao: TOTAL*diasPeriodo > 0 ? Math.min(100, +pct(pacientesDia, TOTAL*diasPeriodo)) : null,
-      giroLeito: TOTAL > 0 ? +(admPer.length/TOTAL).toFixed(1) : null,
-      permanenciaMedia: med(perms), diasPeriodo, pacientesDia, leitos: TOTAL
+      taxaOcupacao: leitosDiaPossiveis > 0 ? Math.min(100, +pct(pacientesDia, leitosDiaPossiveis)) : null,
+      giroLeito: leitosOperacionaisAtual > 0 ? +(admPer.length/leitosOperacionaisAtual).toFixed(1) : null,
+      permanenciaMedia: med(perms), diasPeriodo, pacientesDia,
+      leitos: TOTAL, leitosOperacionais: leitosOperacionaisAtual
     };
   }
 
@@ -10069,7 +10211,9 @@ function _coletarDadosRelatorio(periodo, secoes){
     const noturno= nasPer.filter(n=>n.turno==='NOTURNO').map(n=>parseFloat(n.total)).filter(n=>!isNaN(n));
     const porTurno = {};
     nasPer.forEach(n=>{ const k=n.data+'|'+n.turno; if(!porTurno[k]) porTurno[k]=0; porTurno[k]+=parseFloat(n.total)||0; });
-    const sobrecarga = Object.values(porTurno).filter(t=>t>=100*TOTAL).length;
+    const sobrecarga = Object.entries(porTurno).filter(([k,t]) =>
+      t >= 100 * _leitosOperacionaisNoDia(k.split('|')[0], estadoBloqueios)
+    ).length;
     dados.secoes.nas = {
       registros: nasPer.length, mediaNAS: med(totais),
       maxNAS: totais.length ? +Math.max(...totais).toFixed(1) : null,
@@ -14487,7 +14631,12 @@ async function _pitGerarTexto(form){
 
   const hj = dataDoTurno ? dataDoTurno() : hoje();
   const ocupadosNums = [];
-  for(let n=1; n<=TOTAL; n++){ if(leitos[n] && leitos[n].ocupado) ocupadosNums.push(n); }
+  let leitosOperacionaisHoje = 0;
+  for(let n=1; n<=TOTAL; n++){
+    if(leitos[n] && leitos[n].bloqueado) continue;
+    leitosOperacionaisHoje++;
+    if(leitos[n] && leitos[n].ocupado) ocupadosNums.push(n);
+  }
 
   // Busca as evoluções de todos os leitos ocupados. Usa o mesmo fallback da
   // Passagem de Plantão: turno atual → outro turno do mesmo dia → turno atual
@@ -14518,7 +14667,7 @@ async function _pitGerarTexto(form){
     evData[n] = ev;
   });
 
-  const ocupPct = TOTAL ? Math.round((ocupadosNums.length / TOTAL) * 100) : 0;
+  const ocupPct = leitosOperacionaisHoje ? Math.round((ocupadosNums.length / leitosOperacionaisHoje) * 100) : 0;
 
   const linhas = [];
   linhas.push('UTI GERAL – PIT STOP');
@@ -14529,7 +14678,7 @@ async function _pitGerarTexto(form){
       ? 'NÃO — Ausências: ' + (form.ausencias || '–')
       : 'SIM'
   ));
-  linhas.push('Ocupação: ' + ocupadosNums.length + '/' + TOTAL + ' (' + ocupPct + '%)');
+  linhas.push('Ocupação: ' + ocupadosNums.length + '/' + leitosOperacionaisHoje + ' (' + ocupPct + '%)');
   linhas.push('Reservas de leitos: ' + (
     form.reservas === 'sim'
       ? 'SIM — ' + (form.reservasDetalhe || '–')
