@@ -6476,6 +6476,80 @@ async function leitosData() {
 // data informada, também é excluído do denominador dos indicadores (ver
 // _leitosOperacionaisNoDia). O histórico fica em uti_leito_bloqueio_log
 // (dbArrayPush, sem risco de corrida entre sessões).
+let _blLeitoAtual = null, _blModoAtual = null;
+
+function _garantirModalBloqueioLeito(){
+  if(document.getElementById('modal-bloqueio-leito')) return;
+  const div = document.createElement('div');
+  div.id = 'modal-bloqueio-leito';
+  div.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:10px;max-width:380px;width:100%;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.3);">
+      <div id="bl-header" style="padding:14px 18px;background:#4a4a55;color:#fff;font-weight:600;"></div>
+      <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
+        <div id="bl-campo-motivo">
+          <label style="font-size:.8rem;font-weight:600;color:#555;display:block;margin-bottom:4px;">Motivo (opcional)</label>
+          <input type="text" id="bl-motivo" placeholder="Ex.: reforma, falta de equipe..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;">
+        </div>
+        <div>
+          <label id="bl-label-data" style="font-size:.8rem;font-weight:600;color:#555;display:block;margin-bottom:4px;">A partir de qual data?</label>
+          <input type="date" id="bl-data" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;">
+        </div>
+      </div>
+      <div style="padding:12px 18px;display:flex;gap:8px;border-top:1px solid #eee;">
+        <button type="button" onclick="_blCancelar()" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Cancelar</button>
+        <button type="button" id="bl-btn-confirmar" onclick="_blConfirmar()" style="flex:1;padding:10px;border:none;border-radius:6px;color:#fff;font-weight:600;cursor:pointer;">Confirmar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function _blCancelar(){
+  const modal = document.getElementById('modal-bloqueio-leito');
+  if(modal) modal.style.display = 'none';
+  _blLeitoAtual = null; _blModoAtual = null;
+}
+
+function _blAbrir(leito, modo){
+  _garantirModalBloqueioLeito();
+  _blLeitoAtual = leito; _blModoAtual = modo;
+  const bloquear = modo === 'bloquear';
+  document.getElementById('bl-header').textContent = (bloquear ? '🔒 Bloquear' : '🔓 Liberar') + ' Leito ' + pad(leito);
+  document.getElementById('bl-header').style.background = bloquear ? '#4a4a55' : '#0d47a1';
+  document.getElementById('bl-btn-confirmar').style.background = bloquear ? '#4a4a55' : '#0d47a1';
+  document.getElementById('bl-btn-confirmar').textContent = bloquear ? 'Bloquear' : 'Liberar';
+  document.getElementById('bl-campo-motivo').style.display = bloquear ? '' : 'none';
+  document.getElementById('bl-motivo').value = '';
+  document.getElementById('bl-label-data').textContent = bloquear ? 'Bloquear a partir de qual data?' : 'Liberar a partir de qual data?';
+  document.getElementById('bl-data').value = hoje();
+  document.getElementById('modal-bloqueio-leito').style.display = 'flex';
+}
+
+async function _blConfirmar(){
+  const leito = _blLeitoAtual, modo = _blModoAtual;
+  const data = document.getElementById('bl-data').value; // input type=date sempre retorna AAAA-MM-DD
+  const motivo = document.getElementById('bl-motivo').value.trim();
+  if (!data) { toast('Selecione uma data.', true); return; }
+  const modal = document.getElementById('modal-bloqueio-leito');
+  if (modal) modal.style.display = 'none';
+  _blLeitoAtual = null; _blModoAtual = null;
+
+  const ld = await leitosData();
+  const l = ld[leito];
+  if (!l) return;
+  showLoading(modo === 'bloquear' ? 'Bloqueando leito...' : 'Liberando leito...');
+  try {
+    const dadosLeito = modo === 'bloquear'
+      ? { ...l, bloqueado: true, bloqueadoMotivo: motivo || '', bloqueadoDesde: data, bloqueadoPor: usuarioEmail || '' }
+      : { ...l, bloqueado: false, bloqueadoMotivo: '', bloqueadoDesde: '', bloqueadoPor: '' };
+    await dbSetLeito(leito, dadosLeito);
+    await dbArrayPush('uti_leito_bloqueio_log', { leito, acao: modo, data, motivo: motivo || '', por: usuarioEmail || '', timestamp: Date.now() });
+    hideLoading();
+    toast('✓ Leito ' + pad(leito) + (modo === 'bloquear' ? ' bloqueado a partir de ' : ' liberado a partir de ') + fmtD(data));
+    await renderLeitos();
+  } catch(e) { hideLoading(); toast('Erro: ' + e.message, true); }
+}
+
 async function bloquearLeito(leito){
   if (!_isAdmin()) { toast('Acesso restrito ao administrador.', true); return; }
   const ld = await leitosData();
@@ -6483,20 +6557,7 @@ async function bloquearLeito(leito){
   if (!l) return;
   if (l.ocupado) { toast('Leito ' + pad(leito) + ' está ocupado — não é possível bloquear.', true); return; }
   if (l.bloqueado) { toast('Leito ' + pad(leito) + ' já está bloqueado.', true); return; }
-  const motivo = prompt('Motivo do bloqueio do Leito ' + pad(leito) + ' (opcional):', '');
-  if (motivo === null) return;
-  const dataInicio = prompt('Bloquear a partir de qual data? (AAAA-MM-DD)', hoje());
-  if (!dataInicio) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataInicio)) { toast('Data inválida. Use o formato AAAA-MM-DD.', true); return; }
-  showLoading('Bloqueando leito...');
-  try {
-    const dadosLeito = { ...l, bloqueado: true, bloqueadoMotivo: motivo || '', bloqueadoDesde: dataInicio, bloqueadoPor: usuarioEmail || '' };
-    await dbSetLeito(leito, dadosLeito);
-    await dbArrayPush('uti_leito_bloqueio_log', { leito, acao: 'bloquear', data: dataInicio, motivo: motivo || '', por: usuarioEmail || '', timestamp: Date.now() });
-    hideLoading();
-    toast('✓ Leito ' + pad(leito) + ' bloqueado a partir de ' + dataInicio);
-    await renderLeitos();
-  } catch(e) { hideLoading(); toast('Erro ao bloquear: ' + e.message, true); }
+  _blAbrir(leito, 'bloquear');
 }
 
 async function liberarLeito(leito){
@@ -6504,18 +6565,7 @@ async function liberarLeito(leito){
   const ld = await leitosData();
   const l = ld[leito];
   if (!l || !l.bloqueado) return;
-  const dataFim = prompt('Liberar o Leito ' + pad(leito) + ' a partir de qual data? (AAAA-MM-DD)', hoje());
-  if (!dataFim) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataFim)) { toast('Data inválida. Use o formato AAAA-MM-DD.', true); return; }
-  showLoading('Liberando leito...');
-  try {
-    const dadosLeito = { ...l, bloqueado: false, bloqueadoMotivo: '', bloqueadoDesde: '', bloqueadoPor: '' };
-    await dbSetLeito(leito, dadosLeito);
-    await dbArrayPush('uti_leito_bloqueio_log', { leito, acao: 'liberar', data: dataFim, motivo: '', por: usuarioEmail || '', timestamp: Date.now() });
-    hideLoading();
-    toast('✓ Leito ' + pad(leito) + ' liberado a partir de ' + dataFim);
-    await renderLeitos();
-  } catch(e) { hideLoading(); toast('Erro ao liberar: ' + e.message, true); }
+  _blAbrir(leito, 'liberar');
 }
 
 async function renderLeitos() {
@@ -6557,6 +6607,11 @@ async function renderLeitos() {
     card.classList.toggle('bloqueado', !!l.bloqueado);
 
     if (l.bloqueado) {
+      if (!souAdmin) {
+        // Não-admin: leito bloqueado nem aparece no grid.
+        card.remove();
+        continue;
+      }
       // Leito fora de operação: não abre admissão, mostra motivo/data e,
       // para admins, o botão de liberar.
       card.innerHTML = `
@@ -6565,12 +6620,10 @@ async function renderLeitos() {
           <div class="leito-vazio leito-vazio--bloqueado">🔒 Bloqueado${l.bloqueadoDesde ? ' desde ' + l.bloqueadoDesde : ''}</div>
           ${l.bloqueadoMotivo ? `<div class="leito-diag">${_esc(l.bloqueadoMotivo)}</div>` : ''}
         </div>
-        ${souAdmin ? `<button class="leito-bloqueio-btn leito-bloqueio-btn--liberar" data-leito="${i}" title="Liberar este leito para admissão">🔓 LIBERAR LEITO</button>` : ''}`;
+        <button class="leito-bloqueio-btn leito-bloqueio-btn--liberar" data-leito="${i}" title="Liberar este leito para admissão">🔓 LIBERAR LEITO</button>`;
       card.onclick = null;
-      if (souAdmin) {
-        const liberarBtn = card.querySelector('.leito-bloqueio-btn--liberar');
-        if (liberarBtn) liberarBtn.addEventListener('click', (ev) => { ev.stopPropagation(); liberarLeito(i); });
-      }
+      const liberarBtn = card.querySelector('.leito-bloqueio-btn--liberar');
+      if (liberarBtn) liberarBtn.addEventListener('click', (ev) => { ev.stopPropagation(); liberarLeito(i); });
       continue;
     }
 
