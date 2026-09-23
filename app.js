@@ -7945,6 +7945,82 @@ examesSolic:gf('f-exames-solic'),
   };
 }
 
+// ── IDENTIFICAÇÃO DO ALUNO NA EVOLUÇÃO ──────────────────────────────────────
+// Como o login enfermeirandos@hospesc.com é compartilhado entre vários
+// estudantes, cada evolução salva por esse usuário precisa registrar QUEM
+// (nome do aluno) e SOB SUPERVISÃO DE QUAL enfermeiro — isso vai impresso no
+// lugar da assinatura normal (sem COREN, já que o aluno não tem).
+// Os campos ficam prontos na tela (pré-preenchidos com o último valor desta
+// sessão) mas são pedidos a cada salvamento, pois o aluno/supervisor pode
+// mudar de plantão para plantão mesmo dentro do mesmo login.
+let _alunoIdentAtual = null; // { nome, supervisor } — cache só de sessão, para pré-preencher
+
+function _garantirModalIdentAluno(){
+  if (document.getElementById('modal-ident-aluno')) return;
+  const div = document.createElement('div');
+  div.id = 'modal-ident-aluno';
+  div.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+  div.innerHTML = `
+    <div style="background:#fff;border-radius:10px;max-width:380px;width:100%;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.3);">
+      <div style="padding:14px 18px;background:#00695c;color:#fff;font-weight:600;">Identificação do estudante</div>
+      <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
+        <p style="margin:0;font-size:.78rem;color:#555;">Antes de salvar, identifique quem está registrando esta evolução.</p>
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#555;display:block;margin-bottom:4px;">NOME</label>
+          <input type="text" id="ia-nome" placeholder="Seu nome completo" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;">
+        </div>
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#555;display:block;margin-bottom:4px;">SOB SUPERVISÃO DO ENFERMEIRO</label>
+          <input type="text" id="ia-supervisor" placeholder="Nome do enfermeiro responsável" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:.9rem;">
+        </div>
+        <div id="ia-erro" style="color:#c0392b;font-size:.75rem;display:none;"></div>
+      </div>
+      <div style="padding:12px 18px;display:flex;gap:8px;border-top:1px solid #eee;">
+        <button type="button" id="ia-btn-cancelar" style="flex:1;padding:10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Cancelar</button>
+        <button type="button" id="ia-btn-confirmar" style="flex:1;padding:10px;border:none;border-radius:6px;background:#00695c;color:#fff;font-weight:600;cursor:pointer;">Confirmar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+// Mostra o modal e retorna uma Promise que resolve com {nome, supervisor} ao
+// confirmar, ou null ao cancelar (nesse caso a evolução NÃO deve ser salva).
+function _solicitarIdentAluno(){
+  return new Promise(resolve => {
+    _garantirModalIdentAluno();
+    const modal = document.getElementById('modal-ident-aluno');
+    const nomeEl = document.getElementById('ia-nome');
+    const supEl = document.getElementById('ia-supervisor');
+    const erroEl = document.getElementById('ia-erro');
+    nomeEl.value = (_alunoIdentAtual && _alunoIdentAtual.nome) || '';
+    supEl.value = (_alunoIdentAtual && _alunoIdentAtual.supervisor) || '';
+    erroEl.style.display = 'none';
+    modal.style.display = 'flex';
+
+    const btnConfirmar = document.getElementById('ia-btn-confirmar');
+    const btnCancelar = document.getElementById('ia-btn-cancelar');
+
+    const limpar = () => {
+      btnConfirmar.onclick = null;
+      btnCancelar.onclick = null;
+      modal.style.display = 'none';
+    };
+    btnConfirmar.onclick = () => {
+      const nome = nomeEl.value.trim();
+      const supervisor = supEl.value.trim();
+      if (!nome || !supervisor) {
+        erroEl.textContent = 'Preencha os dois campos para continuar.';
+        erroEl.style.display = 'block';
+        return;
+      }
+      _alunoIdentAtual = { nome, supervisor };
+      limpar();
+      resolve(_alunoIdentAtual);
+    };
+    btnCancelar.onclick = () => { limpar(); resolve(null); };
+  });
+}
+
 // ── GERAR PREVIEW ──────────────────────────────────────────────────────────────
 async function gerarPreview() {
   if (_formCarregando) {
@@ -7953,8 +8029,20 @@ async function gerarPreview() {
   }
   const btn = document.getElementById('btn-gerar');
   if (btn.disabled) return;   // evita duplo clique/duplo disparo
+
+  // Aluno/enfermeirando: exige identificação antes de qualquer coisa ser salva.
+  let _identAlunoParaEstaEvolucao = null;
+  if (_isAluno()) {
+    _identAlunoParaEstaEvolucao = await _solicitarIdentAluno();
+    if (!_identAlunoParaEstaEvolucao) return; // cancelou — nada é salvo
+  }
+
   btn.disabled = true; btn.textContent = 'Salvando...';
   const d = coletarDados();
+  if (_identAlunoParaEstaEvolucao) {
+    d.alunoNome = _identAlunoParaEstaEvolucao.nome;
+    d.alunoSupervisor = _identAlunoParaEstaEvolucao.supervisor;
+  }
 
   // Verifica se já existe SAE salva para este turno (para decidir se auto-gera depois)
   const evKey = 'uti_ev_'+d.leito+'_'+d.turno+'_'+d.data;
@@ -8187,7 +8275,10 @@ h+=`<div class="obs-box" style="min-height:45px;">${d.examesSolic||'–'}</div>`
   }
   h+=st('Assinatura / Carimbo');
   // Padding-top da assinatura também é menor quando há SAE
-  h+=`<div style="display:flex;justify-content:center;padding:${temSAE?'1rem':'2.5rem'} 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:320px;border-top:1px solid #000;padding-top:6px;">${_assinaturaTexto(d.autor)}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
+  const assinaturaHtml = d.alunoNome
+    ? `NOME: ${_esc(d.alunoNome)}<br>SOB SUPERVISÃO DO ENFERMEIRO: ${_esc(d.alunoSupervisor||'–')}`
+    : _assinaturaTexto(d.autor);
+  h+=`<div style="display:flex;justify-content:center;padding:${temSAE?'1rem':'2.5rem'} 0 .5rem;font-size:.72rem;color:#555;"><div style="text-align:center;width:320px;border-top:1px solid #000;padding-top:6px;">${assinaturaHtml}<br>${d.turno}<br>Assinatura / Carimbo</div></div>`;
   h+=`</div><div class="pfoot"><span>Turno: ${d.turno}</span><span>Leito ${pad(d.leito)} – UTI Geral</span><span>${fmtD(d.data)}</span></div>`;
   document.getElementById('preview-area').innerHTML = h;
 }
