@@ -36,6 +36,33 @@ function _isAluno() {
   return ALUNO_EMAILS.includes((usuarioEmail||'').trim().toLowerCase());
 }
 
+// Janela de horário permitida para o perfil aluno: 07:00–18:59 (bloqueado das
+// 19h às 7h). Usa o horário local do dispositivo — como é sempre o app abrindo
+// no próprio celular/computador do usuário, coincide com o horário de Natal/RN.
+function _dentroJanelaAlunoPermitida() {
+  const h = new Date().getHours();
+  return h >= 7 && h < 19;
+}
+
+let _alunoJanelaInterval = null;
+
+// Verifica a cada minuto se um aluno logado ainda está dentro da janela
+// permitida — cobre o caso de uma sessão aberta antes das 19h que continua
+// depois do horário-limite (o check no login sozinho não pegaria isso).
+function _iniciarMonitorJanelaAluno() {
+  if (_alunoJanelaInterval) clearInterval(_alunoJanelaInterval);
+  if (!_isAluno()) return;
+  _alunoJanelaInterval = setInterval(() => {
+    if (_isAluno() && !_dentroJanelaAlunoPermitida()) {
+      clearInterval(_alunoJanelaInterval);
+      _alunoJanelaInterval = null;
+      toast('Acesso permitido apenas das 07h às 19h. Sessão encerrada.', true);
+      sessionStorage.removeItem('uti_auth_ok');
+      auth.signOut();
+    }
+  }, 60000);
+}
+
 // Esconde (não apenas desabilita) todo elemento marcado com a classe
 // "aluno-restrito" no HTML quando o usuário logado é um aluno. Chamada após
 // o login e sempre que uma tela com esses botões é (re)exibida, pois alguns
@@ -9291,8 +9318,18 @@ window.addEventListener('load', () => {
           return;
         }
 
+        // Aluno/enfermeirando fora da janela de horário permitida (07h–19h)?
+        if (_isAluno() && !_dentroJanelaAlunoPermitida()) {
+          toast('Acesso permitido apenas das 07h às 19h.', true);
+          sessionStorage.removeItem('uti_auth_ok');
+          await auth.signOut();
+          mostrarTela('t-login');
+          return;
+        }
+
         _atualizarBadgeUser();
         _aplicarRestricoesAluno();
+        _iniciarMonitorJanelaAluno();
 
         // Primeiro acesso: força troca de senha
         if (perfilUsuario && perfilUsuario.senhaTrocada === false) {
@@ -9314,12 +9351,14 @@ window.addEventListener('load', () => {
         if (!perfilUsuario) perfilUsuario = _perfilSeed((user.email||'').toLowerCase());
         _atualizarBadgeUser();
         _aplicarRestricoesAluno();
+        _iniciarMonitorJanelaAluno();
         irTelaTurno(true);
         mostrarTela('t-turno');
       }
     } else {
       sessionStorage.removeItem('uti_auth_ok');
       perfilUsuario = null;
+      if (_alunoJanelaInterval) { clearInterval(_alunoJanelaInterval); _alunoJanelaInterval = null; }
       mostrarTela('t-login');
     }
   });
