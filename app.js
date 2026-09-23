@@ -23,6 +23,30 @@ function _isAdmin() {
   return ADMIN_EMAILS.includes((usuarioEmail||'').trim().toLowerCase());
 }
 
+// E-mails de acesso restrito (ex.: alunos/enfermeirandos em estágio). Não
+// participam de admissão/gerência, mas herdam as MESMAS restrições de UI
+// aplicadas a qualquer usuário comum — aqui apenas removemos, além disso,
+// acesso a funções sensíveis (trocar senha, turno noturno, alta, transferência,
+// indicadores, emissão de documentos/pit-stop, passagem, impressão e envio ao
+// Drive). É um controle de UI, no mesmo nível do que já existe para _isAdmin();
+// não substitui as Security Rules do Firestore.
+const ALUNO_EMAILS = ['enfermeirandos@hospesc.com'];
+
+function _isAluno() {
+  return ALUNO_EMAILS.includes((usuarioEmail||'').trim().toLowerCase());
+}
+
+// Esconde (não apenas desabilita) todo elemento marcado com a classe
+// "aluno-restrito" no HTML quando o usuário logado é um aluno. Chamada após
+// o login e sempre que uma tela com esses botões é (re)exibida, pois alguns
+// desses elementos vivem em telas montadas dinamicamente.
+function _aplicarRestricoesAluno() {
+  const restrito = _isAluno();
+  document.querySelectorAll('.aluno-restrito').forEach(el => {
+    el.style.display = restrito ? 'none' : '';
+  });
+}
+
 function _aplicarBloqueioAdmissao() {
   const isAdmin = _isAdmin();
   const btnEditar = document.getElementById('btn-editar-admissao');
@@ -812,6 +836,7 @@ let _passagemSujo = false;     // true enquanto houver edições no modal ainda 
 
 // Abre o modal: coleta das evoluções (ou recarrega edição em andamento) e renderiza.
 async function atualizarPassagemPlantao(){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   const dataAtual = dataDoTurno();
   _passagemChaveAtual = `uti_passagem_${dataAtual}_${turno}`;
 
@@ -2217,6 +2242,7 @@ function _pcAbrirParaImprimir(){
 // em modo duplex; os outros dois documentos seguem como folhas extras.
 
 function abrirModalEmitirDocumentos(){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   const hoje0 = hoje();
   document.getElementById('emitir-doc-data').value = hoje0;
   document.getElementById('modal-emitir-doc').classList.add('show');
@@ -2596,6 +2622,7 @@ let _indCategoriaAtiva = 'ocupacao';
 let _indCache = null; // dados brutos carregados (admissões, altas, dispositivos, evoluções, NAS)
 
 function irIndicadores(){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   mostrarTela('t-indicadores');
   // liga os botões de categoria
   document.querySelectorAll('.ind-cat-btn').forEach(b=>{
@@ -6386,6 +6413,7 @@ async function confirmarTrocaSenha() {
 
 // Permite ao usuário trocar a senha voluntariamente (a partir do menu)
 function abrirTrocaSenhaVoluntaria() {
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   const sub = document.getElementById('ts-sub');
   if (sub) sub.textContent = 'Defina uma nova senha de acesso.';
   const btnPular = document.getElementById('btn-pular-troca');
@@ -6429,11 +6457,12 @@ function irTelaTurno(comAuth) {
 }
 
 function irTurno(){ mostrarTela('t-turno'); }
-function irLeitos(){ mostrarTela('t-leitos'); renderLeitos(); window.scrollTo(0,0); }
+function irLeitos(){ mostrarTela('t-leitos'); renderLeitos(); _aplicarRestricoesAluno(); window.scrollTo(0,0); }
 function irForm(){ mostrarTela('t-form'); window.scrollTo(0,0); }
 
 // ── TURNO ────────────────────────────────────────────────────────────────────
 async function escolherTurno(t) {
+  if (t === 'NOTURNO' && _isAluno()) { toast('Acesso restrito ao turno diurno.', true); t = 'DIURNO'; }
   turno = t;
   mostrarTela('t-leitos');
   const b = document.getElementById('badge-leitos');
@@ -6592,6 +6621,7 @@ async function renderLeitos() {
   }
   const data = await dbGetMany(keys);
   const souAdmin = _isAdmin();
+  const souAluno = _isAluno();
   for (let i=1;i<=TOTAL;i++) {
     const l = d[i] || {ocupado:false, pac:'', diag:'', dn:'', adm:'', admHosp:'', comor:'', alergia:'', bloqueado:false, bloqueadoMotivo:'', bloqueadoDesde:'', bloqueadoPor:''};
     const evHoje  = data['uti_ev_'  + i + '_' + turno      + '_' + hj];
@@ -6642,7 +6672,7 @@ async function renderLeitos() {
         ${l.ocupado ? _nasBadge(nasHoje) : ''}
       </div>
       ${l.ocupado ? `<button class="leito-iras-btn${irasPreenchido ? ' leito-iras-btn--preenchido' : ''}" data-leito="${i}" title="${irasPreenchido ? '✓ Bundles IRAS preenchido neste turno — clique para editar' : 'Abrir Checklist de Bundles IRAS deste leito'}">📋 BUNDLES IRAS${irasPreenchido ? ' ✓' : ''}</button>` : ''}
-      ${l.ocupado ? `<div class="leito-acoes-row"><button class="leito-alta-btn" data-leito="${i}" title="Dar alta ou registrar saída deste paciente">🏥 ALTA</button><button class="leito-transf-btn" data-leito="${i}" title="Transferir paciente para outro leito da UTI">↔ TRANSFERIR</button></div>` : ''}
+      ${l.ocupado && !souAluno ? `<div class="leito-acoes-row"><button class="leito-alta-btn" data-leito="${i}" title="Dar alta ou registrar saída deste paciente">🏥 ALTA</button><button class="leito-transf-btn" data-leito="${i}" title="Transferir paciente para outro leito da UTI">↔ TRANSFERIR</button></div>` : ''}
       ${!l.ocupado && souAdmin ? `<button class="leito-bloqueio-btn leito-bloqueio-btn--bloquear" data-leito="${i}" title="Bloquear este leito (fora de operação)">🔒 BLOQUEAR LEITO</button>` : ''}`;
     card.onclick = () => l.ocupado ? abrirForm(i) : abrirModal(i);
     if (!l.ocupado && souAdmin) {
@@ -8348,6 +8378,7 @@ async function gerarPDF(){
 // salva: renderiza o preview em uma área oculta, gera o PDF e envia ao Drive.
 // Mostra uma barra de progresso modal.
 async function enviarTodasEvolucoesTurno(){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   const leitos = await leitosData();
   const ocupados = Object.entries(leitos).filter(([,v])=>v.ocupado).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
   if(!ocupados.length){ toast('Nenhum leito ocupado.'); return; }
@@ -8617,6 +8648,7 @@ async function confirmarAlta(){
 }
 
 function abrirModalAlta(leito){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   leitoParaAlta = leito;
   const nomePac = gf('f-pac') || '';
   document.getElementById('modal-alta-titulo').textContent = `🏥 Alta – Leito ${pad(leito)}`;
@@ -8774,6 +8806,7 @@ async function confirmarAltaFinal(){
 // Versão chamada direto do card da grade de leitos (sem precisar abrir o formulário).
 // Recebe o número do leito como parâmetro em vez de depender de leitoAtual.
 async function _transferirDoCard(leito){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   const ld = await leitosData();
   const pac = (ld[leito]||{}).pac || '';
   const novoLeito = prompt(`Transferir "${pac}" do Leito ${pad(leito)} para qual leito? (1–${TOTAL})`);
@@ -8804,6 +8837,7 @@ async function _transferirDoCard(leito){
 }
 
 async function prepararTransferencia(){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   const novoLeito=prompt(`Transferir "${gf('f-pac')}" do Leito ${pad(leitoAtual)} para qual leito?`);
   if(!novoLeito) return;
   const dest=parseInt(novoLeito);
@@ -9258,6 +9292,7 @@ window.addEventListener('load', () => {
         }
 
         _atualizarBadgeUser();
+        _aplicarRestricoesAluno();
 
         // Primeiro acesso: força troca de senha
         if (perfilUsuario && perfilUsuario.senhaTrocada === false) {
@@ -9278,6 +9313,7 @@ window.addEventListener('load', () => {
         hideLoading();
         if (!perfilUsuario) perfilUsuario = _perfilSeed((user.email||'').toLowerCase());
         _atualizarBadgeUser();
+        _aplicarRestricoesAluno();
         irTelaTurno(true);
         mostrarTela('t-turno');
       }
@@ -9293,6 +9329,7 @@ window.addEventListener('load', () => {
 // IMPRIMIR TURNO COMPLETO – abre todas as evoluções do turno em uma janela única
 // ════════════════════════════════════════════════════════════════════════════
 async function imprimirTurnoCompleto(){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   await _selecionarLeitosEChamar('🖨 Imprimir Turno — escolha os leitos', '#1565c0',
     (leitosSel) => _imprimirTurnoCompletoExec(leitosSel));
 }
@@ -14628,6 +14665,7 @@ function _pitIniciais(nome){
 
 // ── Abrir / Fechar ────────────────────────────────────────────────────────────
 async function abrirPitStop(){
+  if (_isAluno()) { toast('Acesso restrito.', true); return; }
   document.getElementById('pit-step-form').style.display = '';
   document.getElementById('pit-step-preview').style.display = 'none';
   document.getElementById('pit-footer-form').style.display = 'flex';
