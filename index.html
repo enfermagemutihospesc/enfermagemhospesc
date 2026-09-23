@@ -80,14 +80,14 @@
   </div>
   <div class="turno-cards">
     <button class="turno-btn" onclick="escolherTurno('DIURNO')"><span class="turno-icon">☀️</span><span class="turno-label">Turno<br>Diurno</span></button>
-    <button class="turno-btn" onclick="escolherTurno('NOTURNO')"><span class="turno-icon">🌙</span><span class="turno-label">Turno<br>Noturno</span></button>
+    <button class="turno-btn aluno-restrito" onclick="escolherTurno('NOTURNO')"><span class="turno-icon">🌙</span><span class="turno-label">Turno<br>Noturno</span></button>
   </div>
   <div class="sync-status" id="sync-status">
     <span class="sync-dot" id="sync-dot"></span>
     <span id="sync-txt">verificando conexão...</span>
   </div>
   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:1rem;">
-    <button class="btn btn-sec btn-sm" onclick="abrirTrocaSenhaVoluntaria()">🔑 Trocar minha senha</button>
+    <button class="btn btn-sec btn-sm aluno-restrito" onclick="abrirTrocaSenhaVoluntaria()">🔑 Trocar minha senha</button>
     <button class="btn btn-sec btn-sm" id="btn-gerenciar-usuarios" style="display:none;" onclick="abrirGerenciarUsuarios()">👥 Gerenciar usuários</button>
     <button class="btn btn-sec btn-sm" onclick="fazerLogout()">🚪 Sair</button>
   </div>
@@ -162,15 +162,15 @@
       <button class="btn btn-sec btn-sm" onclick="irTurno()">← Trocar turno</button>
       <button class="btn btn-sec btn-sm" onclick="irNAS()">📊 NAS do Turno</button>
       <button class="btn btn-sec btn-sm" onclick="abrirHistoricoDispositivosGeral()">🩺 Dispositivos</button>
-      <button class="btn btn-sec btn-sm" onclick="irIndicadores()">📈 Indicadores</button>
+      <button class="btn btn-sec btn-sm aluno-restrito" onclick="irIndicadores()">📈 Indicadores</button>
       <button class="btn btn-sm" id="btn-checklist-setorial" style="background:linear-gradient(135deg,#0d47a1,#1565c0);color:white;" onclick="abrirChecklistSetorial()">📋 Check-list Setorial</button>
-      <button class="btn btn-sm" id="btn-pit-stop" style="background:linear-gradient(135deg,#e65100,#ff8f00);color:white;" onclick="abrirPitStop()">🏁 Emitir Pit Stop</button>
-      <button class="btn btn-sm" style="background:#6a1b9a;color:white;" onclick="abrirModalEmitirDocumentos()">📑 Emitir Documentos</button>
-      <button class="btn btn-sm" style="background:#00695c;color:white;" onclick="atualizarPassagemPlantao()">📋 Atualizar Passagem</button>
+      <button class="btn btn-sm aluno-restrito" id="btn-pit-stop" style="background:linear-gradient(135deg,#e65100,#ff8f00);color:white;" onclick="abrirPitStop()">🏁 Emitir Pit Stop</button>
+      <button class="btn btn-sm aluno-restrito" style="background:#6a1b9a;color:white;" onclick="abrirModalEmitirDocumentos()">📑 Emitir Documentos</button>
+      <button class="btn btn-sm aluno-restrito" style="background:#00695c;color:white;" onclick="atualizarPassagemPlantao()">📋 Atualizar Passagem</button>
       <button class="btn btn-sm" style="background:#c62828;color:white;" onclick="abrirNotificacaoNSP()">🛡 Notificação NSP</button>
-      <button class="btn btn-sm" style="background:#1a6b3a;color:white;" onclick="imprimirTurnoCompleto()">🖨 Imprimir turno</button>
+      <button class="btn btn-sm aluno-restrito" style="background:#1a6b3a;color:white;" onclick="imprimirTurnoCompleto()">🖨 Imprimir turno</button>
       <button class="btn btn-sm" style="background:#795548;color:white;" onclick="abrirParecerCurativo()">🩹 Parecer Curativos</button>
-      <button class="btn btn-sm" style="background:#6c3483;color:white;" onclick="enviarTodasEvolucoesTurno()">☁ Enviar tudo ao Drive</button>
+      <button class="btn btn-sm aluno-restrito" style="background:#6c3483;color:white;" onclick="enviarTodasEvolucoesTurno()">☁ Enviar tudo ao Drive</button>
     </div>
   </div>
 </div>
@@ -821,8 +821,8 @@
   <button class="btn btn-sec btn-sm" onclick="irForm()">← Editar</button>
   <button class="btn btn-sec btn-sm" onclick="irLeitos()">🛏 Leitos</button>
   <button class="btn btn-pdf btn-sm" id="btn-pdf" onclick="gerarPDF()">☁ Salvar PDF no Drive</button>
-  <button class="btn btn-sm" style="background:#d63031; color:white;" onclick="confirmarAlta()">🏥 Alta</button>
-  <button class="btn btn-sm" style="background:#fdcb6e; color:black;" onclick="prepararTransferencia()">🔄 Transf.</button>
+  <button class="btn btn-sm aluno-restrito" style="background:#d63031; color:white;" onclick="confirmarAlta()">🏥 Alta</button>
+  <button class="btn btn-sm aluno-restrito" style="background:#fdcb6e; color:black;" onclick="prepararTransferencia()">🔄 Transf.</button>
 </div>
     <p id="pdf-status" style="font-size:.72rem;color:var(--muted);text-align:right;"></p>
   </div>
